@@ -4,7 +4,11 @@ import { useRef, useEffect, useState, type FC } from "react";
 import { Stage, Layer } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
-import { snapToGrid, snapToNodeAlignments, snapToOutletDocking } from "@/engine/spatial/snapping";
+import {
+  snapToGrid,
+  snapToNodeAlignments,
+  snapToOutletDocking,
+} from "@/engine/spatial/snapping";
 import { GridLayer } from "./GridLayer";
 import { CableLayer, CableData, CableFilterMode } from "./CableLayer";
 import { EquipmentLayer, RackDisplay, NodeDisplay } from "./EquipmentLayer";
@@ -25,6 +29,8 @@ interface FloorCanvasProps {
   onNodeDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onWaypointChange?: ((cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => void) | undefined;
+  onAddWaypoint?: ((cableId: string) => void) | undefined;
+  onRemoveWaypoint?: ((cableId: string) => void) | undefined;
 }
 
 export const FloorCanvas: FC<FloorCanvasProps> = ({
@@ -43,6 +49,8 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   onNodeDragMove,
   onRackDragMove,
   onWaypointChange,
+  onAddWaypoint,
+  onRemoveWaypoint,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { viewport, setViewport, zoomAt, fitFloor, gridConfig } = useCameraStore();
@@ -147,6 +155,15 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     onNodePositionChange?.(id, snapResult.point);
   };
 
+  // Déplacement fluide des coudes/waypoints de câbles sans frottement ni blocage forcé
+  const handleWaypointMove = (
+    cableId: string,
+    waypointIndex: number,
+    newPos: { x: number; y: number }
+  ) => {
+    onWaypointChange?.(cableId, waypointIndex, newPos);
+  };
+
   return (
     <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-slate-950 cursor-grab active:cursor-grabbing">
       <Stage
@@ -183,7 +200,9 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
                 else onSelectNode?.(node);
               }
             }}
-            onWaypointChange={onWaypointChange}
+            onWaypointChange={handleWaypointMove}
+            onAddWaypoint={onAddWaypoint}
+            onRemoveWaypoint={onRemoveWaypoint}
           />
         </Layer>
 

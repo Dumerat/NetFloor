@@ -6,7 +6,12 @@ import {
   fitToBounds,
   distanceBetween,
 } from "../matrix";
-import { snapToGrid, snapToPort, snapToNodeAlignments } from "../snapping";
+import {
+  snapToGrid,
+  snapToPort,
+  snapToNodeAlignments,
+  snapToJunctionDocking,
+} from "../snapping";
 import { useCameraStore } from "../useCameraStore";
 import { Viewport, BoundingBox } from "../types";
 
@@ -220,6 +225,50 @@ async function runSpatialTests() {
   const v3 = useCameraStore.getState().viewport;
   assertClose(v3.scale, 0.025, 1e-6, "Reset caméra conforme");
   console.log("   ✅ Store Zustand découplé validé sans régression.");
+
+  // ---------------------------------------------------------------------------
+  // Test 8 : Auto-clip et Docking des Jonctions de Câbles (snapToJunctionDocking)
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 8. Test de l'auto-clip des jonctions de câbles (snapToJunctionDocking)...");
+  const refJunctions = [
+    { id: "cable-01", point: { x: 15500, y: 9000 } },
+  ];
+
+  // Cas 1 : Fusion directe sur le même boîtier (< 90mm)
+  const mergeResult = snapToJunctionDocking({ x: 15540, y: 9030 }, refJunctions, 350, 80, 90);
+  assert(mergeResult.dockedWithId === "cable-01", "Jonction cible identifiée pour fusion");
+  assert(mergeResult.dockType === "MERGE", "Type MERGE validé");
+  assertClose(mergeResult.snappedPoint.x, 15500, 1e-6, "X calé exactement sur le boîtier existant");
+  assertClose(mergeResult.snappedPoint.y, 9000, 1e-6, "Y calé exactement sur le boîtier existant");
+
+  // Cas 2 : Docking horizontal en nappe (côte-à-côte à 80mm sur même Y)
+  const dockHResult = snapToJunctionDocking({ x: 15680, y: 9030 }, refJunctions, 350, 80, 90);
+  assert(dockHResult.dockedWithId === "cable-01", "Jonction cible identifiée pour dock horizontal");
+  assert(dockHResult.dockType === "HORIZONTAL", "Type HORIZONTAL validé");
+  assertClose(dockHResult.snappedPoint.x, 15580, 1e-6, "X calé avec espacement 80mm");
+  assertClose(dockHResult.snappedPoint.y, 9000, 1e-6, "Y verrouillé sur le même axe couloir");
+
+  // Cas 3 : Docking vertical en nappe (en ligne à 80mm sur même X)
+  const dockVResult = snapToJunctionDocking({ x: 15520, y: 9200 }, refJunctions, 350, 80, 90);
+  assert(dockVResult.dockedWithId === "cable-01", "Jonction cible identifiée pour dock vertical");
+  assert(dockVResult.dockType === "VERTICAL", "Type VERTICAL validé");
+  assertClose(dockVResult.snappedPoint.x, 15500, 1e-6, "X verrouillé sur la même colonne technique");
+  assertClose(dockVResult.snappedPoint.y, 9080, 1e-6, "Y calé avec espacement 80mm");
+
+  // Cas 4 : Alignement sur l'axe du couloir (Y)
+  const axisYResult = snapToJunctionDocking({ x: 18000, y: 9060 }, refJunctions, 350, 80, 90);
+  assert(axisYResult.dockType === "CORRIDOR_Y", "Type CORRIDOR_Y validé");
+  assertClose(axisYResult.snappedPoint.y, 9000, 1e-6, "Y aligné sur l'axe du couloir");
+  assertClose(axisYResult.snappedPoint.x, 18000, 1e-6, "X libre conservé");
+
+  // Cas 5 : Hors de portée (> 350mm et non aligné)
+  const noSnapResult = snapToJunctionDocking({ x: 25000, y: 25000 }, refJunctions, 350, 80, 90);
+  assert(noSnapResult.dockType === "NONE", "Aucun accrochage si hors de portée");
+  assert(noSnapResult.dockedWithId === null, "Aucun ID lié");
+  assertClose(noSnapResult.snappedPoint.x, 25000, 1e-6, "Position X d'origine préservée");
+  assertClose(noSnapResult.snappedPoint.y, 25000, 1e-6, "Position Y d'origine préservée");
+
+  console.log("   ✅ Accrochage automatique (Clip auto) et docking de jonctions certifiés.");
 
   console.log("\n🎉 TOUS LES TESTS DU MOTEUR SPATIAL 2D SONT VALIDÉS AVEC SUCCÈS !");
 }

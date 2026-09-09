@@ -1,0 +1,265 @@
+# ==============================================================================
+# Unités Organisationnelles (OUs) de Base
+# ==============================================================================
+dn: ou=people,dc=company,dc=com
+objectClass: top
+objectClass: organizationalUnit
+ou: people
+description: Collaborateurs de l'entreprise
+
+dn: ou=groups,dc=company,dc=com
+objectClass: top
+objectClass: organizationalUnit
+ou: groups
+description: Groupes de securite et profils applicatifs
+
+dn: ou=computers,dc=company,dc=com
+objectClass: top
+objectClass: organizationalUnit
+ou: computers
+description: Postes de travail et equipements reseau
+
+# ==============================================================================
+# Collaborateurs d'Entreprise (Miroir de src/data/directory.ts)
+# ==============================================================================
+
+# 1. Alexandre Martin - Tech Lead Fullstack
+dn: uid=alexandre.martin,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Alexandre Martin
+sn: Martin
+givenName: Alexandre
+uid: alexandre.martin
+mail: alexandre.martin@company.com
+title: Tech Lead Fullstack
+departmentNumber: Tech Lab
+telephoneNumber: +33 1 42 68 01 01
+userPassword: Password123!
+employeeNumber: usr-001
+
+# 2. Sarah Benali - RH & Recrutement
+dn: uid=sarah.benali,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Sarah Benali
+sn: Benali
+givenName: Sarah
+uid: sarah.benali
+mail: sarah.benali@company.com
+title: Responsable Recrutement & RH
+departmentNumber: Ressources Humaines
+telephoneNumber: +33 1 42 68 01 02
+userPassword: Password123!
+employeeNumber: usr-002
+
+# 3. Thomas Dubois - Admin Reseau & Securite
+dn: uid=thomas.dubois,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Thomas Dubois
+sn: Dubois
+givenName: Thomas
+uid: thomas.dubois
+mail: thomas.dubois@company.com
+title: Administrateur Reseaux & Securite
+departmentNumber: DSI / Infrastructure
+telephoneNumber: +33 1 42 68 01 03
+userPassword: Password123!
+employeeNumber: usr-003
+
+# 4. Julie Moreau - Office Manager
+dn: uid=julie.moreau,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Julie Moreau
+sn: Moreau
+givenName: Julie
+uid: julie.moreau
+mail: julie.moreau@company.com
+title: Office Manager & Logistique
+departmentNumber: Moyens Generaux / RH
+telephoneNumber: +33 1 42 68 01 04
+userPassword: Password123!
+employeeNumber: usr-004
+
+# 5. Emma Petit - UX/UI Frontend
+dn: uid=emma.petit,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Emma Petit
+sn: Petit
+givenName: Emma
+uid: emma.petit
+mail: emma.petit@company.com
+title: Ingenieure Frontend UI/UX
+departmentNumber: Tech Lab
+telephoneNumber: +33 1 42 68 01 05
+userPassword: Password123!
+employeeNumber: usr-005
+
+# 6. Marc Lefebvre - DAF
+dn: uid=marc.lefebvre,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Marc Lefebvre
+sn: Lefebvre
+givenName: Marc
+uid: marc.lefebvre
+mail: marc.lefebvre@company.com
+title: Directeur Financier
+departmentNumber: Direction Financiere
+telephoneNumber: +33 1 42 68 01 06
+userPassword: Password123!
+employeeNumber: usr-006
+
+# 7. Antoine Roux - Support & Cablage
+dn: uid=antoine.roux,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Antoine Roux
+sn: Roux
+givenName: Antoine
+uid: antoine.roux
+mail: antoine.roux@company.com
+title: Technicien Support & Cablage
+departmentNumber: Maintenance & IT
+telephoneNumber: +33 1 42 68 01 07
+userPassword: Password123!
+employeeNumber: usr-007
+
+# 8. Lea Bernard - Juriste / DPO
+dn: uid=lea.bernard,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Lea Bernard
+sn: Bernard
+givenName: Lea
+uid: lea.bernard
+mail: lea.bernard@company.com
+title: Juriste d Entreprise & DPO
+departmentNumber: Direction Juridique
+telephoneNumber: +33 1 42 68 01 08
+userPassword: Password123!
+employeeNumber: usr-008
+
+# 9. Maxime Girard - DevOps & Cloud
+dn: uid=maxime.girard,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Maxime Girard
+sn: Girard
+givenName: Maxime
+uid: maxime.girard
+mail: maxime.girard@company.com
+title: DevOps & Cloud Architect
+departmentNumber: Tech Lab
+telephoneNumber: +33 1 42 68 01 09
+userPassword: Password123!
+employeeNumber: usr-009
+
+# 10. Chloe Rousseau - Communication
+dn: uid=chloe.rousseau,ou=people,dc=company,dc=com
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: inetOrgPerson
+cn: Chloe Rousseau
+sn: Rousseau
+givenName: Chloe
+uid: chloe.rousseau
+mail: chloe.rousseau@company.com
+title: Chargee de Communication
+departmentNumber: Ressources Humaines
+telephoneNumber: +33 1 42 68 01 10
+userPassword: Password123!
+employeeNumber: usr-010
+
+# ==============================================================================
+# Groupes d'Habilitations & Profils
+# ==============================================================================
+dn: cn=DSI-NetFloor-Admins,ou=groups,dc=company,dc=com
+objectClass: top
+objectClass: groupOfNames
+cn: DSI-NetFloor-Admins
+description: Administrateurs autorises sur la gestion NetFloor
+member: uid=thomas.dubois,ou=people,dc=company,dc=com
+member: uid=maxime.girard,ou=people,dc=company,dc=com
+member: uid=antoine.roux,ou=people,dc=company,dc=com
+
+dn: cn=All-Collaborators,ou=groups,dc=company,dc=com
+objectClass: top
+objectClass: groupOfNames
+cn: All-Collaborators
+description: Ensemble des employes de l entreprise
+member: uid=alexandre.martin,ou=people,dc=company,dc=com
+member: uid=sarah.benali,ou=people,dc=company,dc=com
+member: uid=thomas.dubois,ou=people,dc=company,dc=com
+member: uid=julie.moreau,ou=people,dc=company,dc=com
+member: uid=emma.petit,ou=people,dc=company,dc=com
+member: uid=marc.lefebvre,ou=people,dc=company,dc=com
+member: uid=antoine.roux,ou=people,dc=company,dc=com
+member: uid=lea.bernard,ou=people,dc=company,dc=com
+member: uid=maxime.girard,ou=people,dc=company,dc=com
+member: uid=chloe.rousseau,ou=people,dc=company,dc=com
+
+# ==============================================================================
+# Objets Equipements / Postes de travail (Correlation MAC/IP avec NetFloor)
+# ==============================================================================
+dn: cn=PC-ALEXANDRE-MARTIN,ou=computers,dc=company,dc=com
+objectClass: top
+objectClass: device
+objectClass: ipHost
+objectClass: ieee802Device
+cn: PC-ALEXANDRE-MARTIN
+description: Dell Precision 5570 (Poste 408)
+ipHostNumber: 10.42.20.108
+macAddress: f4:d4:88:9a:12:44
+
+dn: cn=VOIP-ALEXANDRE-MARTIN,ou=computers,dc=company,dc=com
+objectClass: top
+objectClass: device
+objectClass: ipHost
+objectClass: ieee802Device
+cn: VOIP-ALEXANDRE-MARTIN
+description: Cisco IP Phone 8845 (Poste 408)
+ipHostNumber: 10.42.30.108
+macAddress: 64:16:8d:4b:90:72
+
+dn: cn=COPIEUR-RH-ETAGE-4,ou=computers,dc=company,dc=com
+objectClass: top
+objectClass: device
+objectClass: ipHost
+objectClass: ieee802Device
+cn: COPIEUR-RH-ETAGE-4
+description: Canon imageRUNNER ADVANCE DX C5850i
+ipHostNumber: 10.42.40.2
+macAddress: 00:26:73:9a:c8:12
+
+dn: cn=AP-WIFI-OPENSPACE-04,ou=computers,dc=company,dc=com
+objectClass: top
+objectClass: device
+objectClass: ipHost
+objectClass: ieee802Device
+cn: AP-WIFI-OPENSPACE-04
+description: Cisco Catalyst 9120AX Series (Wi-Fi 6)
+ipHostNumber: 10.42.50.4
+macAddress: a4:b2:39:68:df:44

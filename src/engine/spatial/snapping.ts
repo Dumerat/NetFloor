@@ -252,3 +252,139 @@ export function snapToOutletDocking(
   return { snappedPoint: draggedPoint, dockedWithId: null };
 }
 
+export type JunctionDockType = "MERGE" | "HORIZONTAL" | "VERTICAL" | "CORRIDOR_Y" | "COLUMN_X" | "NONE";
+
+export interface JunctionDockResult {
+  readonly snappedPoint: Point2D;
+  readonly dockedWithId: string | null;
+  readonly dockType: JunctionDockType;
+  readonly guide: SnapGuide | null;
+}
+
+/**
+ * Accrochage magnétique direct (Auto-clip) entre jonctions et boîtiers de dérivation de câbles.
+ * Fonctionne selon la même mécanique que l'accostage des prises RJ45 (snapToOutletDocking) :
+ * 1. Fusion exacte (MERGE) : Si très proche (< mergeRadiusMm, ex: 90mm), les deux câbles passent par le même boîtier exact.
+ * 2. Docking en nappe parallèle (HORIZONTAL / VERTICAL) : Si proche (< snapRadiusMm, ex: 350mm),
+ *    s'aligne sur le même axe et se cale côte-à-côte à spacingMm (ex: 80mm).
+ * 3. Alignement sur couloir / colonne (CORRIDOR_Y / COLUMN_X) : Si proche de l'axe d'un couloir existant (< 120mm),
+ *    s'aligne parfaitement sur la hauteur Y ou la descente X.
+ */
+export function snapToJunctionDocking(
+  draggedPoint: Point2D,
+  otherJunctionPoints: readonly { id: string; point: Point2D }[],
+  snapRadiusMm = 350,
+  spacingMm = 80,
+  mergeRadiusMm = 90
+): JunctionDockResult {
+  let closestDist = snapRadiusMm;
+  let bestCandidate: { id: string; point: Point2D; dist: number } | null = null;
+
+  for (const other of otherJunctionPoints) {
+    const dist = distanceBetween(draggedPoint, other.point);
+    if (dist < closestDist) {
+      closestDist = dist;
+      bestCandidate = { id: other.id, point: other.point, dist };
+    }
+  }
+
+  if (bestCandidate) {
+    // 1. Fusion exacte sur le même boîtier de dérivation
+    if (bestCandidate.dist <= mergeRadiusMm) {
+      return {
+        snappedPoint: { x: bestCandidate.point.x, y: bestCandidate.point.y },
+        dockedWithId: bestCandidate.id,
+        dockType: "MERGE",
+        guide: {
+          axis: "X",
+          positionMm: bestCandidate.point.x,
+          startMm: bestCandidate.point.y - 300,
+          endMm: bestCandidate.point.y + 300,
+          type: "PORT_CONNECT",
+        },
+      };
+    }
+
+    // 2. Docking automatique côte-à-côte ou en ligne (comme les prises RJ45)
+    const dx = draggedPoint.x - bestCandidate.point.x;
+    const dy = draggedPoint.y - bestCandidate.point.y;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Côte à côte horizontal : même axe de couloir Y, décalé de spacingMm en X
+      const snappedX = bestCandidate.point.x + (dx > 0 ? spacingMm : -spacingMm);
+      const snappedY = bestCandidate.point.y;
+      return {
+        snappedPoint: { x: snappedX, y: snappedY },
+        dockedWithId: bestCandidate.id,
+        dockType: "HORIZONTAL",
+        guide: {
+          axis: "Y",
+          positionMm: snappedY,
+          startMm: Math.min(snappedX, bestCandidate.point.x) - 200,
+          endMm: Math.max(snappedX, bestCandidate.point.x) + 200,
+          type: "NODE_ALIGNMENT",
+        },
+      };
+    } else {
+      // En ligne vertical : même axe de colonne X, décalé de spacingMm en Y
+      const snappedX = bestCandidate.point.x;
+      const snappedY = bestCandidate.point.y + (dy > 0 ? spacingMm : -spacingMm);
+      return {
+        snappedPoint: { x: snappedX, y: snappedY },
+        dockedWithId: bestCandidate.id,
+        dockType: "VERTICAL",
+        guide: {
+          axis: "X",
+          positionMm: snappedX,
+          startMm: Math.min(snappedY, bestCandidate.point.y) - 200,
+          endMm: Math.max(snappedY, bestCandidate.point.y) + 200,
+          type: "NODE_ALIGNMENT",
+        },
+      };
+    }
+  }
+
+  // 3. Alignement d'axe couloir faux-plafond (Y) ou colonne technique (X)
+  const axisThresholdMm = 120;
+  for (const other of otherJunctionPoints) {
+    const diffY = Math.abs(draggedPoint.y - other.point.y);
+    if (diffY <= axisThresholdMm) {
+      return {
+        snappedPoint: { x: draggedPoint.x, y: other.point.y },
+        dockedWithId: other.id,
+        dockType: "CORRIDOR_Y",
+        guide: {
+          axis: "Y",
+          positionMm: other.point.y,
+          startMm: Math.min(draggedPoint.x, other.point.x) - 400,
+          endMm: Math.max(draggedPoint.x, other.point.x) + 400,
+          type: "NODE_ALIGNMENT",
+        },
+      };
+    }
+
+    const diffX = Math.abs(draggedPoint.x - other.point.x);
+    if (diffX <= axisThresholdMm) {
+      return {
+        snappedPoint: { x: other.point.x, y: draggedPoint.y },
+        dockedWithId: other.id,
+        dockType: "COLUMN_X",
+        guide: {
+          axis: "X",
+          positionMm: other.point.x,
+          startMm: Math.min(draggedPoint.y, other.point.y) - 400,
+          endMm: Math.max(draggedPoint.y, other.point.y) + 400,
+          type: "NODE_ALIGNMENT",
+        },
+      };
+    }
+  }
+
+  return {
+    snappedPoint: draggedPoint,
+    dockedWithId: null,
+    dockType: "NONE",
+    guide: null,
+  };
+}
+

@@ -458,31 +458,6 @@ export default function NetFloorApp() {
       });
     });
 
-    // Cordons de brassage internes en baie (Data & VoIP)
-    list.push({
-      id: "cable-p1",
-      cableType: "PATCH_CORD",
-      category: "CAT6A",
-      lengthMm: 1500,
-      sourcePos: { x: rack.xMm + 100, y: rack.yMm + 260 },
-      targetPos: { x: rack.xMm + 100, y: rack.yMm + 420 },
-      vlanId: 20,
-      sourceNodeId: rack.id,
-      targetNodeId: rack.id,
-    });
-
-    list.push({
-      id: "cable-p2",
-      cableType: "PATCH_CORD",
-      category: "CAT6A",
-      lengthMm: 1500,
-      sourcePos: { x: rack.xMm + 100, y: rack.yMm + 290 },
-      targetPos: { x: rack.xMm + 100, y: rack.yMm + 450 },
-      vlanId: 30,
-      sourceNodeId: rack.id,
-      targetNodeId: rack.id,
-    });
-
     // Liaison Backbone Trunk / Interconnexion Baie
     list.push({
       id: "cable-backbone-01",
@@ -604,7 +579,7 @@ export default function NetFloorApp() {
     });
   }, []);
 
-  // Fin du déplacement d'un nœud ou d'une baie (commit immédiat avec magnétisme)
+  // Fin du déplacement d'un nœud ou d'une baie (commit immédiat avec magnétisme et détachement automatique fluide)
   const handleNodeMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
     if (rafNodeDragRef.current) {
       cancelAnimationFrame(rafNodeDragRef.current);
@@ -616,9 +591,62 @@ export default function NetFloorApp() {
     }
     pendingNodeDragRef.current = null;
     pendingRackDragRef.current = null;
+
+    // Détachement automatique au glissé : si une prise liée à un meuble est tirée loin du meuble
+    setNodes((prev) => {
+      const node = prev.find((n) => n.id === id);
+      if (node && node.type === "WALL_OUTLET" && node.attachedToDeskId) {
+        const linkedDesk = prev.find((d) => d.id === node.attachedToDeskId);
+        if (linkedDesk) {
+          const deskW = linkedDesk.widthMm ?? 1600;
+          const deskH = linkedDesk.heightMm ?? 800;
+          const deskCenterX = linkedDesk.xMm + deskW / 2;
+          const deskCenterY = linkedDesk.yMm + deskH / 2;
+          const dist = Math.hypot(newPos.x - deskCenterX, newPos.y - deskCenterY);
+          const maxAttachDistance = Math.max(deskW, deskH) + 600;
+          if (dist > maxAttachDistance) {
+            return prev.map((n) =>
+              n.id === id
+                ? {
+                    ...n,
+                    xMm: newPos.x,
+                    yMm: newPos.y,
+                    attachedToDeskId: undefined,
+                    attachedSeatIndex: undefined,
+                  }
+                : n
+            );
+          }
+        }
+      }
+      return prev;
+    });
+
     handleNodeUpdate(id, newPos);
     handleRackUpdate(id, newPos);
   }, [handleNodeUpdate, handleRackUpdate]);
+
+  // Ajout d'un coude orthogonal supplémentaire sur un câble
+  const handleAddWaypoint = useCallback((cableId: string) => {
+    setCustomWaypoints((prev) => {
+      const existing = prev[cableId] ?? [{ x: 14800, y: 9000 }];
+      const lastWp = existing[existing.length - 1] ?? { x: 14800, y: 9000 };
+      const newWp = {
+        x: Math.round(lastWp.x - 1200),
+        y: Math.round(lastWp.y + 1500),
+      };
+      return { ...prev, [cableId]: [...existing, newWp] };
+    });
+  }, []);
+
+  // Retrait du dernier coude d'un câble (minimum 1)
+  const handleRemoveWaypoint = useCallback((cableId: string) => {
+    setCustomWaypoints((prev) => {
+      const existing = prev[cableId] ?? [];
+      if (existing.length <= 1) return prev;
+      return { ...prev, [cableId]: existing.slice(0, -1) };
+    });
+  }, []);
 
   // Déplacement d'une baie throttlé par RAF
   const handleThrottledRackDragMove = useCallback((id: string, newPos: { x: number; y: number }) => {
@@ -1342,6 +1370,8 @@ export default function NetFloorApp() {
             onNodeDragMove={handleThrottledNodeDragMove}
             onRackDragMove={handleThrottledRackDragMove}
             onWaypointChange={handleThrottledWaypointChange}
+            onAddWaypoint={handleAddWaypoint}
+            onRemoveWaypoint={handleRemoveWaypoint}
           />
 
           {/* Quick tips badge */}
@@ -1369,6 +1399,8 @@ export default function NetFloorApp() {
             onAddOutletToDesk={handleAddOutletToDesk}
             onAddColonnetteToDesk={handleAddColonnetteToDesk}
             onUpdateNodeProperties={handleUpdateNodeProperties}
+            onAddWaypoint={handleAddWaypoint}
+            onRemoveWaypoint={handleRemoveWaypoint}
           />
         </div>
       </div>

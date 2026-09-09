@@ -47,6 +47,166 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 
+export interface InternalRackPatch {
+  id: string;
+  sourceDevice: string;
+  sourcePort: string;
+  targetDevice: string;
+  targetPort: string;
+  vlanId: number;
+  serviceName: string;
+  cableType: "CAT6A_RJ45" | "DAC_10G" | "FIBER_LC";
+  lengthM: number;
+  status: "UP" | "DOWN";
+  speedGbps: number;
+}
+
+const DEFAULT_RACK_PATCHES: InternalRackPatch[] = [
+  {
+    id: "patch-01",
+    sourceDevice: "PP-24P-CAT6A (U24)",
+    sourcePort: "Port 01",
+    targetDevice: "SW-ACCESS-4A (U22)",
+    targetPort: "Gi1/0/1",
+    vlanId: 20,
+    serviceName: "Poste Bureau 408-A (Data PC)",
+    cableType: "CAT6A_RJ45",
+    lengthM: 1.0,
+    status: "UP",
+    speedGbps: 1,
+  },
+  {
+    id: "patch-02",
+    sourceDevice: "PP-24P-CAT6A (U24)",
+    sourcePort: "Port 02",
+    targetDevice: "SW-ACCESS-4A (U22)",
+    targetPort: "Gi1/0/2",
+    vlanId: 30,
+    serviceName: "IP Phone Bureau 408-B (VoIP)",
+    cableType: "CAT6A_RJ45",
+    lengthM: 1.0,
+    status: "UP",
+    speedGbps: 1,
+  },
+  {
+    id: "patch-03",
+    sourceDevice: "PP-24P-CAT6A (U24)",
+    sourcePort: "Port 03",
+    targetDevice: "SW-ACCESS-4A (U22)",
+    targetPort: "Gi1/0/3",
+    vlanId: 20,
+    serviceName: "Colonnette 402 - RJ45-1 (Data)",
+    cableType: "CAT6A_RJ45",
+    lengthM: 1.0,
+    status: "UP",
+    speedGbps: 1,
+  },
+  {
+    id: "patch-04",
+    sourceDevice: "PP-24P-CAT6A (U24)",
+    sourcePort: "Port 04",
+    targetDevice: "SW-ACCESS-4A (U22)",
+    targetPort: "Gi1/0/4",
+    vlanId: 30,
+    serviceName: "Colonnette 402 - RJ45-2 (VoIP)",
+    cableType: "CAT6A_RJ45",
+    lengthM: 1.0,
+    status: "UP",
+    speedGbps: 1,
+  },
+  {
+    id: "patch-05",
+    sourceDevice: "PP-24P-CAT6A (U24)",
+    sourcePort: "Port 05",
+    targetDevice: "SW-ACCESS-4A (U22)",
+    targetPort: "Gi1/0/5",
+    vlanId: 20,
+    serviceName: "Boîte Sol 1 (Data)",
+    cableType: "CAT6A_RJ45",
+    lengthM: 1.5,
+    status: "UP",
+    speedGbps: 1,
+  },
+  {
+    id: "patch-06",
+    sourceDevice: "PP-24P-CAT6A (U24)",
+    sourcePort: "Port 06",
+    targetDevice: "SW-ACCESS-4A (U22)",
+    targetPort: "Gi1/0/6",
+    vlanId: 50,
+    serviceName: "Borne Wi-Fi 04 Plafond (PoE+)",
+    cableType: "CAT6A_RJ45",
+    lengthM: 1.5,
+    status: "UP",
+    speedGbps: 2.5,
+  },
+  {
+    id: "patch-07",
+    sourceDevice: "PP-24P-CAT6A (U24)",
+    sourcePort: "Port 07",
+    targetDevice: "SW-ACCESS-4A (U22)",
+    targetPort: "Gi1/0/7",
+    vlanId: 40,
+    serviceName: "Copieur RH (Impression)",
+    cableType: "CAT6A_RJ45",
+    lengthM: 1.0,
+    status: "UP",
+    speedGbps: 1,
+  },
+  {
+    id: "patch-08",
+    sourceDevice: "SW-ACCESS-4A (U22)",
+    sourcePort: "Te1/0/1",
+    targetDevice: "SW-DISTRIB-4B (U20)",
+    targetPort: "Te1/0/1",
+    vlanId: 99,
+    serviceName: "Trunk Inter-Switch 802.1Q (LACP)",
+    cableType: "DAC_10G",
+    lengthM: 0.5,
+    status: "UP",
+    speedGbps: 10,
+  },
+  {
+    id: "patch-09",
+    sourceDevice: "SW-ACCESS-4A (U22)",
+    sourcePort: "Te1/0/2",
+    targetDevice: "FW-FORTIGATE (U15)",
+    targetPort: "port1",
+    vlanId: 99,
+    serviceName: "Uplink Cœur Sécurité Pare-feu",
+    cableType: "DAC_10G",
+    lengthM: 1.0,
+    status: "UP",
+    speedGbps: 10,
+  },
+  {
+    id: "patch-10",
+    sourceDevice: "SW-DISTRIB-4B (U20)",
+    sourcePort: "Te1/0/2",
+    targetDevice: "SRV-ESXI (U10)",
+    targetPort: "vmnic0",
+    vlanId: 10,
+    serviceName: "Cluster Hyperviseur & Stockage NAS",
+    cableType: "DAC_10G",
+    lengthM: 1.0,
+    status: "UP",
+    speedGbps: 10,
+  },
+  {
+    id: "patch-11",
+    sourceDevice: "FW-FORTIGATE (U15)",
+    sourcePort: "WAN1",
+    targetDevice: "Tiroir Optique Orange (U05)",
+    targetPort: "Port 1",
+    vlanId: 100,
+    serviceName: "Accès Internet Entreprise FTTO",
+    cableType: "FIBER_LC",
+    lengthM: 2.0,
+    status: "UP",
+    speedGbps: 1,
+  },
+];
+
 export interface CircuitInspectorProps {
   traceResult: CircuitTraceResult | null;
   isLoading: boolean;
@@ -61,6 +221,8 @@ export interface CircuitInspectorProps {
   onAddOutletToDesk?: ((deskId: string, role: OutletRole) => void) | undefined;
   onAddColonnetteToDesk?: ((deskId: string, portsCount?: number | undefined) => void) | undefined;
   onUpdateNodeProperties?: ((nodeId: string, updates: Partial<NodeDisplay>) => void) | undefined;
+  onAddWaypoint?: ((cableId: string) => void) | undefined;
+  onRemoveWaypoint?: ((cableId: string) => void) | undefined;
 }
 
 export const CircuitInspector: FC<CircuitInspectorProps> = ({
@@ -77,11 +239,23 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
   onAddOutletToDesk,
   onAddColonnetteToDesk,
   onUpdateNodeProperties,
+  onAddWaypoint,
+  onRemoveWaypoint,
 }) => {
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false);
   const [pickingSeatIndex, setPickingSeatIndex] = useState<number | null>(null);
   const [activeStackedPortIdx, setActiveStackedPortIdx] = useState(0);
+
+  // État interactif du Menu Baie & Branchements Internes
+  const [rackTab, setRackTab] = useState<"PATCHING" | "EQUIPMENT" | "VLANS">("PATCHING");
+  const [rackVlanFilter, setRackVlanFilter] = useState<string>("ALL");
+  const [rackPatches, setRackPatches] = useState<InternalRackPatch[]>(DEFAULT_RACK_PATCHES);
+  const [isAddingPatch, setIsAddingPatch] = useState(false);
+  const [newPatchSourcePort, setNewPatchSourcePort] = useState("Port 08");
+  const [newPatchTargetPort, setNewPatchTargetPort] = useState("Gi1/0/8");
+  const [newPatchVlan, setNewPatchVlan] = useState(20);
+  const [newPatchRole, setNewPatchRole] = useState("Poste Travail Flex (Data)");
 
   // Sécuriser l'index du port actif pour le slot multi-ports
   const safeStackedPortIdx = useMemo(() => {
@@ -941,6 +1115,38 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
           </div>
         </div>
 
+        {/* 1b. Carte : Cheminement Câble & Coudes Orthogonaux 90° */}
+        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+              <RotateCw className="w-3.5 h-3.5 text-blue-400" />
+              Coudes Câble (90° Orthogonal)
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono">Routing</span>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Chaque coude est déplaçable librement pour contourner les bureaux ou suivre les cloisons.
+          </p>
+          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+            <button
+              onClick={() => onAddWaypoint?.(`cable-run-${selectedNode.id}`)}
+              className="py-1 px-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+              title="Ajouter un coude orthogonal à 90°"
+            >
+              <Plus className="w-3 h-3" />
+              + Coude (90°)
+            </button>
+            <button
+              onClick={() => onRemoveWaypoint?.(`cable-run-${selectedNode.id}`)}
+              className="py-1 px-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+              title="Retirer le dernier coude du câble"
+            >
+              <Trash2 className="w-3 h-3" />
+              - Retirer coude
+            </button>
+          </div>
+        </div>
+
         {/* 2. Carte : Liaison Mobilier & Postes */}
         <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2">
           <div className="flex items-center justify-between">
@@ -1189,10 +1395,37 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
     const rackDepthMm = selectedNode.heightMm ?? 1000;
     const connectedOutlets = allNodes.filter((n) => n.type === "WALL_OUTLET");
 
+    const filteredPatches = rackPatches.filter((p) => {
+      if (rackVlanFilter === "ALL") return true;
+      return String(p.vlanId) === rackVlanFilter;
+    });
+
+    const handleCreatePatch = () => {
+      const newPatch: InternalRackPatch = {
+        id: `patch-${Date.now()}`,
+        sourceDevice: "PP-24P-CAT6A (U24)",
+        sourcePort: newPatchSourcePort,
+        targetDevice: "SW-ACCESS-4A (U22)",
+        targetPort: newPatchTargetPort,
+        vlanId: newPatchVlan,
+        serviceName: newPatchRole || "Cordon de brassage interne",
+        cableType: newPatchVlan === 99 ? "DAC_10G" : "CAT6A_RJ45",
+        lengthM: 1.0,
+        status: "UP",
+        speedGbps: newPatchVlan === 99 ? 10 : 1,
+      };
+      setRackPatches((prev) => [...prev, newPatch]);
+      setIsAddingPatch(false);
+    };
+
+    const handleDeletePatch = (patchId: string) => {
+      setRackPatches((prev) => prev.filter((p) => p.id !== patchId));
+    };
+
     return (
       <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
         {/* En-tête Baie */}
-        <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0">
+        <div className="border-b border-slate-800 pb-3 mb-2 flex-shrink-0">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
               <Server className="w-4 h-4 text-purple-400 flex-shrink-0" />
@@ -1210,170 +1443,520 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
               {(selectedNode.xMm / 1000).toFixed(1)}m, {(selectedNode.yMm / 1000).toFixed(1)}m
             </span>
           </div>
+
+          {/* Navigation par Onglets de la Baie */}
+          <div className="grid grid-cols-3 gap-1 mt-2.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <button
+              onClick={() => setRackTab("PATCHING")}
+              className={`py-1 px-1.5 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
+                rackTab === "PATCHING"
+                  ? "bg-purple-600 text-white shadow-sm font-semibold"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              }`}
+            >
+              <ArrowLeftRight className="w-3 h-3" />
+              Brassage ({rackPatches.length})
+            </button>
+            <button
+              onClick={() => setRackTab("EQUIPMENT")}
+              className={`py-1 px-1.5 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
+                rackTab === "EQUIPMENT"
+                  ? "bg-purple-600 text-white shadow-sm font-semibold"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              }`}
+            >
+              <Zap className="w-3 h-3" />
+              Châssis 42U
+            </button>
+            <button
+              onClick={() => setRackTab("VLANS")}
+              className={`py-1 px-1.5 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
+                rackTab === "VLANS"
+                  ? "bg-purple-600 text-white shadow-sm font-semibold"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              }`}
+            >
+              <Network className="w-3 h-3" />
+              VLANs & IP
+            </button>
+          </div>
         </div>
 
+        {/* Corps défilant selon l'onglet actif */}
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-          {/* Section 1 : Équipements internes 19 pouces */}
-          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-            <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-blue-400" />
-              Équipements Rackables Normalisés (U)
-            </span>
-
-            <div className="space-y-1.5">
-              {/* U24 Panneau de brassage */}
-              <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-blue-400" />
-                    U24 : PP-24P-CAT6A-U24
-                  </span>
-                  <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                    {connectedOutlets.length}/24 brassés
-                  </span>
+          {rackTab === "PATCHING" && (
+            <div className="space-y-3">
+              {/* Entête & Statistiques de brassage */}
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                      <ArrowLeftRight className="w-3.5 h-3.5 text-purple-400" />
+                      Branchements Internes de la Baie
+                    </div>
+                    <div className="text-[9px] text-slate-400 mt-0.5">
+                      Liaisons inter-switch, tiroirs optiques et distribution RJ45
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsAddingPatch(!isAddingPatch)}
+                    className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-medium flex items-center gap-1 transition shadow"
+                  >
+                    <Plus className="w-3 h-3" />
+                    {isAddingPatch ? "Fermer" : "Nouveau"}
+                  </button>
                 </div>
-                <div className="text-[10px] text-slate-400">
-                  Panneau RJ45 Cat6A blindé STP • Câblage horizontal des bureaux
+
+                {/* Formulaire ajout nouveau cordon */}
+                {isAddingPatch && (
+                  <div className="p-2.5 bg-slate-950 rounded-lg border border-purple-500/40 space-y-2 mt-2">
+                    <div className="text-[10px] font-semibold text-purple-300 flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Brasser un nouveau cordon interne
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Origine (U24 PP)</label>
+                        <select
+                          value={newPatchSourcePort}
+                          onChange={(e) => setNewPatchSourcePort(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                        >
+                          {Array.from({ length: 24 }).map((_, i) => (
+                            <option key={`p-src-${i}`} value={`Port ${String(i + 1).padStart(2, "0")}`}>
+                              Port {String(i + 1).padStart(2, "0")}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Destination (U22 Switch)</label>
+                        <select
+                          value={newPatchTargetPort}
+                          onChange={(e) => setNewPatchTargetPort(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                        >
+                          {Array.from({ length: 24 }).map((_, i) => (
+                            <option key={`p-tgt-${i}`} value={`Gi1/0/${i + 1}`}>
+                              Gi1/0/{i + 1}
+                            </option>
+                          ))}
+                          <option value="Te1/0/1">Te1/0/1 (10G)</option>
+                          <option value="Te1/0/2">Te1/0/2 (10G)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">VLAN Assigné</label>
+                        <select
+                          value={newPatchVlan}
+                          onChange={(e) => setNewPatchVlan(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                        >
+                          <option value={20}>VLAN 20 (Corp Data)</option>
+                          <option value={30}>VLAN 30 (VoIP)</option>
+                          <option value={40}>VLAN 40 (Print)</option>
+                          <option value={50}>VLAN 50 (WiFi)</option>
+                          <option value={99}>VLAN 99 (Trunk)</option>
+                          <option value={10}>VLAN 10 (Infra)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Libellé / Destination</label>
+                        <input
+                          type="text"
+                          value={newPatchRole}
+                          onChange={(e) => setNewPatchRole(e.target.value)}
+                          placeholder="Ex: Bureau 403 - RJ45-1"
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-1.5 pt-1">
+                      <button
+                        onClick={() => setIsAddingPatch(false)}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        onClick={handleCreatePatch}
+                        className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-semibold"
+                      >
+                        Créer le cordon
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Filtre par VLAN */}
+                <div className="flex items-center gap-1 overflow-x-auto pt-1 pb-0.5 font-mono text-[9px]">
+                  <span className="text-slate-500 flex-shrink-0">Filtrer :</span>
+                  {[
+                    { id: "ALL", label: "Tous" },
+                    { id: "20", label: "VLAN 20" },
+                    { id: "30", label: "VLAN 30" },
+                    { id: "40", label: "VLAN 40" },
+                    { id: "50", label: "VLAN 50" },
+                    { id: "99", label: "Trunk 99" },
+                    { id: "10", label: "Infra 10" },
+                  ].map((filter) => (
+                    <button
+                      key={filter.id}
+                      onClick={() => setRackVlanFilter(filter.id)}
+                      className={`px-1.5 py-0.5 rounded border transition flex-shrink-0 ${
+                        rackVlanFilter === filter.id
+                          ? "bg-purple-600 text-white border-purple-500"
+                          : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200"
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* U22 Switch Cisco */}
-              <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    U22 : SW-ACCESS-4A-U22
-                  </span>
-                  <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
-                    Cisco C9300
-                  </span>
-                </div>
-                <div className="text-[10px] text-slate-400">
-                  24 Ports 1GbE PoE+ 370W • Uplink 10GbE SFP+ vers Cœur de réseau
-                </div>
-              </div>
+              {/* Liste détaillée des cordons de brassage internes */}
+              <div className="space-y-1.5">
+                {filteredPatches.map((patch) => {
+                  const isVlan30 = patch.vlanId === 30;
+                  const isVlan50 = patch.vlanId === 50;
+                  const isVlan40 = patch.vlanId === 40;
+                  const isTrunk = patch.vlanId === 99;
+                  const isInfra = patch.vlanId === 10;
 
-              {/* U01 PDU */}
-              <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-amber-400" />
-                    U01 : PDU-APC-16A
-                  </span>
-                  <span className="text-[9px] font-mono text-amber-400">230V Ondulé</span>
-                </div>
-                <div className="text-[10px] text-slate-400">
-                  Alimentation secourue sur onduleur centralisé
+                  const vlanColorClass = isVlan30
+                    ? "text-purple-400 bg-purple-500/10 border-purple-500/30"
+                    : isVlan50
+                    ? "text-indigo-400 bg-indigo-500/10 border-indigo-500/30"
+                    : isVlan40
+                    ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+                    : isTrunk
+                    ? "text-rose-400 bg-rose-500/10 border-rose-500/30"
+                    : isInfra
+                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                    : "text-blue-400 bg-blue-500/10 border-blue-500/30";
+
+                  return (
+                    <div
+                      key={patch.id}
+                      className="p-2 bg-slate-950 rounded-lg border border-slate-800/80 hover:border-slate-700 transition space-y-1.5 group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-200 text-[11px] truncate flex items-center gap-1.5">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              patch.status === "UP" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+                            }`}
+                          />
+                          {patch.serviceName}
+                        </span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <span className={`text-[9px] font-mono px-1 py-0.5 rounded border ${vlanColorClass}`}>
+                            VID {patch.vlanId}
+                          </span>
+                          <button
+                            onClick={() => handleDeletePatch(patch.id)}
+                            className="text-slate-600 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+                            title="Débrancher ce cordon de brassage"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Cheminement Ports */}
+                      <div className="flex items-center justify-between font-mono text-[10px] bg-slate-900/60 p-1.5 rounded border border-slate-900">
+                        <div className="flex flex-col">
+                          <span className="text-slate-400 text-[9px]">{patch.sourceDevice}</span>
+                          <span className="text-blue-300 font-semibold">{patch.sourcePort}</span>
+                        </div>
+                        <div className="flex flex-col items-center px-1 text-slate-500">
+                          <span className="text-[8px] uppercase tracking-wider text-slate-400">
+                            {patch.cableType === "DAC_10G"
+                              ? "DAC 10G"
+                              : patch.cableType === "FIBER_LC"
+                              ? "Fibre LC"
+                              : "Cat6A RJ45"}
+                          </span>
+                          <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-slate-400 text-[9px]">{patch.targetDevice}</span>
+                          <span className="text-emerald-300 font-semibold">{patch.targetPort}</span>
+                        </div>
+                      </div>
+
+                      {/* Détails techniques bas */}
+                      <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono pt-0.5">
+                        <span>L: {patch.lengthM}m</span>
+                        <span className="text-slate-300 font-medium">{patch.speedGbps} Gbps</span>
+                        <span className="text-emerald-400 font-semibold">Liaison {patch.status}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {rackTab === "EQUIPMENT" && (
+            <div className="space-y-2">
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-purple-400" />
+                  Élévation Châssis Rack 19&quot; (42U)
+                </span>
+
+                <div className="space-y-1.5">
+                  {/* U24 Panneau de brassage */}
+                  <div className="p-2 bg-slate-950 rounded border border-blue-500/30 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-blue-400" />
+                        U24 : PP-24P-CAT6A-U24
+                      </span>
+                      <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                        {connectedOutlets.length}/24 brassés
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Panneau RJ45 Cat6A blindé STP • Câblage horizontal des bureaux
+                    </div>
+                  </div>
+
+                  {/* U22 Switch Cisco */}
+                  <div className="p-2 bg-slate-950 rounded border border-emerald-500/30 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        U22 : SW-ACCESS-4A-U22
+                      </span>
+                      <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
+                        Cisco C9300
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      24 Ports 1GbE PoE+ 370W • Uplink 10GbE SFP+ vers Cœur
+                    </div>
+                  </div>
+
+                  {/* U20 Switch d'agrégation */}
+                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                        U20 : SW-DISTRIB-4B
+                      </span>
+                      <span className="text-[9px] font-mono text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
+                        48P 10GbE
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Commutateur de distribution & agrégation LACP 802.1AX
+                    </div>
+                  </div>
+
+                  {/* U15 Pare-feu Fortinet */}
+                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-rose-400" />
+                        U15 : FW-FORTIGATE-100F
+                      </span>
+                      <span className="text-[9px] font-mono text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
+                        Next-Gen
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Pare-feu périmétrique, VPN IPsec & inspection SSL
+                    </div>
+                  </div>
+
+                  {/* U10 Serveur ESXi */}
+                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                        U10 : SRV-ESXI-POWEREDGE
+                      </span>
+                      <span className="text-[9px] font-mono text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
+                        VMware ESXi
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Serveur applicatif DSI, contrôleur AD DC & DNS local
+                    </div>
+                  </div>
+
+                  {/* U05 Tiroir optique FTTO */}
+                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-400" />
+                        U05 : Tiroir Optique FTTO
+                      </span>
+                      <span className="text-[9px] font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                        Fibre Orange
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Arrivée opérateur Fibre Dédiée 1 Gbps symétrique GTR 4H
+                    </div>
+                  </div>
+
+                  {/* U01 PDU */}
+                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-amber-400" />
+                        U01 : PDU-APC-16A
+                      </span>
+                      <span className="text-[9px] font-mono text-amber-400">230V Ondulé</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Alimentation secourue sur onduleur centralisé
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Section 1b : Carte Adressage Réseau & IPAM Baie */}
-          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-                <Network className="w-3.5 h-3.5 text-cyan-400" />
-                Management IP & SNMP Baie
-              </span>
-              {selectedNode.pingStatus ? (
-                <span
-                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                    selectedNode.pingStatus === "ONLINE"
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                      : selectedNode.pingStatus === "DEGRADED"
-                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                      : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      selectedNode.pingStatus === "ONLINE" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
-                    }`}
-                  />
-                  {selectedNode.pingStatus}
-                  {selectedNode.pingLatencyMs !== undefined ? ` (${selectedNode.pingLatencyMs}ms)` : ""}
+          {rackTab === "VLANS" && (
+            <div className="space-y-3">
+              {/* Management IP & SNMP */}
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Network className="w-3.5 h-3.5 text-cyan-400" />
+                    Management IP & SNMP Baie
+                  </span>
+                  {selectedNode.pingStatus ? (
+                    <span
+                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                        selectedNode.pingStatus === "ONLINE"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          : selectedNode.pingStatus === "DEGRADED"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          selectedNode.pingStatus === "ONLINE" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+                        }`}
+                      />
+                      {selectedNode.pingStatus}
+                      {selectedNode.pingLatencyMs !== undefined ? ` (${selectedNode.pingLatencyMs}ms)` : ""}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.5 rounded">
+                      SNMP v3 Active
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                      <Globe className="w-3 h-3 text-slate-500" />
+                      IP Switch Mgmt :
+                    </span>
+                    <input
+                      type="text"
+                      value={selectedNode.ipAddress ?? ""}
+                      placeholder="Ex: 10.42.0.10"
+                      onChange={(e) =>
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                        })
+                      }
+                      className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                      <Activity className="w-3 h-3 text-slate-500" />
+                      MAC Châssis :
+                    </span>
+                    <input
+                      type="text"
+                      value={selectedNode.macAddress ?? ""}
+                      placeholder="Ex: 00:0A:41:88:99:A1"
+                      onChange={(e) =>
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                        })
+                      }
+                      className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Table des VLANs */}
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  Segmentation VLANs & Trunks
                 </span>
-              ) : (
-                <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.5 rounded">
-                  SNMP v3 Active
-                </span>
-              )}
+
+                <div className="space-y-1.5 text-[10px] font-mono">
+                  <div className="p-2 bg-slate-950 rounded border border-blue-500/30 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-blue-300">VLAN 20 • VLAN_CORP_DATA</div>
+                      <div className="text-[9px] text-slate-400">Subnet: 10.42.20.0/24 • GW: 10.42.20.1</div>
+                    </div>
+                    <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded">Access</span>
+                  </div>
+
+                  <div className="p-2 bg-slate-950 rounded border border-purple-500/30 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-purple-300">VLAN 30 • VLAN_VOIP</div>
+                      <div className="text-[9px] text-slate-400">Subnet: 10.42.30.0/24 • QoS DSCP EF46</div>
+                    </div>
+                    <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded">Access</span>
+                  </div>
+
+                  <div className="p-2 bg-slate-950 rounded border border-amber-500/30 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-amber-300">VLAN 40 • VLAN_PRINT</div>
+                      <div className="text-[9px] text-slate-400">Subnet: 10.42.40.0/24 • Filtrage ACL</div>
+                    </div>
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded">Access</span>
+                  </div>
+
+                  <div className="p-2 bg-slate-950 rounded border border-indigo-500/30 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-indigo-300">VLAN 50 • VLAN_WIFI_INFRA</div>
+                      <div className="text-[9px] text-slate-400">Subnet: 10.42.50.0/24 • Bornes AP PoE+</div>
+                    </div>
+                    <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded">Access</span>
+                  </div>
+
+                  <div className="p-2 bg-slate-950 rounded border border-rose-500/30 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-rose-300">VLAN 99 • VLAN_TRUNK_INTERSWITCH</div>
+                      <div className="text-[9px] text-slate-400">Trunk 802.1Q • Ports 10GbE Uplink SFP+</div>
+                    </div>
+                    <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded">Trunk</span>
+                  </div>
+                </div>
+              </div>
             </div>
+          )}
 
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                  <Globe className="w-3 h-3 text-slate-500" />
-                  IP Switch Mgmt :
-                </span>
-                <input
-                  type="text"
-                  value={selectedNode.ipAddress ?? ""}
-                  placeholder="Ex: 10.42.0.10"
-                  onChange={(e) =>
-                    onUpdateNodeProperties?.(selectedNode.id, {
-                      ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
-                    })
-                  }
-                  className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                  <Activity className="w-3 h-3 text-slate-500" />
-                  MAC Châssis :
-                </span>
-                <input
-                  type="text"
-                  value={selectedNode.macAddress ?? ""}
-                  placeholder="Ex: 00:0A:41:88:99:A1"
-                  onChange={(e) =>
-                    onUpdateNodeProperties?.(selectedNode.id, {
-                      macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
-                    })
-                  }
-                  className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2 : VLANs Actifs Distribués */}
-          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-            <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              VLANs & Segmentation Réseau
-            </span>
-
-            <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
-              <div className="p-1.5 bg-slate-950 rounded border border-blue-500/30 text-blue-300">
-                <div className="font-bold">VLAN 20</div>
-                <div className="text-[9px] text-slate-400">VLAN_CORP_DATA</div>
-              </div>
-              <div className="p-1.5 bg-slate-950 rounded border border-purple-500/30 text-purple-300">
-                <div className="font-bold">VLAN 30</div>
-                <div className="text-[9px] text-slate-400">VLAN_VOIP (QoS)</div>
-              </div>
-              <div className="p-1.5 bg-slate-950 rounded border border-amber-500/30 text-amber-300">
-                <div className="font-bold">VLAN 40</div>
-                <div className="text-[9px] text-slate-400">VLAN_PRINT</div>
-              </div>
-              <div className="p-1.5 bg-slate-950 rounded border border-indigo-500/30 text-indigo-300">
-                <div className="font-bold">VLAN 50</div>
-                <div className="text-[9px] text-slate-400">VLAN_WIFI_INFRA</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3 : Liaisons vers les prises du plateau */}
+          {/* Section : Liaisons vers les prises du plateau */}
           <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
             <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
               <Link2 className="w-3.5 h-3.5 text-blue-400" />
-              Prises Raccordées ({connectedOutlets.length})
+              Prises Bureaux Raccordées au Panneau ({connectedOutlets.length})
             </span>
 
-            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+            <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
               {connectedOutlets.map((outlet, oIdx) => (
                 <button
                   key={outlet.id}

@@ -1,0 +1,76 @@
+services:
+  # ============================================================================
+  # 1. Annuaire d'Entreprise : OpenLDAP avec schéma d'entreprise
+  # ============================================================================
+  lab-ldap:
+    image: osixia/openldap:1.5.0
+    container_name: netfloor-lab-ldap
+    restart: unless-stopped
+    environment:
+      LDAP_ORGANISATION: "NetFloor Enterprise"
+      LDAP_DOMAIN: "company.com"
+      LDAP_BASE_DN: "dc=company,dc=com"
+      LDAP_ADMIN_PASSWORD: "adminpassword"
+      LDAP_CONFIG_PASSWORD: "configpassword"
+      LDAP_READONLY_USER: "true"
+      LDAP_READONLY_USER_USERNAME: "readonly"
+      LDAP_READONLY_USER_PASSWORD: "readonlypassword"
+      LDAP_RFC2307BIS_SCHEMA: "true"
+      LDAP_TLS: "false"
+    volumes:
+      - ./ldap-seed:/ldap-seed:ro
+      - lab_ldap_data:/var/lib/ldap
+      - lab_ldap_config:/etc/ldap/slapd.d
+    ports:
+      - "389:389"
+      - "636:636"
+    networks:
+      netfloor-lab-net:
+        ipv4_address: 172.28.0.10
+
+  # ============================================================================
+  # 2. Interface Web Graphique : phpLDAPadmin (Exploration & Édition des comptes)
+  # ============================================================================
+  lab-ldap-admin:
+    image: osixia/phpldapadmin:latest
+    container_name: netfloor-lab-ldap-admin
+    restart: unless-stopped
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: "lab-ldap"
+      PHPLDAPADMIN_HTTPS: "false"
+      PHPLDAPADMIN_SERVER_ADMIN: "admin@company.com"
+    ports:
+      - "8088:80"
+    depends_on:
+      - lab-ldap
+    networks:
+      netfloor-lab-net:
+        ipv4_address: 172.28.0.11
+
+  # ============================================================================
+  # 3. Simulateur d'Équipements Réseau : SNMPsim (Cisco Catalyst, Baies APC)
+  # ============================================================================
+  lab-snmp-sim:
+    image: tandrup/snmpsim:latest
+    container_name: netfloor-lab-snmpsim
+    restart: unless-stopped
+    command: >
+      /bin/sh -c "snmpsimd.py --agent-udpv4-endpoint=0.0.0.0:161 --process-user=snmpsim --process-group=nogroup --data-dir=/usr/local/snmpsim/data"
+    volumes:
+      - ./snmp-data:/usr/local/snmpsim/data:ro
+    ports:
+      - "161:161/udp"
+    networks:
+      netfloor-lab-net:
+        ipv4_address: 172.28.0.20
+
+networks:
+  netfloor-lab-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  lab_ldap_data:
+  lab_ldap_config:

@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import { useRef, type FC } from "react";
 import { Group, Rect, Text, Line, Circle } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 
@@ -146,6 +146,113 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
     e.cancelBubble = true;
   };
 
+  // Référence pour le suivi synchrone GPU immédiat du bureau et de ses prises solidaires (0 latence)
+  const deskDragStateRef = useRef<{
+    deskId: string;
+    startDeskPos: { x: number; y: number };
+    attachedOutlets: {
+      id: string;
+      startPos: { x: number; y: number };
+      localAnchorX: number;
+      localAnchorY: number;
+    }[];
+  } | null>(null);
+
+  const handleDeskDragStart = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
+    const attached = nodes.filter((n) => n.type === "WALL_OUTLET" && n.attachedToDeskId === desk.id);
+    const deskW = desk.widthMm ?? 1600;
+    const deskH = desk.heightMm ?? 800;
+
+    deskDragStateRef.current = {
+      deskId: desk.id,
+      startDeskPos: { x: e.target.x(), y: e.target.y() },
+      attachedOutlets: attached.map((outlet) => {
+        let localAnchorX = deskW / 2;
+        let localAnchorY = deskH / 2;
+        if (outlet.attachedSeatIndex !== undefined) {
+          if (desk.subType === "BENCH_QUAD") {
+            const sIdx = outlet.attachedSeatIndex;
+            localAnchorX = sIdx === 0 || sIdx === 2 ? deskW / 4 : (3 * deskW) / 4;
+            localAnchorY = sIdx === 0 || sIdx === 1 ? deskH / 4 : (3 * deskH) / 4;
+          } else if (desk.subType === "BENCH_DOUBLE") {
+            const sIdx = outlet.attachedSeatIndex;
+            localAnchorX = deskW / 2;
+            localAnchorY = sIdx === 0 ? deskH / 4 : (3 * deskH) / 4;
+          }
+        }
+        return {
+          id: outlet.id,
+          startPos: { x: outlet.xMm, y: outlet.yMm },
+          localAnchorX,
+          localAnchorY,
+        };
+      }),
+    };
+  };
+
+  const handleDeskDragMove = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
+    const state = deskDragStateRef.current;
+    const currentDeskX = e.target.x();
+    const currentDeskY = e.target.y();
+
+    if (state && state.deskId === desk.id) {
+      const deltaX = currentDeskX - state.startDeskPos.x;
+      const deltaY = currentDeskY - state.startDeskPos.y;
+      const stage = e.target.getStage();
+
+      const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+      const cosR = Math.cos(rotRad);
+      const sinR = Math.sin(rotRad);
+
+      if (stage) {
+        for (const item of state.attachedOutlets) {
+          const currentOutletX = item.startPos.x + deltaX;
+          const currentOutletY = item.startPos.y + deltaY;
+
+          // 1. Déplacer instantanément le nœud Konva de la prise solidaire
+          const outletNode = stage.findOne("#" + item.id);
+          if (outletNode) {
+            outletNode.position({ x: currentOutletX, y: currentOutletY });
+          }
+
+          // 2. Mettre à jour la ligne d'ancrage en pointillés
+          const anchorLineNode = stage.findOne("#anchor-line-" + item.id) as any;
+          if (anchorLineNode && typeof anchorLineNode.points === "function") {
+            const anchorX = currentDeskX + item.localAnchorX * cosR - item.localAnchorY * sinR;
+            const anchorY = currentDeskY + item.localAnchorX * sinR + item.localAnchorY * cosR;
+            anchorLineNode.points([anchorX, anchorY, currentOutletX, currentOutletY]);
+          }
+
+          // 3. Mettre à jour l'extrémité du câble relié à cette prise
+          const cableLineNode = stage.findOne("#cable-line-cable-run-" + item.id) as any;
+          if (cableLineNode && typeof cableLineNode.points === "function") {
+            const currentPts = cableLineNode.points();
+            if (currentPts && currentPts.length >= 4) {
+              const updatedPts = [...currentPts];
+              updatedPts[0] = currentOutletX;
+              updatedPts[1] = currentOutletY;
+              updatedPts[2] = currentOutletX;
+              cableLineNode.points(updatedPts);
+            }
+          }
+        }
+
+        // Re-dessin GPU synchrone immédiat (0 latence, même frame 60 FPS)
+        stage.batchDraw();
+      }
+    }
+
+    onNodeDragMove?.(desk.id, { x: currentDeskX, y: currentDeskY });
+  };
+
+  const handleDeskDragEnd = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
+    deskDragStateRef.current = null;
+    handleDragEnd(desk.id, e);
+  };
+
   const handleRackDragMove = (id: string, e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
     onRackDragMove?.(id, { x: e.target.x(), y: e.target.y() });
@@ -209,6 +316,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             return (
               <Group key={`anchor-link-${outlet.id}`} listening={false}>
                 <Line
+                  id={`anchor-line-${outlet.id}`}
                   points={[anchorX, anchorY, outlet.xMm, outlet.yMm]}
                   stroke={lineColor}
                   strokeWidth={18}
@@ -524,9 +632,9 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               draggable
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
-              onDragStart={handleDragStart}
-              onDragMove={(e) => handleNodeDragMove(desk.id, e)}
-              onDragEnd={(e) => handleDragEnd(desk.id, e)}
+              onDragStart={(e) => handleDeskDragStart(desk, e)}
+              onDragMove={(e) => handleDeskDragMove(desk, e)}
+              onDragEnd={(e) => handleDeskDragEnd(desk, e)}
               onClick={() => onSelectNode?.(desk)}
               onTap={() => onSelectNode?.(desk)}
             >
@@ -901,6 +1009,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             return (
               <Group
                 key={outlet.id}
+                id={outlet.id}
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
@@ -982,6 +1091,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             return (
               <Group
                 key={outlet.id}
+                id={outlet.id}
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
@@ -1043,6 +1153,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             return (
               <Group
                 key={outlet.id}
+                id={outlet.id}
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
@@ -1113,6 +1224,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             return (
               <Group
                 key={outlet.id}
+                id={outlet.id}
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
@@ -1286,6 +1398,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
           return (
             <Group
               key={outlet.id}
+              id={outlet.id}
               x={outlet.xMm}
               y={outlet.yMm}
               draggable
