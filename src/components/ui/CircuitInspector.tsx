@@ -133,6 +133,13 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
       assignedUserId: updatedSeats[0]?.userId,
       department: updatedSeats[0]?.department,
     });
+    // Propager le nom du collaborateur sur les prises affectées à cette place
+    const seatOutlets = allNodes.filter(
+      (n) => n.type === "WALL_OUTLET" && n.attachedToDeskId === selectedNode.id && n.attachedSeatIndex === seatIdx
+    );
+    seatOutlets.forEach((o) => {
+      onUpdateNodeProperties?.(o.id, { assignedPerson: user.fullName });
+    });
     setPickingSeatIndex(null);
   };
 
@@ -157,6 +164,13 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
       assignedPerson: summary || undefined,
       assignedUserId: updatedSeats.find((s) => s.userId)?.userId,
       department: updatedSeats.find((s) => s.department)?.department,
+    });
+    // Libérer l'assignation sur les prises de cette place
+    const seatOutlets = allNodes.filter(
+      (n) => n.type === "WALL_OUTLET" && n.attachedToDeskId === selectedNode.id && n.attachedSeatIndex === seatIdx
+    );
+    seatOutlets.forEach((o) => {
+      onUpdateNodeProperties?.(o.id, { assignedPerson: undefined });
     });
   };
 
@@ -374,6 +388,58 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                 </div>
               </div>
 
+              {/* Affectation de la prise à une place spécifique du bureau */}
+              {getDeskSeatCount(linkedDesk.subType) > 1 && (
+                <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-slate-300 font-medium flex items-center gap-1">
+                      <Users className="w-3 h-3 text-blue-400" />
+                      Attribution à la place :
+                    </span>
+                    {selectedNode.attachedSeatIndex !== undefined ? (
+                      <span className="text-[9px] font-mono bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/30">
+                        Place {selectedNode.attachedSeatIndex + 1}
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-mono text-slate-500">Commune</span>
+                    )}
+                  </div>
+                  <select
+                    value={selectedNode.attachedSeatIndex !== undefined ? selectedNode.attachedSeatIndex : ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "") {
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          attachedSeatIndex: undefined,
+                          assignedPerson: undefined,
+                        });
+                      } else {
+                        const seatIdx = Number(val);
+                        const occupant = linkedDesk.seats?.find((s) => s.seatIndex === seatIdx);
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          attachedSeatIndex: seatIdx,
+                          assignedPerson: occupant?.fullName || undefined,
+                        });
+                      }
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-200 focus:outline-none focus:border-blue-500 font-sans"
+                  >
+                    <option value="">🌐 Prise commune (non attribuée)</option>
+                    {Array.from({ length: getDeskSeatCount(linkedDesk.subType) }).map((_, i) => {
+                      const seatOccupant = linkedDesk.seats?.find((s) => s.seatIndex === i);
+                      const labels = getDefaultSeatLabels(linkedDesk.subType);
+                      const label = seatOccupant?.seatLabel ?? labels[i] ?? `Place ${i + 1}`;
+                      const occupantDesc = seatOccupant?.fullName ? ` (${seatOccupant.fullName})` : " (Libre)";
+                      return (
+                        <option key={`opt-seat-${i}`} value={i}>
+                          Place {i + 1} : {label}{occupantDesc}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
               {siblingOutlets.length > 0 && (
                 <div className="pt-1">
                   <div className="text-[10px] text-slate-400 font-medium mb-1">
@@ -571,6 +637,7 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                     : null;
                   const isOccupied = Boolean(seat.fullName);
                   const isPickingThisSeat = pickingSeatIndex === idx;
+                  const seatOutlets = attachedOutlets.filter((o) => o.attachedSeatIndex === idx);
 
                   return (
                     <div
@@ -658,6 +725,28 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                           </span>
                           <span className="text-[9px] text-blue-400 font-mono">Entra ID</span>
                         </button>
+                      )}
+
+                      {/* Prises attribuées à cette place */}
+                      {seatOutlets.length > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap pt-1.5 mt-1.5 border-t border-slate-900">
+                          <span className="text-[9px] text-slate-500 font-medium">Prises :</span>
+                          {seatOutlets.map((outlet) => (
+                            <button
+                              key={outlet.id}
+                              onClick={() => onSelectNode?.(outlet)}
+                              className="px-1.5 py-0.5 rounded bg-blue-950/60 hover:bg-blue-900 border border-blue-800/60 text-[9px] font-mono text-blue-300 flex items-center gap-1 transition"
+                              title="Inspecter cette prise"
+                            >
+                              {outlet.outletRole === "VOIP" ? (
+                                <Phone className="w-2.5 h-2.5 text-purple-400" />
+                              ) : (
+                                <Laptop className="w-2.5 h-2.5 text-blue-400" />
+                              )}
+                              {outlet.name}
+                            </button>
+                          ))}
+                        </div>
                       )}
 
                       {/* Sélecteur Annuaire Déroulant pour cette place */}
@@ -1099,7 +1188,37 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    {deskSeatCount > 1 && (
+                      <select
+                        value={outlet.attachedSeatIndex !== undefined ? outlet.attachedSeatIndex : ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "") {
+                            onUpdateNodeProperties?.(outlet.id, {
+                              attachedSeatIndex: undefined,
+                              assignedPerson: undefined,
+                            });
+                          } else {
+                            const seatIdx = Number(val);
+                            const occupant = currentSeats.find((s) => s.seatIndex === seatIdx);
+                            onUpdateNodeProperties?.(outlet.id, {
+                              attachedSeatIndex: seatIdx,
+                              assignedPerson: occupant?.fullName || undefined,
+                            });
+                          }
+                        }}
+                        className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-[9px] text-slate-300 focus:outline-none focus:border-blue-500 font-sans"
+                        title="Attribution à une place"
+                      >
+                        <option value="">Commune</option>
+                        {currentSeats.map((s, sIdx) => (
+                          <option key={sIdx} value={sIdx}>
+                            P{sIdx + 1} {s.fullName ? `(${s.fullName.split(" ")[0]})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       onClick={() => onSelectNode?.(outlet)}
                       title="Inspecter le circuit"

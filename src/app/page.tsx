@@ -174,49 +174,55 @@ export default function NetFloorApp() {
     {
       id: "outlet-408-a",
       type: "WALL_OUTLET",
-      name: "PRISE-DESK-408-A",
+      name: "Prise 408-A",
       xMm: 38800,
       yMm: 15200,
       portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
       attachedToDeskId: "desk-408",
       outletRole: "DATA",
+      assignedPerson: "Alexandre Martin",
     },
     {
       id: "outlet-408-b",
       type: "WALL_OUTLET",
-      name: "PRISE-DESK-408-B",
+      name: "Prise 408-B",
       xMm: 38800,
       yMm: 15650,
       portId: "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d",
       attachedToDeskId: "desk-408",
       outletRole: "VOIP",
+      assignedPerson: "Alexandre Martin",
     },
-    // 5. Prises réseau pour l'îlot 402
+    // 5. Prises réseau pour l'îlot 402 (affectées aux collaborateurs des places 1 et 2)
     {
       id: "outlet-402-a",
       type: "WALL_OUTLET",
-      name: "PRISE-BENCH-402-A",
+      name: "Prise 402-A",
       xMm: 26400,
       yMm: 15200,
       portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
       attachedToDeskId: "bench-402",
+      attachedSeatIndex: 0,
+      assignedPerson: "Thomas Roux",
       outletRole: "DATA",
     },
     {
       id: "outlet-402-b",
       type: "WALL_OUTLET",
-      name: "PRISE-BENCH-402-B",
+      name: "Prise 402-B",
       xMm: 26400,
       yMm: 15650,
       portId: "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d",
       attachedToDeskId: "bench-402",
+      attachedSeatIndex: 1,
+      assignedPerson: "Sarah Benali",
       outletRole: "VOIP",
     },
     // 6. Boîte de Sol Centrale
     {
       id: "floorbox-01",
       type: "WALL_OUTLET",
-      name: "BOITE-SOL-CENTRE-01",
+      name: "Boîte Sol 1",
       xMm: 33000,
       yMm: 20000,
       widthMm: 300,
@@ -229,7 +235,7 @@ export default function NetFloorApp() {
     {
       id: "wifi-01",
       type: "WALL_OUTLET",
-      name: "AP-WIFI-OPENSPACE-04",
+      name: "Wi-Fi 04",
       xMm: 28000,
       yMm: 11000,
       widthMm: 350,
@@ -242,7 +248,7 @@ export default function NetFloorApp() {
     {
       id: "printer-01",
       type: "WALL_OUTLET",
-      name: "COPIEUR-RH-ETAGE-4",
+      name: "Copieur RH",
       xMm: 22000,
       yMm: 21000,
       widthMm: 800,
@@ -499,10 +505,11 @@ export default function NetFloorApp() {
       const worldX = desk.xMm + localX * cos - localY * sin;
       const worldY = desk.yMm + localX * sin + localY * cos;
 
+      const deskNum = desk.name.replace(/^Bureau\s*/i, "").trim();
       const newOutlet: NodeDisplay = {
         id: newOutletId,
         type: "WALL_OUTLET",
-        name: `PRISE-${desk.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}-${suffixLetter}`,
+        name: `Prise ${deskNum}-${suffixLetter}`,
         xMm: Math.round(worldX),
         yMm: Math.round(worldY),
         portId: newPortId,
@@ -620,10 +627,31 @@ export default function NetFloorApp() {
           }))
         : undefined;
 
+    const computeName = () => {
+      if (item.targetType === "DESK") {
+        const deskCount = nodes.filter((n) => n.type === "DESK").length;
+        return `Bureau ${403 + deskCount}`;
+      }
+      if (item.subType === "FLOOR_BOX") {
+        const boxCount = nodes.filter((n) => n.subType === "FLOOR_BOX").length;
+        return `Boîte Sol ${boxCount + 1}`;
+      }
+      if (item.subType === "WIFI_AP") {
+        const wifiCount = nodes.filter((n) => n.subType === "WIFI_AP").length;
+        return `Wi-Fi 0${wifiCount + 5}`;
+      }
+      if (item.subType === "PRINTER_STATION") {
+        const pCount = nodes.filter((n) => n.subType === "PRINTER_STATION").length;
+        return `Copieur RH ${pCount + 1}`;
+      }
+      const outletCount = nodes.filter((n) => n.type === "WALL_OUTLET" && !n.subType).length;
+      return `Prise ${403 + outletCount}`;
+    };
+
     const newNode: NodeDisplay = {
       id: newId,
       type: item.targetType,
-      name: `${item.name} #${nodes.length + 1}`,
+      name: computeName(),
       xMm: newX,
       yMm: newY,
       widthMm: item.widthMm,

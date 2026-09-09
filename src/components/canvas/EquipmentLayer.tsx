@@ -78,6 +78,7 @@ export interface NodeDisplay {
   description?: string | undefined;
   chairPosition?: "BOTTOM" | "TOP" | "LEFT" | "RIGHT" | "NONE" | undefined;
   seats?: DeskSeatOccupant[] | undefined;
+  attachedSeatIndex?: number | undefined;
 }
 
 interface EquipmentLayerProps {
@@ -152,9 +153,27 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             const deskW = desk.widthMm ?? 1600;
             const deskH = desk.heightMm ?? 800;
             const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
-            // Centre réel du bureau en tenant compte de la rotation de celui-ci
-            const deskCenterX = desk.xMm + (deskW / 2) * Math.cos(rotRad) - (deskH / 2) * Math.sin(rotRad);
-            const deskCenterY = desk.yMm + (deskW / 2) * Math.sin(rotRad) + (deskH / 2) * Math.cos(rotRad);
+
+            // Point d'ancrage sur le meuble : si la prise est liée à une place précise, on ancre vers sa place !
+            let localAnchorX = deskW / 2;
+            let localAnchorY = deskH / 2;
+
+            if (outlet.attachedSeatIndex !== undefined) {
+              if (desk.subType === "BENCH_QUAD") {
+                const sIdx = outlet.attachedSeatIndex;
+                localAnchorX = sIdx === 0 || sIdx === 2 ? deskW / 4 : (3 * deskW) / 4;
+                localAnchorY = sIdx === 0 || sIdx === 1 ? deskH / 4 : (3 * deskH) / 4;
+              } else if (desk.subType === "BENCH_DOUBLE") {
+                const sIdx = outlet.attachedSeatIndex;
+                localAnchorX = deskW / 2;
+                localAnchorY = sIdx === 0 ? deskH / 4 : (3 * deskH) / 4;
+              }
+            }
+
+            const anchorX =
+              desk.xMm + localAnchorX * Math.cos(rotRad) - localAnchorY * Math.sin(rotRad);
+            const anchorY =
+              desk.yMm + localAnchorX * Math.sin(rotRad) + localAnchorY * Math.cos(rotRad);
 
             const isVoip = outlet.outletRole === "VOIP";
             const isPrinter = outlet.outletRole === "PRINTER";
@@ -170,11 +189,11 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             return (
               <Group key={`anchor-link-${outlet.id}`} listening={false}>
                 <Line
-                  points={[deskCenterX, deskCenterY, outlet.xMm, outlet.yMm]}
+                  points={[anchorX, anchorY, outlet.xMm, outlet.yMm]}
                   stroke={lineColor}
                   strokeWidth={18}
                   dash={isVoip ? [60, 40] : [70, 50]}
-                  opacity={0.75}
+                  opacity={0.8}
                   listening={false}
                 />
               </Group>
@@ -387,25 +406,25 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               {/* Équipements informatiques (écrans, claviers) & Chaises selon le type */}
               {!isMeeting && isBenchQuad && (
                 <Group listening={false}>
-                  {/* Place 0 (Haut-Gauche) */}
-                  <Rect x={width / 4 - 210} y={height / 4 + 110} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={width / 4 - 45} y={height / 4 + 85} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={width / 4 - 160} y={height / 4 - 130} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  {/* Place 0 (Haut-Gauche) : Écran contre la cloisonnette centrale, clavier vers l'utilisateur */}
+                  <Rect x={width / 4 - 210} y={height / 2 - 120} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={width / 4 - 45} y={height / 2 - 82} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 4 - 160} y={80} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
 
                   {/* Place 1 (Haut-Droite) */}
-                  <Rect x={(3 * width) / 4 - 210} y={height / 4 + 110} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={(3 * width) / 4 - 45} y={height / 4 + 85} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={(3 * width) / 4 - 160} y={height / 4 - 130} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect x={(3 * width) / 4 - 210} y={height / 2 - 120} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={(3 * width) / 4 - 45} y={height / 2 - 82} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={(3 * width) / 4 - 160} y={80} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
 
                   {/* Place 2 (Bas-Gauche) */}
-                  <Rect x={width / 4 - 210} y={(3 * height) / 4 - 150} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={width / 4 - 45} y={(3 * height) / 4 - 175} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={width / 4 - 160} y={(3 * height) / 4 + 65} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect x={width / 4 - 210} y={height / 2 + 82} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={width / 4 - 45} y={height / 2 + 60} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 4 - 160} y={height - 175} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
 
                   {/* Place 3 (Bas-Droite) */}
-                  <Rect x={(3 * width) / 4 - 210} y={(3 * height) / 4 - 150} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={(3 * width) / 4 - 45} y={(3 * height) / 4 - 175} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={(3 * width) / 4 - 160} y={(3 * height) / 4 + 65} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect x={(3 * width) / 4 - 210} y={height / 2 + 82} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={(3 * width) / 4 - 45} y={height / 2 + 60} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={(3 * width) / 4 - 160} y={height - 175} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
 
                   {/* 4 Chaises (2 en haut tournées vers le bas, 2 en bas tournées vers le haut) */}
                   {desk.chairPosition !== "NONE" && (
@@ -441,14 +460,14 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               {!isMeeting && isBenchDouble && (
                 <Group listening={false}>
                   {/* Écran & Clavier Place 0 (Haut) */}
-                  <Rect x={width / 2 - 210} y={height / 4 + 110} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={width / 2 - 45} y={height / 4 + 85} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={width / 2 - 160} y={height / 4 - 130} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect x={width / 2 - 210} y={height / 2 - 120} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={width / 2 - 45} y={height / 2 - 82} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 2 - 160} y={80} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
 
                   {/* Écran & Clavier Place 1 (Bas) */}
-                  <Rect x={width / 2 - 210} y={(3 * height) / 4 - 150} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={width / 2 - 45} y={(3 * height) / 4 - 175} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={width / 2 - 160} y={(3 * height) / 4 + 65} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect x={width / 2 - 210} y={height / 2 + 82} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={width / 2 - 45} y={height / 2 + 60} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 2 - 160} y={height - 175} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
 
                   {/* 2 Chaises (1 en haut tournée vers le bas, 1 en bas tournée vers le haut) */}
                   {desk.chairPosition !== "NONE" && (
@@ -472,10 +491,10 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               {!isMeeting && !isBenchDouble && !isBenchQuad && (
                 <Group listening={false}>
                   {/* Écran Principal Solo */}
-                  <Rect x={width / 2 - 220} y={90} width={440} height={40} fill="#0284c7" stroke="#38bdf8" strokeWidth={8} cornerRadius={6} />
-                  <Rect x={width / 2 - 50} y={65} width={100} height={25} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 2 - 220} y={80} width={440} height={40} fill="#0284c7" stroke="#38bdf8" strokeWidth={8} cornerRadius={6} />
+                  <Rect x={width / 2 - 50} y={55} width={100} height={25} fill="#475569" cornerRadius={5} />
                   {/* Clavier Solo */}
-                  <Rect x={width / 2 - 180} y={180} width={360} height={110} fill="#1e293b" stroke="#334155" strokeWidth={8} cornerRadius={8} />
+                  <Rect x={width / 2 - 180} y={170} width={360} height={110} fill="#1e293b" stroke="#334155" strokeWidth={8} cornerRadius={8} />
 
                   {/* Fauteuil Solo Ergonomique */}
                   {desk.chairPosition !== "NONE" && (
@@ -491,7 +510,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 
               {/* Cartouches d'identification épurés et TOUJOURS horizontaux (rotation={-rotDeg}) */}
               {isBenchQuad ? (
-                // ÎLOT 4 POSTES : 4 Badges Distincts + Pill Centrale
+                // ÎLOT 4 POSTES : 4 Grands Badges Distincts + Pill Centrale
                 <Group listening={false}>
                   {/* Badge Central Îlot */}
                   <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
@@ -499,28 +518,28 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                     <Text x={-250} y={-28} width={500} text={`${shortTitle} • Îlot 4P`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" />
                   </Group>
 
-                  {/* 4 Badges d'occupants dans les 4 quadrants */}
+                  {/* 4 Grands Badges d'occupants dans les 4 quadrants (sans P1/P2, police 82px) */}
                   {[
-                    { idx: 0, cx: width / 4, cy: height / 4 - 30 },
-                    { idx: 1, cx: (3 * width) / 4, cy: height / 4 - 30 },
-                    { idx: 2, cx: width / 4, cy: (3 * height) / 4 + 30 },
-                    { idx: 3, cx: (3 * width) / 4, cy: (3 * height) / 4 + 30 },
+                    { idx: 0, cx: width / 4, cy: 380 },
+                    { idx: 1, cx: (3 * width) / 4, cy: 380 },
+                    { idx: 2, cx: width / 4, cy: height - 380 },
+                    { idx: 3, cx: (3 * width) / 4, cy: height - 380 },
                   ].map(({ idx, cx, cy }) => {
                     const seat = getSeat(idx);
                     const isOccupied = Boolean(seat?.fullName);
-                    const bW = 460;
-                    const bH = 135;
+                    const bW = 650;
+                    const bH = 175;
                     return (
                       <Group key={`quad-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
-                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.94)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={6} cornerRadius={14} />
-                        <Text x={-bW / 2 + 10} y={-bH / 2 + 16} width={bW - 20} text={`P${idx + 1} : ${seat?.fullName ? seat.fullName : "Libre / Flex"}`} fontSize={58} fontFamily="sans-serif" fontStyle="bold" fill={isOccupied ? "#f8fafc" : "#94a3b8"} align="center" />
-                        <Text x={-bW / 2 + 10} y={-bH / 2 + 76} width={bW - 20} text={seat?.department ?? "Place disponible"} fontSize={46} fontFamily="sans-serif" fill={isOccupied ? "#38bdf8" : "#64748b"} align="center" />
+                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.94)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
+                        <Text x={-bW / 2 + 15} y={-bH / 2 + 20} width={bW - 30} text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"} fontSize={82} fontFamily="sans-serif" fontStyle="bold" fill={isOccupied ? "#f8fafc" : "#94a3b8"} align="center" />
+                        <Text x={-bW / 2 + 15} y={-bH / 2 + 105} width={bW - 30} text={seat?.department ?? "Disponible / Flex"} fontSize={58} fontFamily="sans-serif" fill={isOccupied ? "#38bdf8" : "#64748b"} align="center" />
                       </Group>
                     );
                   })}
                 </Group>
               ) : isBenchDouble ? (
-                // BENCH DOUBLE 2 POSTES : 2 Badges Distincts + Pill Centrale
+                // BENCH DOUBLE 2 POSTES : 2 Grands Badges Distincts + Pill Centrale
                 <Group listening={false}>
                   {/* Badge Central Bench */}
                   <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
@@ -528,20 +547,20 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                     <Text x={-230} y={-26} width={460} text={`${shortTitle} • Bench 2P`} fontSize={56} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" />
                   </Group>
 
-                  {/* 2 Badges d'occupants (Place 1 Nord, Place 2 Sud) */}
+                  {/* 2 Grands Badges d'occupants (Face Nord, Face Sud) */}
                   {[
-                    { idx: 0, cx: width / 2, cy: height / 4 - 30 },
-                    { idx: 1, cx: width / 2, cy: (3 * height) / 4 + 30 },
+                    { idx: 0, cx: width / 2, cy: 380 },
+                    { idx: 1, cx: width / 2, cy: height - 380 },
                   ].map(({ idx, cx, cy }) => {
                     const seat = getSeat(idx);
                     const isOccupied = Boolean(seat?.fullName);
-                    const bW = 500;
-                    const bH = 140;
+                    const bW = 680;
+                    const bH = 175;
                     return (
                       <Group key={`double-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
-                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.94)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={6} cornerRadius={14} />
-                        <Text x={-bW / 2 + 10} y={-bH / 2 + 18} width={bW - 20} text={`P${idx + 1} : ${seat?.fullName ? seat.fullName : "Libre / Flex"}`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill={isOccupied ? "#f8fafc" : "#94a3b8"} align="center" />
-                        <Text x={-bW / 2 + 10} y={-bH / 2 + 80} width={bW - 20} text={seat?.department ?? "Place disponible"} fontSize={48} fontFamily="sans-serif" fill={isOccupied ? "#38bdf8" : "#64748b"} align="center" />
+                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.94)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
+                        <Text x={-bW / 2 + 15} y={-bH / 2 + 20} width={bW - 30} text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"} fontSize={82} fontFamily="sans-serif" fontStyle="bold" fill={isOccupied ? "#f8fafc" : "#94a3b8"} align="center" />
+                        <Text x={-bW / 2 + 15} y={-bH / 2 + 105} width={bW - 30} text={seat?.department ?? "Disponible / Flex"} fontSize={58} fontFamily="sans-serif" fill={isOccupied ? "#38bdf8" : "#64748b"} align="center" />
                       </Group>
                     );
                   })}
@@ -551,8 +570,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 (() => {
                   const isRotatedVertical = rotDeg % 180 !== 0;
                   const badgeWidth = isRotatedVertical
-                    ? Math.max(480, height - 90)
-                    : Math.max(540, width - 120);
+                    ? Math.max(500, height - 80)
+                    : Math.max(580, width - 100);
                   const badgeHeight = 200;
 
                   return (
@@ -570,7 +589,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                         fill="rgba(15, 23, 42, 0.92)"
                         stroke={isSelected ? "#60a5fa" : "#334155"}
                         strokeWidth={8}
-                        cornerRadius={16}
+                        cornerRadius={18}
                         listening={false}
                       />
                       <Text
@@ -592,9 +611,9 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                         text={
                           desk.assignedPerson
                             ? `👤 ${desk.assignedPerson}`
-                            : "👤 Poste vacant / Flex"
+                            : "👤 Poste Libre"
                         }
-                        fontSize={80}
+                        fontSize={82}
                         fontFamily="sans-serif"
                         fontStyle={desk.assignedPerson ? "bold" : "normal"}
                         fill={desk.assignedPerson ? "#34d399" : "#94a3b8"}
@@ -685,30 +704,29 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 {/* Passe-câbles brosse */}
                 <Rect x={-80} y={-100} width={160} height={12} fill="#000" cornerRadius={4} listening={false} />
 
-                {/* Libellé Boîte de Sol */}
-                <Text
-                  x={180}
-                  y={-80}
-                  text={`📦 BOÎTE DE SOL • ${outlet.name}`}
-                  fontSize={140}
-                  fontFamily="monospace"
-                  fontStyle="bold"
-                  fill={isSelected ? "#ffffff" : "#38bdf8"}
-                  listening={false}
-                />
-                <Text
-                  x={180}
-                  y={60}
-                  text={
-                    isLinked
-                      ? `🔗 Rattachée au ${linkedDesk?.name}`
-                      : "📍 Boîte de sol fixe (Plancher technique)"
-                  }
-                  fontSize={105}
-                  fontFamily="monospace"
-                  fill={isLinked ? "#38bdf8" : "#94a3b8"}
-                  listening={false}
-                />
+                {/* Libellé Boîte de Sol épuré mono-ligne */}
+                <Group x={180} y={0} listening={false}>
+                  <Rect
+                    x={0}
+                    y={-45}
+                    width={480}
+                    height={90}
+                    fill="rgba(15, 23, 42, 0.94)"
+                    stroke={isSelected ? "#ffffff" : isLinked ? "#38bdf8" : "#475569"}
+                    strokeWidth={6}
+                    cornerRadius={16}
+                  />
+                  <Text
+                    x={20}
+                    y={-24}
+                    width={440}
+                    text="📦 Boîte de Sol (4x RJ45)"
+                    fontSize={68}
+                    fontFamily="sans-serif"
+                    fontStyle="bold"
+                    fill={isSelected ? "#ffffff" : "#38bdf8"}
+                  />
+                </Group>
               </Group>
             );
           }
@@ -747,25 +765,29 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 {/* LED d'état centrale verte */}
                 <Circle radius={25} fill="#34d399" listening={false} />
 
-                <Text
-                  x={160}
-                  y={-60}
-                  text={`📡 BORNE WI-FI 6 • ${outlet.name}`}
-                  fontSize={140}
-                  fontFamily="monospace"
-                  fontStyle="bold"
-                  fill={isSelected ? "#ffffff" : "#c7d2fe"}
-                  listening={false}
-                />
-                <Text
-                  x={160}
-                  y={60}
-                  text="Plafonnier PoE+ (VLAN Wi-Fi Infra)"
-                  fontSize={105}
-                  fontFamily="monospace"
-                  fill="#94a3b8"
-                  listening={false}
-                />
+                {/* Libellé Wi-Fi épuré mono-ligne */}
+                <Group x={160} y={0} listening={false}>
+                  <Rect
+                    x={0}
+                    y={-45}
+                    width={450}
+                    height={90}
+                    fill="rgba(15, 23, 42, 0.94)"
+                    stroke={isSelected ? "#ffffff" : "#818cf8"}
+                    strokeWidth={6}
+                    cornerRadius={16}
+                  />
+                  <Text
+                    x={20}
+                    y={-24}
+                    width={410}
+                    text="📡 Wi-Fi 6 • Plafonnier"
+                    fontSize={68}
+                    fontFamily="sans-serif"
+                    fontStyle="bold"
+                    fill={isSelected ? "#ffffff" : "#c7d2fe"}
+                  />
+                </Group>
               </Group>
             );
           }
@@ -807,25 +829,29 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 <Rect x={-160} y={-140} width={320} height={180} fill="#0f172a" stroke="#b45309" strokeWidth={10} cornerRadius={10} listening={false} />
                 <Rect x={-160} y={70} width={320} height={70} fill="#334155" cornerRadius={6} listening={false} />
 
-                <Text
-                  x={230}
-                  y={-60}
-                  text={`🖨️ COPIEUR • ${outlet.name}`}
-                  fontSize={140}
-                  fontFamily="monospace"
-                  fontStyle="bold"
-                  fill={isSelected ? "#ffffff" : "#fbbf24"}
-                  listening={false}
-                />
-                <Text
-                  x={230}
-                  y={60}
-                  text="Station d'impression sécurisée"
-                  fontSize={105}
-                  fontFamily="monospace"
-                  fill="#94a3b8"
-                  listening={false}
-                />
+                {/* Libellé Copieur épuré mono-ligne */}
+                <Group x={230} y={0} listening={false}>
+                  <Rect
+                    x={0}
+                    y={-45}
+                    width={400}
+                    height={90}
+                    fill="rgba(15, 23, 42, 0.94)"
+                    stroke={isSelected ? "#ffffff" : "#d97706"}
+                    strokeWidth={6}
+                    cornerRadius={16}
+                  />
+                  <Text
+                    x={20}
+                    y={-24}
+                    width={360}
+                    text="🖨️ Copieur RH"
+                    fontSize={68}
+                    fontFamily="sans-serif"
+                    fontStyle="bold"
+                    fill={isSelected ? "#ffffff" : "#fbbf24"}
+                  />
+                </Group>
               </Group>
             );
           }
@@ -848,7 +874,6 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             : isLinked
             ? roleColor
             : "#64748b";
-          const roleIcon = isVoip ? "☎️ VOIP" : "💻 DATA";
 
           return (
             <Group
@@ -884,29 +909,50 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               {/* Connecteur RJ45 frontal */}
               <Rect x={-45} y={-45} width={90} height={90} fill="#0f172a" stroke="#475569" strokeWidth={8} cornerRadius={10} listening={false} />
 
-              <Text
-                x={150}
-                y={-80}
-                text={`${roleIcon} • ${outlet.name}`}
-                fontSize={140}
-                fontFamily="monospace"
-                fontStyle="bold"
-                fill={isSelected ? "#ffffff" : roleColor}
-                listening={false}
-              />
-              <Text
-                x={150}
-                y={60}
-                text={
-                  isLinked
-                    ? `🔗 Solidaire ${linkedDesk?.name}`
-                    : "📍 Plastron mural fixe (Plinthe)"
+              {/* Cartouche épuré mono-ligne avec nom court ou personne assignée */}
+              {(() => {
+                const isVoipRole = outlet.outletRole === "VOIP";
+                const roleIcon = isVoipRole ? "📞" : "💻";
+                const rolePrefix = isVoipRole ? "VoIP" : "Data";
+
+                let shortOutletText = "";
+                if (outlet.assignedPerson) {
+                  shortOutletText = `${roleIcon} ${rolePrefix} • ${outlet.assignedPerson}`;
+                } else {
+                  const cleanName = outlet.name
+                    .replace(/^PRISE-DESK-/i, "Prise ")
+                    .replace(/^PRISE-BENCH-/i, "Prise ")
+                    .replace(/^PRISE-/i, "Prise ");
+                  shortOutletText = `${roleIcon} ${cleanName}`;
                 }
-                fontSize={105}
-                fontFamily="monospace"
-                fill={isLinked ? roleColor : "#94a3b8"}
-                listening={false}
-              />
+
+                const badgeWidth = Math.max(380, shortOutletText.length * 28 + 60);
+
+                return (
+                  <Group x={150} y={0} listening={false}>
+                    <Rect
+                      x={0}
+                      y={-45}
+                      width={badgeWidth}
+                      height={90}
+                      fill="rgba(15, 23, 42, 0.94)"
+                      stroke={isSelected ? "#ffffff" : isLinked ? roleColor : "#475569"}
+                      strokeWidth={6}
+                      cornerRadius={16}
+                    />
+                    <Text
+                      x={20}
+                      y={-24}
+                      width={badgeWidth - 40}
+                      text={shortOutletText}
+                      fontSize={68}
+                      fontFamily="sans-serif"
+                      fontStyle="bold"
+                      fill={isSelected ? "#ffffff" : roleColor}
+                    />
+                  </Group>
+                );
+              })()}
             </Group>
           );
         })}
