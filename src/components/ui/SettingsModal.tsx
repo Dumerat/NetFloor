@@ -36,6 +36,8 @@ import {
   MOCK_DISCOVERED_DEVICES,
   DeviceTelemetry,
   SubnetDefinition,
+  LAB_ACTIVE_DIRECTORY_CONFIG,
+  LAB_SNMP_CONFIG,
   loadStoredSettings,
   saveStoredSettings,
   resetStoredSettings,
@@ -80,6 +82,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
   // États pour les actions interactives
   const [isScanningSnmp, setIsScanningSnmp] = useState(false);
   const [snmpScanResult, setSnmpScanResult] = useState<string | null>(null);
+  const [snmpIsLive, setSnmpIsLive] = useState<boolean | null>(null);
 
   const [isTestingSso, setIsTestingSso] = useState(false);
   const [ssoTestResult, setSsoTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -155,6 +158,28 @@ export const SettingsModal: FC<SettingsModalProps> = ({
     }
   };
 
+  // Injecter la configuration du Lab Docker pour Active Directory
+  const handleApplyLabAdPreset = () => {
+    setSettings((prev) => ({
+      ...prev,
+      sso: {
+        ...prev.sso,
+        provider: "ACTIVE_DIRECTORY_LDAP",
+        activeDirectory: { ...LAB_ACTIVE_DIRECTORY_CONFIG },
+      },
+    }));
+    showToast("⚡ Paramètres du Lab Docker injectés pour Active Directory (127.0.0.1:389)");
+  };
+
+  // Injecter la configuration du Lab Docker pour SNMP
+  const handleApplyLabSnmpPreset = () => {
+    setSettings((prev) => ({
+      ...prev,
+      snmp: { ...LAB_SNMP_CONFIG },
+    }));
+    showToast("⚡ Paramètres du Lab Docker injectés pour SNMP (127.0.0.1:161 public)");
+  };
+
   // Test de liaison Active Directory via l'API dédiée
   const handleTestActiveDirectory = async () => {
     setIsTestingAd(true);
@@ -166,17 +191,17 @@ export const SettingsModal: FC<SettingsModalProps> = ({
         body: JSON.stringify({ config: settings.sso.activeDirectory }),
       });
       const data = await res.json();
+      setAdDiagnosticData(data);
       if (data.success) {
-        setAdDiagnosticData(data);
         if (Array.isArray(data.syncedUsers)) {
           setSyncedAdUsers(data.syncedUsers);
         }
         showToast("✅ Liaison Active Directory validée avec succès");
       } else {
-        throw new Error(data.error || "Erreur de connexion AD");
+        showToast(`❌ Échec de liaison AD : ${data.error || "Erreur de connexion"}`);
       }
     } catch (err: unknown) {
-      showToast("❌ Échec de liaison au contrôleur de domaine AD");
+      showToast("❌ Impossible de contacter l'API de diagnostic Active Directory");
     } finally {
       setIsTestingAd(false);
     }
@@ -237,10 +262,15 @@ export const SettingsModal: FC<SettingsModalProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.devices)) {
         setDiscoveredDevices(data.devices);
+        setSnmpIsLive(Boolean(data.isLiveSnmp));
         setSnmpScanResult(
           `Scan terminé sur ${data.subnet} : ${data.summary.online} en ligne, ${data.summary.warning} alertes, ${data.summary.offline} hors-ligne.`
         );
-        showToast("📡 Découverte SNMP terminée avec succès");
+        showToast(
+          data.isLiveSnmp
+            ? "📡 Découverte SNMP terminée (Connecté au Lab Docker 127.0.0.1)"
+            : "📡 Découverte SNMP terminée avec succès"
+        );
       } else {
         throw new Error(data.error || "Erreur lors du scan");
       }
@@ -371,8 +401,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden text-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-[1040px] max-w-[95vw] h-[820px] max-h-[90vh] flex flex-col overflow-hidden text-slate-200">
         {/* Toast flottant */}
         {toastMessage && (
           <div className="absolute top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-xl text-xs font-semibold flex items-center gap-2 animate-bounce">
@@ -538,6 +568,14 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                         </h3>
                       </div>
                       <div className="flex gap-2">
+                        <button
+                          onClick={handleApplyLabAdPreset}
+                          className="px-3 py-1.5 bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/40 transition shadow-sm"
+                          title="Remplir automatiquement avec les paramètres du Lab Docker (OpenLDAP 127.0.0.1:389)"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          ⚡ Remplir avec le Lab Local
+                        </button>
                         <button
                           onClick={handleSyncAdDirectory}
                           disabled={isTestingAd}
@@ -782,28 +820,66 @@ export const SettingsModal: FC<SettingsModalProps> = ({
 
                   {/* Résultat du Diagnostic Active Directory */}
                   {adDiagnosticData && (
-                    <div className="p-4 rounded-lg bg-slate-950 border border-cyan-800/60 space-y-3">
+                    <div
+                      className={`p-4 rounded-lg bg-slate-950 border space-y-3 ${
+                        adDiagnosticData.success ? "border-cyan-800/60" : "border-rose-800/60"
+                      }`}
+                    >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-cyan-300 font-semibold text-xs">
-                          <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-                          Rapport de Test LDAP / Active Directory Réussi ({adDiagnosticData.totalLatencyMs}ms)
+                        <div
+                          className={`flex items-center gap-2 font-semibold text-xs ${
+                            adDiagnosticData.success ? "text-cyan-300" : "text-rose-300"
+                          }`}
+                        >
+                          {adDiagnosticData.success ? (
+                            <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+                          ) : (
+                            <X className="w-4 h-4 text-rose-400" />
+                          )}
+                          {adDiagnosticData.success
+                            ? `Rapport de Test LDAP / Active Directory Réussi (${adDiagnosticData.totalLatencyMs}ms)`
+                            : `Échec du Test LDAP : ${adDiagnosticData.error || "Erreur de connexion"}`}
                         </div>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {adDiagnosticData.summary?.domainController}
-                        </span>
+                        {adDiagnosticData.summary?.domainController && (
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {adDiagnosticData.summary?.domainController}
+                          </span>
+                        )}
                       </div>
 
-                      {/* Étapes de diagnostic validées */}
+                      {/* Étapes de diagnostic */}
                       <div className="space-y-1.5 font-mono text-[11px]">
                         {adDiagnosticData.steps?.map((step: any) => (
-                          <div key={step.step} className="flex items-center justify-between p-2 rounded bg-slate-900/80 border border-slate-850">
+                          <div
+                            key={step.step}
+                            className={`flex items-center justify-between p-2 rounded bg-slate-900/80 border ${
+                              step.status === "ERROR" ? "border-rose-800/50" : "border-slate-850"
+                            }`}
+                          >
                             <div className="flex items-center gap-2">
-                              <span className="text-cyan-400 font-bold">[{step.step}]</span>
+                              <span
+                                className={`font-bold ${
+                                  step.status === "ERROR" ? "text-rose-400" : "text-cyan-400"
+                                }`}
+                              >
+                                [{step.step}]
+                              </span>
                               <span className="text-slate-200 font-semibold">{step.title} :</span>
-                              <span className="text-slate-400">{step.detail}</span>
+                              <span className={step.status === "ERROR" ? "text-rose-300" : "text-slate-400"}>
+                                {step.detail}
+                              </span>
                             </div>
-                            <span className="text-emerald-400 text-[10px] flex items-center gap-1">
-                              <Check className="w-3 h-3" /> {step.latencyMs}ms
+                            <span
+                              className={`text-[10px] flex items-center gap-1 ${
+                                step.status === "ERROR" ? "text-rose-400" : "text-emerald-400"
+                              }`}
+                            >
+                              {step.status === "ERROR" ? (
+                                <X className="w-3 h-3" />
+                              ) : (
+                                <Check className="w-3 h-3" />
+                              )}{" "}
+                              {step.latencyMs}ms
                             </span>
                           </div>
                         ))}
@@ -977,6 +1053,14 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                   </div>
                   <div className="flex gap-2">
                     <button
+                      onClick={handleApplyLabSnmpPreset}
+                      className="px-3 py-1.5 bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/40 transition shadow-sm"
+                      title="Remplir automatiquement avec les paramètres du Lab Docker SNMP (127.0.0.1:161 public)"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      ⚡ Remplir avec le Lab Local
+                    </button>
+                    <button
                       onClick={handleSyncAllDevicesToFloor}
                       className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
                       title="Associer automatiquement tous les équipements découverts sur le plan"
@@ -1043,9 +1127,22 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                 </div>
 
                 {snmpScanResult && (
-                  <div className="p-3 bg-cyan-950/40 border border-cyan-800/60 rounded text-cyan-300 text-xs flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-cyan-400" />
-                    <span>{snmpScanResult}</span>
+                  <div className="p-3 bg-cyan-950/40 border border-cyan-800/60 rounded text-cyan-300 text-xs flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-cyan-400" />
+                      <span>{snmpScanResult}</span>
+                    </div>
+                    {snmpIsLive !== null && (
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          snmpIsLive
+                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                            : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                        }`}
+                      >
+                        {snmpIsLive ? "🐳 Lab Docker Réel (127.0.0.1:161)" : "Simulé (Secours)"}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

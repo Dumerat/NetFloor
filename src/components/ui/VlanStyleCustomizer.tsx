@@ -20,211 +20,221 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
   vlanStyles,
   onUpdateVlanStyle,
   onResetVlanStyles,
-  compact = false,
 }) => {
-  const [activeVlanId, setActiveVlanId] = useState<number | null>(null);
-
   const vlanList = Object.values(vlanStyles).sort((a, b) => a.vlanId - b.vlanId);
+  const [selectedVlanId, setSelectedVlanId] = useState<number>(() => {
+    return vlanStyles[20] ? 20 : (vlanList[0]?.vlanId ?? 20);
+  });
+
+  const currentStyle = vlanStyles[selectedVlanId] ?? vlanList[0];
+  if (!currentStyle) return null;
+
+  const strokeWidthPx =
+    currentStyle.thickness === "FINE" ? 2 : currentStyle.thickness === "THICK" ? 5 : 3.5;
+  const dashArray =
+    currentStyle.strokePattern === "DASHED"
+      ? "8,4"
+      : currentStyle.strokePattern === "DOTTED"
+      ? "2,4"
+      : undefined;
 
   return (
-    <div className="space-y-2.5">
-      <div className="flex items-center justify-between pb-1">
+    <div className="space-y-3">
+      {/* En-tête avec bouton de réinitialisation */}
+      <div className="flex items-center justify-between pb-0.5">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
           <Palette className="w-3.5 h-3.5 text-sky-400" />
-          <span>Styles & Tracés des Câbles par VLAN</span>
+          <span>Styles & Tracés des Câbles</span>
         </div>
         {onResetVlanStyles && (
           <button
             onClick={onResetVlanStyles}
             className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 font-mono transition"
-            title="Rétablir les couleurs et tracés d'origine"
+            title="Rétablir les couleurs et tracés d'origine de tous les VLANs"
           >
             <RotateCcw className="w-2.5 h-2.5" />
-            Défaut
+            Réinitialiser
           </button>
         )}
       </div>
 
-      <div className="space-y-2">
-        {vlanList.map((style) => {
-          const isExpanded = activeVlanId === style.vlanId;
-          const strokeWidthPx =
-            style.thickness === "FINE" ? 2 : style.thickness === "THICK" ? 5 : 3.5;
-          const dashArray =
-            style.strokePattern === "DASHED"
-              ? "8,4"
-              : style.strokePattern === "DOTTED"
-              ? "2,4"
-              : undefined;
-
-          return (
-            <div
-              key={style.vlanId}
-              className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 transition space-y-2"
-            >
-              {/* En-tête VLAN avec pastille et aperçu direct */}
-              <div
-                onClick={() => setActiveVlanId(isExpanded ? null : style.vlanId)}
-                className="flex items-center justify-between cursor-pointer group select-none"
+      {/* Barre de sélection du VLAN (un seul VLAN affiché à la fois) */}
+      <div className="space-y-1">
+        <span className="text-[10px] text-slate-400 font-mono block">
+          Sélectionner le VLAN à personnaliser :
+        </span>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 font-mono text-[10px]">
+          {vlanList.map((vlan) => {
+            const isSelected = selectedVlanId === vlan.vlanId;
+            return (
+              <button
+                key={vlan.vlanId}
+                onClick={() => setSelectedVlanId(vlan.vlanId)}
+                className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 flex-shrink-0 ${
+                  isSelected
+                    ? "bg-slate-800 text-white border-sky-500 shadow-sm font-bold ring-1 ring-sky-500/50"
+                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-900"
+                }`}
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div
-                    className="w-3.5 h-3.5 rounded-full flex-shrink-0 border border-white/20 shadow-sm transition-transform group-hover:scale-110"
-                    style={{ backgroundColor: style.color }}
-                  />
-                  <div className="truncate">
-                    <span className="font-mono text-xs font-bold text-slate-200">
-                      VID {style.vlanId}
-                    </span>
-                    <span className="text-[11px] text-slate-400 ml-1.5 truncate">
-                      {style.vlanName}
-                    </span>
-                  </div>
-                </div>
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0 shadow-sm"
+                  style={{ backgroundColor: vlan.color }}
+                />
+                <span>VID {vlan.vlanId}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
-                    {style.strokePattern === "SOLID"
-                      ? "Plein"
-                      : style.strokePattern === "DASHED"
-                      ? "Pointillés"
-                      : "Points"}
-                    {" • "}
-                    {style.thickness === "FINE"
-                      ? "Fin"
-                      : style.thickness === "THICK"
-                      ? "Épais"
-                      : "Normal"}
-                  </span>
-                  <span className="text-slate-500 text-[10px] group-hover:text-sky-400 transition font-mono">
-                    {isExpanded ? "▲" : "▼"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Ligne d'aperçu dynamique du câble */}
-              <div className="bg-slate-900/70 p-1.5 rounded border border-slate-900/90 flex items-center gap-2">
-                <span className="text-[9px] font-mono text-slate-500 flex-shrink-0">Aperçu :</span>
-                <svg className="w-full h-3" viewBox="0 0 200 10" preserveAspectRatio="none">
-                  <line
-                    x1="2"
-                    y1="5"
-                    x2="198"
-                    y2="5"
-                    stroke={style.color}
-                    strokeWidth={strokeWidthPx}
-                    strokeDasharray={dashArray}
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-
-              {/* Panneau d'édition détaillé (ouvert par clic ou toujours affiché si non-compact) */}
-              {(!compact || isExpanded) && (
-                <div className="pt-2 border-t border-slate-900 space-y-2.5">
-                  {/* 1. Sélection de la Couleur */}
-                  <div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1.5">
-                      <span>Couleur du câble :</span>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="color"
-                          value={style.color}
-                          onChange={(e) =>
-                            onUpdateVlanStyle(style.vlanId, { color: e.target.value })
-                          }
-                          className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0"
-                          title="Choisir une couleur libre"
-                        />
-                        <span className="text-[9px] text-slate-300 font-mono uppercase">
-                          {style.color}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Palette rapide */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-                      {PRESET_VLAN_COLORS.map((preset) => (
-                        <button
-                          key={preset.hex}
-                          onClick={() => onUpdateVlanStyle(style.vlanId, { color: preset.hex })}
-                          className={`w-5 h-5 rounded-full flex-shrink-0 transition border flex items-center justify-center ${
-                            style.color.toLowerCase() === preset.hex.toLowerCase()
-                              ? "border-white scale-110 shadow-md ring-2 ring-sky-500/50"
-                              : "border-transparent opacity-80 hover:opacity-100 hover:scale-105"
-                          }`}
-                          style={{ backgroundColor: preset.hex }}
-                          title={preset.name}
-                        >
-                          {style.color.toLowerCase() === preset.hex.toLowerCase() && (
-                            <Check className="w-3 h-3 text-white drop-shadow-md" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 2. Type de Tracé (Plein / Pointillés / Points) */}
-                  <div>
-                    <label className="text-[10px] text-slate-400 font-mono block mb-1">
-                      Motif du tracé :
-                    </label>
-                    <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
-                      {[
-                        { id: "SOLID" as CableStrokePattern, label: "Plein ───", desc: "Ligne continue" },
-                        { id: "DASHED" as CableStrokePattern, label: "Pointillé - -", desc: "Tirets espacés" },
-                        { id: "DOTTED" as CableStrokePattern, label: "Points • •", desc: "Points fins" },
-                      ].map((pattern) => (
-                        <button
-                          key={pattern.id}
-                          onClick={() =>
-                            onUpdateVlanStyle(style.vlanId, { strokePattern: pattern.id })
-                          }
-                          className={`py-1.5 px-2 rounded border transition text-center ${
-                            style.strokePattern === pattern.id
-                              ? "bg-sky-600/30 text-sky-300 border-sky-500/50 font-bold"
-                              : "bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200"
-                          }`}
-                          title={pattern.desc}
-                        >
-                          {pattern.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 3. Épaisseur du Câble */}
-                  <div>
-                    <label className="text-[10px] text-slate-400 font-mono block mb-1">
-                      Épaisseur du câble :
-                    </label>
-                    <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
-                      {[
-                        { id: "FINE" as CableThickness, label: "Fin (2mm)", widthDesc: "Discret" },
-                        { id: "NORMAL" as CableThickness, label: "Normal (4mm)", widthDesc: "Standard" },
-                        { id: "THICK" as CableThickness, label: "Épais (7mm)", widthDesc: "Renforcé" },
-                      ].map((thick) => (
-                        <button
-                          key={thick.id}
-                          onClick={() =>
-                            onUpdateVlanStyle(style.vlanId, { thickness: thick.id })
-                          }
-                          className={`py-1.5 px-2 rounded border transition text-center ${
-                            style.thickness === thick.id
-                              ? "bg-sky-600/30 text-sky-300 border-sky-500/50 font-bold"
-                              : "bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200"
-                          }`}
-                          title={thick.widthDesc}
-                        >
-                          {thick.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+      {/* Fiche détaillée UNIQUE du VLAN sélectionné */}
+      <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
+        {/* Titre du VLAN sélectionné */}
+        <div className="flex items-center justify-between pb-1 border-b border-slate-900">
+          <div className="flex items-center gap-2">
+            <div
+              className="w-4 h-4 rounded-full flex-shrink-0 border border-white/20 shadow"
+              style={{ backgroundColor: currentStyle.color }}
+            />
+            <div>
+              <span className="font-mono text-xs font-bold text-slate-100">
+                VID {currentStyle.vlanId}
+              </span>
+              <span className="text-xs text-slate-300 ml-2 font-medium">
+                {currentStyle.vlanName}
+              </span>
             </div>
-          );
-        })}
+          </div>
+          <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-slate-900 text-sky-400 border border-slate-800">
+            {currentStyle.strokePattern === "SOLID"
+              ? "Plein"
+              : currentStyle.strokePattern === "DASHED"
+              ? "Pointillés"
+              : "Points"}
+            {" • "}
+            {currentStyle.thickness === "FINE"
+              ? "Fin (2mm)"
+              : currentStyle.thickness === "THICK"
+              ? "Épais (7mm)"
+              : "Normal (4mm)"}
+          </span>
+        </div>
+
+        {/* Ligne d'aperçu dynamique du câble */}
+        <div className="bg-slate-900/80 p-2 rounded-md border border-slate-800/80 flex items-center gap-2.5">
+          <span className="text-[10px] font-mono text-slate-400 flex-shrink-0">Aperçu :</span>
+          <svg className="w-full h-3.5" viewBox="0 0 200 10" preserveAspectRatio="none">
+            <line
+              x1="2"
+              y1="5"
+              x2="198"
+              y2="5"
+              stroke={currentStyle.color}
+              strokeWidth={strokeWidthPx}
+              strokeDasharray={dashArray}
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+
+        {/* 1. Sélection de la Couleur */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+            <span>Couleur du câble :</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="color"
+                value={currentStyle.color}
+                onChange={(e) =>
+                  onUpdateVlanStyle(currentStyle.vlanId, { color: e.target.value })
+                }
+                className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0"
+                title="Choisir une couleur libre"
+              />
+              <span className="text-[10px] text-slate-200 font-mono uppercase font-semibold">
+                {currentStyle.color}
+              </span>
+            </div>
+          </div>
+          {/* Palette rapide */}
+          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+            {PRESET_VLAN_COLORS.map((preset) => (
+              <button
+                key={preset.hex}
+                onClick={() => onUpdateVlanStyle(currentStyle.vlanId, { color: preset.hex })}
+                className={`w-5 h-5 rounded-full flex-shrink-0 transition border flex items-center justify-center ${
+                  currentStyle.color.toLowerCase() === preset.hex.toLowerCase()
+                    ? "border-white scale-110 shadow-md ring-2 ring-sky-500/50"
+                    : "border-transparent opacity-80 hover:opacity-100 hover:scale-105"
+                }`}
+                style={{ backgroundColor: preset.hex }}
+                title={preset.name}
+              >
+                {currentStyle.color.toLowerCase() === preset.hex.toLowerCase() && (
+                  <Check className="w-3 h-3 text-white drop-shadow-md" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 2. Type de Tracé (Plein / Pointillés / Points) */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] text-slate-400 font-mono block">
+            Motif du tracé sur le plan :
+          </label>
+          <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
+            {[
+              { id: "SOLID" as CableStrokePattern, label: "Plein ───", desc: "Ligne continue" },
+              { id: "DASHED" as CableStrokePattern, label: "Pointillé - -", desc: "Tirets espacés" },
+              { id: "DOTTED" as CableStrokePattern, label: "Points • •", desc: "Petits points fins" },
+            ].map((pattern) => (
+              <button
+                key={pattern.id}
+                onClick={() =>
+                  onUpdateVlanStyle(currentStyle.vlanId, { strokePattern: pattern.id })
+                }
+                className={`py-2 px-2 rounded-lg border transition text-center ${
+                  currentStyle.strokePattern === pattern.id
+                    ? "bg-sky-600/30 text-sky-300 border-sky-500/50 font-bold shadow-sm"
+                    : "bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/60"
+                }`}
+                title={pattern.desc}
+              >
+                {pattern.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 3. Épaisseur du Câble */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] text-slate-400 font-mono block">
+            Épaisseur du câble :
+          </label>
+          <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
+            {[
+              { id: "FINE" as CableThickness, label: "Fin (2mm)", widthDesc: "Discret & fin" },
+              { id: "NORMAL" as CableThickness, label: "Normal (4mm)", widthDesc: "Standard" },
+              { id: "THICK" as CableThickness, label: "Épais (7mm)", widthDesc: "Renforcé" },
+            ].map((thick) => (
+              <button
+                key={thick.id}
+                onClick={() =>
+                  onUpdateVlanStyle(currentStyle.vlanId, { thickness: thick.id })
+                }
+                className={`py-2 px-2 rounded-lg border transition text-center ${
+                  currentStyle.thickness === thick.id
+                    ? "bg-sky-600/30 text-sky-300 border-sky-500/50 font-bold shadow-sm"
+                    : "bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800/60"
+                }`}
+                title={thick.widthDesc}
+              >
+                {thick.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

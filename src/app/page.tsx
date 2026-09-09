@@ -1466,8 +1466,8 @@ export default function NetFloorApp() {
       {/* 5. Modal Dédié Personnalisation Styles & Tracés des Câbles par VLAN */}
       {isVlanStyleModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-slate-950 border border-slate-800 rounded-xl max-w-md w-full p-4 shadow-2xl space-y-3 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+          <div className="bg-slate-950 border border-slate-800 rounded-xl w-[480px] max-w-[95vw] h-[520px] max-h-[90vh] p-4 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
                   <Palette className="w-4 h-4" />
@@ -1484,14 +1484,14 @@ export default function NetFloorApp() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="max-h-[65vh] overflow-y-auto pr-1">
+            <div className="flex-1 overflow-y-auto pr-1 my-2">
               <VlanStyleCustomizer
                 vlanStyles={vlanStyles}
                 onUpdateVlanStyle={handleUpdateVlanStyle}
                 onResetVlanStyles={handleResetVlanStyles}
               />
             </div>
-            <div className="flex justify-end pt-2 border-t border-slate-800">
+            <div className="flex justify-end pt-2 border-t border-slate-800 flex-shrink-0">
               <button
                 onClick={() => setIsVlanStyleModalOpen(false)}
                 className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow transition"

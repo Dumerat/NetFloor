@@ -102,24 +102,39 @@ export interface SystemSettings {
   integrations: IntegrationsSettings;
 }
 
+export const LAB_ACTIVE_DIRECTORY_CONFIG: ActiveDirectoryConfig = {
+  serverHost: "127.0.0.1",
+  port: 389,
+  encryption: "NONE",
+  domainFqdn: "company.com",
+  netbiosDomain: "COMPANY",
+  baseDn: "dc=company,dc=com",
+  bindDn: "cn=admin,dc=company,dc=com",
+  bindPassword: "adminpassword",
+  userSearchFilter: "(&(objectClass=inetOrgPerson)(|(uid={0})(cn={0})))",
+  adminGroupDn: "cn=admins,ou=groups,dc=company,dc=com",
+  rhGroupDn: "cn=rh,ou=groups,dc=company,dc=com",
+  techGroupDn: "cn=technicians,ou=groups,dc=company,dc=com",
+  syncIntervalMinutes: 30,
+};
+
+export const LAB_SNMP_CONFIG: SnmpSettings = {
+  version: "v2c",
+  targetSubnet: "127.0.0.1/32",
+  community: "public",
+  v3User: "snmp_admin",
+  v3AuthProtocol: "SHA",
+  v3PrivProtocol: "AES",
+  v3AuthPass: "••••••••••••",
+  v3PrivPass: "••••••••••••",
+  pollIntervalSeconds: 60,
+  lastScanIso: new Date(Date.now() - 3600000).toISOString(),
+};
+
 export const INITIAL_SETTINGS: SystemSettings = {
   sso: {
     provider: "ACTIVE_DIRECTORY_LDAP",
-    activeDirectory: {
-      serverHost: "dc01.corp.local",
-      port: 636,
-      encryption: "LDAPS",
-      domainFqdn: "corp.local",
-      netbiosDomain: "CORP",
-      baseDn: "DC=corp,DC=local",
-      bindDn: "CN=svc-netfloor,OU=ServiceAccounts,DC=corp,DC=local",
-      bindPassword: "••••••••••••••••••••",
-      userSearchFilter: "(&(objectCategory=person)(objectClass=user)(sAMAccountName={0}))",
-      adminGroupDn: "CN=NetFloor_Admins,OU=Groups,DC=corp,DC=local",
-      rhGroupDn: "CN=NetFloor_RH,OU=Groups,DC=corp,DC=local",
-      techGroupDn: "CN=NetFloor_Technicians,OU=Groups,DC=corp,DC=local",
-      syncIntervalMinutes: 30,
-    },
+    activeDirectory: { ...LAB_ACTIVE_DIRECTORY_CONFIG },
     tenantId: "8f7a91bc-4e2a-4389-9a71-d0b8f0418c99",
     clientId: "netfloor-enterprise-sso-app",
     clientSecret: "••••••••••••••••••••••••••••••••",
@@ -129,18 +144,7 @@ export const INITIAL_SETTINGS: SystemSettings = {
     status: "CONNECTED",
     tokenExpiryIso: new Date(Date.now() + 3600000 * 24 * 60).toISOString(),
   },
-  snmp: {
-    version: "v2c",
-    targetSubnet: "10.42.0.0/20",
-    community: "public",
-    v3User: "snmp_admin",
-    v3AuthProtocol: "SHA",
-    v3PrivProtocol: "AES",
-    v3AuthPass: "••••••••••••",
-    v3PrivPass: "••••••••••••",
-    pollIntervalSeconds: 60,
-    lastScanIso: new Date(Date.now() - 3600000).toISOString(),
-  },
+  snmp: { ...LAB_SNMP_CONFIG },
   subnets: [
     {
       vlanId: 1,
