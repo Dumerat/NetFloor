@@ -169,13 +169,20 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
           />
         </Layer>
 
-        {/* Calque 2 : Câblage physique dynamique avec poignées de courbure interactives */}
+        {/* Calque 2 : Câblage physique dynamique avec poignées de couloir interactives */}
         <Layer>
           <CableLayer
             cables={cables}
             activeViewMode={activeViewMode}
             cableFilterMode={cableFilterMode}
             selectedNodeId={selectedNodeId ?? selectedOutletId}
+            onSelectNodeId={(id) => {
+              const node = nodes.find((n) => n.id === id);
+              if (node) {
+                if (node.type === "WALL_OUTLET") onSelectOutlet(node);
+                else onSelectNode?.(node);
+              }
+            }}
             onWaypointChange={onWaypointChange}
           />
         </Layer>

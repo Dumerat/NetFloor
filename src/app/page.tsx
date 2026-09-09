@@ -438,10 +438,10 @@ export default function NetFloorApp() {
       const cableId = `cable-run-${outlet.id}`;
       const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + index * 35 };
 
-      // Point de courbure évitant les bureaux (cheminement dégagé)
-      const defaultMidX = Math.round((outlet.xMm + targetPos.x) / 2);
-      const defaultMidY = Math.round(Math.min(outlet.yMm, targetPos.y) - 2200);
-      const cableWaypoints = customWaypoints[cableId] ?? [{ x: defaultMidX, y: defaultMidY }];
+      // Cheminement en nappe de câbles faux-plafond (lignes parallèles régulières à angles droits 90° évitant les bureaux)
+      const defaultCorridorY = 8800 + (index % 10) * 80;
+      const defaultChuteX = 14800 + (index % 10) * 60;
+      const cableWaypoints = customWaypoints[cableId] ?? [{ x: defaultChuteX, y: defaultCorridorY }];
 
       list.push({
         id: cableId,
@@ -549,6 +549,8 @@ export default function NetFloorApp() {
   const rafNodeDragRef = useRef<number | null>(null);
   const pendingRackDragRef = useRef<{ id: string; pos: { x: number; y: number } } | null>(null);
   const rafRackDragRef = useRef<number | null>(null);
+  const pendingWaypointDragRef = useRef<{ cableId: string; waypointIndex: number; pos: { x: number; y: number } } | null>(null);
+  const rafWaypointDragRef = useRef<number | null>(null);
 
   // Déplacement d'un nœud (bureau ou prise)
   const handleNodeUpdate = useCallback((id: string, newPos: { x: number; y: number }) => {
@@ -631,11 +633,32 @@ export default function NetFloorApp() {
     }
   }, [handleRackUpdate]);
 
+  // Déplacement fluide des waypoints de câbles cadencé par RAF à 60 FPS
+  const handleThrottledWaypointChange = useCallback(
+    (cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => {
+      pendingWaypointDragRef.current = { cableId, waypointIndex, pos: newPos };
+      if (!rafWaypointDragRef.current) {
+        rafWaypointDragRef.current = requestAnimationFrame(() => {
+          if (pendingWaypointDragRef.current) {
+            handleWaypointChange(
+              pendingWaypointDragRef.current.cableId,
+              pendingWaypointDragRef.current.waypointIndex,
+              pendingWaypointDragRef.current.pos
+            );
+          }
+          rafWaypointDragRef.current = null;
+        });
+      }
+    },
+    [handleWaypointChange]
+  );
+
   // Nettoyage des timers RAF au démontage
   useEffect(() => {
     return () => {
       if (rafNodeDragRef.current) cancelAnimationFrame(rafNodeDragRef.current);
       if (rafRackDragRef.current) cancelAnimationFrame(rafRackDragRef.current);
+      if (rafWaypointDragRef.current) cancelAnimationFrame(rafWaypointDragRef.current);
     };
   }, []);
 
@@ -1318,14 +1341,14 @@ export default function NetFloorApp() {
             onNodePositionChange={handleNodeMoveEnd}
             onNodeDragMove={handleThrottledNodeDragMove}
             onRackDragMove={handleThrottledRackDragMove}
-            onWaypointChange={handleWaypointChange}
+            onWaypointChange={handleThrottledWaypointChange}
           />
 
           {/* Quick tips badge */}
           <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-800 backdrop-blur rounded-lg p-2.5 text-[11px] text-slate-400 shadow-xl font-mono flex items-center gap-2 pointer-events-none z-10">
             <Sparkles className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
             <span>
-              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Colonnettes RJ45 stackées jusqu&apos;à 8 ports • Tracés courbes et poignées de cintrage interactives.
+              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Colonnettes RJ45 stackées jusqu&apos;à 8 ports • Tracés orthogonaux 90° et couloirs de câblage ajustables.
             </span>
           </div>
         </div>
