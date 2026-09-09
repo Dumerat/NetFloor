@@ -2,7 +2,13 @@
 
 import { useState, useMemo, type FC } from "react";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
-import { NodeDisplay, OutletRole } from "@/components/canvas/EquipmentLayer";
+import {
+  NodeDisplay,
+  OutletRole,
+  DeskSeatOccupant,
+  getDeskSeatCount,
+  getDefaultSeatLabels,
+} from "@/components/canvas/EquipmentLayer";
 import { ENTERPRISE_DIRECTORY } from "@/data/directory";
 import {
   Zap,
@@ -30,6 +36,7 @@ import {
   Mail,
   Building,
   UserCheck,
+  Users,
 } from "lucide-react";
 
 export interface CircuitInspectorProps {
@@ -63,6 +70,95 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
 }) => {
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false);
+  const [pickingSeatIndex, setPickingSeatIndex] = useState<number | null>(null);
+
+  // Détection du nombre de places du bureau (1, 2 ou 4)
+  const deskSeatCount = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== "DESK") return 1;
+    return getDeskSeatCount(selectedNode.subType);
+  }, [selectedNode]);
+
+  // Liste normalisée des places du bureau
+  const currentSeats: DeskSeatOccupant[] = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== "DESK") return [];
+    const count = getDeskSeatCount(selectedNode.subType);
+    const labels = getDefaultSeatLabels(selectedNode.subType);
+    const list: DeskSeatOccupant[] = [];
+    for (let i = 0; i < count; i++) {
+      const existing = selectedNode.seats?.find((s) => s.seatIndex === i);
+      if (existing) {
+        list.push({ ...existing, seatLabel: existing.seatLabel ?? labels[i] });
+      } else if (i === 0 && selectedNode.assignedPerson && count === 1) {
+        list.push({
+          seatIndex: 0,
+          seatLabel: labels[0],
+          fullName: selectedNode.assignedPerson,
+          userId: selectedNode.assignedUserId,
+          department: selectedNode.department,
+        });
+      } else {
+        list.push({
+          seatIndex: i,
+          seatLabel: labels[i] ?? `Place ${i + 1}`,
+        });
+      }
+    }
+    return list;
+  }, [selectedNode]);
+
+  const occupiedSeatsCount = useMemo(
+    () => currentSeats.filter((s) => s.fullName).length,
+    [currentSeats]
+  );
+
+  // Assignation d'un collaborateur à une place spécifique
+  const handleAssignUserToSeat = (seatIdx: number, user: (typeof ENTERPRISE_DIRECTORY)[0]) => {
+    if (!selectedNode) return;
+    const labels = getDefaultSeatLabels(selectedNode.subType);
+    const updatedSeats: DeskSeatOccupant[] = [...currentSeats];
+    updatedSeats[seatIdx] = {
+      seatIndex: seatIdx,
+      seatLabel: labels[seatIdx] ?? `Place ${seatIdx + 1}`,
+      userId: user.id,
+      fullName: user.fullName,
+      department: user.department,
+    };
+    const summary = updatedSeats
+      .filter((s) => s.fullName)
+      .map((s) => s.fullName)
+      .join(", ");
+    onUpdateNodeProperties?.(selectedNode.id, {
+      seats: updatedSeats,
+      assignedPerson: summary || undefined,
+      assignedUserId: updatedSeats[0]?.userId,
+      department: updatedSeats[0]?.department,
+    });
+    setPickingSeatIndex(null);
+  };
+
+  // Libération d'une place spécifique
+  const handleUnassignSeat = (seatIdx: number) => {
+    if (!selectedNode) return;
+    const labels = getDefaultSeatLabels(selectedNode.subType);
+    const updatedSeats: DeskSeatOccupant[] = [...currentSeats];
+    updatedSeats[seatIdx] = {
+      seatIndex: seatIdx,
+      seatLabel: labels[seatIdx] ?? `Place ${seatIdx + 1}`,
+      userId: undefined,
+      fullName: undefined,
+      department: undefined,
+    };
+    const summary = updatedSeats
+      .filter((s) => s.fullName)
+      .map((s) => s.fullName)
+      .join(", ");
+    onUpdateNodeProperties?.(selectedNode.id, {
+      seats: updatedSeats,
+      assignedPerson: summary || undefined,
+      assignedUserId: updatedSeats.find((s) => s.userId)?.userId,
+      department: updatedSeats.find((s) => s.department)?.department,
+    });
+  };
 
   // Recherche de l'utilisateur actuellement assigné
   const currentAssignedUser = useMemo(() => {
@@ -438,158 +534,337 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-        {/* Section 1 : Affectation RH (Annuaire Entra ID / Active Directory & Description) */}
+        {/* Section 1 : Affectation RH (Multi-Places ou Place Solo) */}
         <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-              Collaborateur Assigné (Entra ID)
-            </span>
-            <span
-              className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
-                selectedNode.assignedPerson
-                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                  : "bg-slate-800 text-slate-400 border-slate-700"
-              }`}
-            >
-              {selectedNode.assignedPerson ? "OCCUPÉ" : "FLEX / LIBRE"}
-            </span>
-          </div>
-
-          {/* Profil assigné ou sélection */}
-          {currentAssignedUser || selectedNode.assignedPerson ? (
-            <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${
-                      currentAssignedUser?.avatarColor ?? "bg-blue-600"
-                    }`}
-                  >
-                    {(currentAssignedUser?.fullName ?? selectedNode.assignedPerson ?? "U")
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-100">
-                      {currentAssignedUser?.fullName ?? selectedNode.assignedPerson}
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      {currentAssignedUser?.jobTitle ?? selectedNode.department ?? "Collaborateur"}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() =>
-                    onUpdateNodeProperties?.(selectedNode.id, {
-                      assignedPerson: undefined,
-                      assignedUserId: undefined,
-                      department: undefined,
-                    })
-                  }
-                  title="Libérer le poste (passer en flex)"
-                  className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-900 rounded transition"
-                >
-                  <UserMinus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {currentAssignedUser && (
-                <div className="pt-1.5 border-t border-slate-900 grid grid-cols-1 gap-1 text-[10px] text-slate-400">
-                  <div className="flex items-center gap-1.5">
-                    <Building className="w-3 h-3 text-slate-500 flex-shrink-0" />
-                    <span>{currentAssignedUser.department}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-400">
-                    <Mail className="w-3 h-3 text-slate-500 flex-shrink-0" />
-                    <span className="truncate">{currentAssignedUser.email}</span>
-                  </div>
-                  {currentAssignedUser.phone && (
-                    <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-400">
-                      <Phone className="w-3 h-3 text-slate-500 flex-shrink-0" />
-                      <span>{currentAssignedUser.phone}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <button
-                onClick={() => setIsUserPickerOpen((prev) => !prev)}
-                className="w-full py-1 px-2 text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-800 transition text-center"
-              >
-                {isUserPickerOpen ? "Fermer l'annuaire" : "Changer d'occupant..."}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <div className="text-[10px] text-slate-400">
-                Poste vacant ou flexible. Attribuez un collaborateur :
-              </div>
-              <button
-                onClick={() => setIsUserPickerOpen((prev) => !prev)}
-                className="w-full py-1.5 px-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs flex items-center justify-between transition"
-              >
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <Search className="w-3.5 h-3.5" />
-                  Sélectionner dans l'annuaire...
+          {deskSeatCount > 1 ? (
+            /* Cas Multi-Postes : Bench Double (2 places) ou Îlot Quad (4 places) */
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-blue-400" />
+                  Affectation des Postes ({occupiedSeatsCount}/{deskSeatCount} occupés)
                 </span>
-                <span className="text-[10px] text-blue-400 font-mono">Entra ID</span>
-              </button>
-            </div>
-          )}
-
-          {/* Menu déroulant de l'Annuaire Entra ID */}
-          {isUserPickerOpen && (
-            <div className="p-2 bg-slate-950 border border-slate-800 rounded-lg space-y-2 mt-1 shadow-xl">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2" />
-                <input
-                  type="text"
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  placeholder="Rechercher par nom, métier ou service..."
-                  className="w-full pl-7 pr-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 text-[10px] focus:outline-none focus:border-blue-500"
-                />
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                    occupiedSeatsCount === deskSeatCount
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                      : occupiedSeatsCount > 0
+                      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                      : "bg-slate-800 text-slate-400 border-slate-700"
+                  }`}
+                >
+                  {occupiedSeatsCount === deskSeatCount
+                    ? "COMPLET"
+                    : occupiedSeatsCount > 0
+                    ? "PARTIEL"
+                    : "VIDE / FLEX"}
+                </span>
               </div>
 
-              <div className="max-h-44 overflow-y-auto space-y-1 pr-1 text-xs">
-                {filteredUsers.map((user) => {
-                  const isCurrent = (currentAssignedUser?.id ?? selectedNode.assignedUserId) === user.id;
+              {/* Cartes individuelles pour chaque place */}
+              <div className="space-y-2">
+                {currentSeats.map((seat, idx) => {
+                  const assignedUser = seat.userId
+                    ? ENTERPRISE_DIRECTORY.find((u) => u.id === seat.userId)
+                    : seat.fullName
+                    ? ENTERPRISE_DIRECTORY.find((u) => u.fullName.toLowerCase() === seat.fullName?.toLowerCase())
+                    : null;
+                  const isOccupied = Boolean(seat.fullName);
+                  const isPickingThisSeat = pickingSeatIndex === idx;
+
                   return (
-                    <button
-                      key={user.id}
-                      onClick={() => {
-                        onUpdateNodeProperties?.(selectedNode.id, {
-                          assignedPerson: user.fullName,
-                          assignedUserId: user.id,
-                          department: user.department,
-                        });
-                        setIsUserPickerOpen(false);
-                      }}
-                      className={`w-full p-1.5 rounded flex items-center justify-between text-left transition ${
-                        isCurrent
-                          ? "bg-emerald-950/40 border border-emerald-500/40 text-emerald-300"
-                          : "hover:bg-slate-900 text-slate-300"
+                    <div
+                      key={`seat-card-${idx}`}
+                      className={`p-2 rounded border transition ${
+                        isOccupied
+                          ? "bg-slate-950 border-slate-800"
+                          : "bg-slate-950/50 border-dashed border-slate-800"
                       }`}
                     >
-                      <div className="truncate">
-                        <div className="text-[11px] font-medium text-slate-200 truncate flex items-center gap-1">
-                          {user.fullName}
-                          {isCurrent && <Check className="w-3 h-3 text-emerald-400" />}
-                        </div>
-                        <div className="text-[9px] text-slate-400 truncate">
-                          {user.jobTitle} • <span className="text-slate-500">{user.department}</span>
-                        </div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full bg-blue-600/30 text-blue-300 flex items-center justify-center text-[9px] font-mono">
+                            {idx + 1}
+                          </span>
+                          {seat.seatLabel ?? `Place ${idx + 1}`}
+                        </span>
+                        <span
+                          className={`text-[8px] font-mono px-1.5 py-0.5 rounded border ${
+                            isOccupied
+                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                              : "bg-slate-800 text-slate-500 border-slate-700"
+                          }`}
+                        >
+                          {isOccupied ? "OCCUPÉ" : "DISPONIBLE"}
+                        </span>
                       </div>
-                    </button>
+
+                      {isOccupied ? (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
+                                  assignedUser?.avatarColor ?? "bg-blue-600"
+                                }`}
+                              >
+                                {(seat.fullName ?? "U")
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .join("")
+                                  .slice(0, 2)
+                                  .toUpperCase()}
+                              </div>
+                              <div className="truncate">
+                                <div className="text-[11px] font-semibold text-slate-100 truncate">
+                                  {seat.fullName}
+                                </div>
+                                <div className="text-[9px] text-slate-400 truncate">
+                                  {assignedUser?.jobTitle ?? seat.department ?? "Collaborateur"}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleUnassignSeat(idx)}
+                              title="Libérer cette place"
+                              className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-900 rounded transition"
+                            >
+                              <UserMinus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              setUserSearchQuery("");
+                              setPickingSeatIndex(isPickingThisSeat ? null : idx);
+                            }}
+                            className="w-full py-0.5 px-2 text-[9px] bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-800 transition text-center"
+                          >
+                            {isPickingThisSeat ? "Fermer l'annuaire" : "Changer d'occupant..."}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setUserSearchQuery("");
+                            setPickingSeatIndex(isPickingThisSeat ? null : idx);
+                          }}
+                          className="w-full py-1 px-2 bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded text-slate-300 text-[10px] flex items-center justify-between transition"
+                        >
+                          <span className="flex items-center gap-1.5 text-slate-400">
+                            <Plus className="w-3 h-3 text-blue-400" />
+                            Attribuer un collaborateur
+                          </span>
+                          <span className="text-[9px] text-blue-400 font-mono">Entra ID</span>
+                        </button>
+                      )}
+
+                      {/* Sélecteur Annuaire Déroulant pour cette place */}
+                      {isPickingThisSeat && (
+                        <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg space-y-1.5 mt-2 shadow-xl">
+                          <div className="relative">
+                            <Search className="w-3 h-3 text-slate-500 absolute left-2 top-2" />
+                            <input
+                              type="text"
+                              value={userSearchQuery}
+                              onChange={(e) => setUserSearchQuery(e.target.value)}
+                              placeholder="Rechercher par nom, métier ou service..."
+                              className="w-full pl-6 pr-2 py-1 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[9px] focus:outline-none focus:border-blue-500"
+                              autoFocus
+                            />
+                          </div>
+
+                          <div className="max-h-36 overflow-y-auto space-y-1 pr-1 text-xs">
+                            {filteredUsers.map((user) => (
+                              <button
+                                key={user.id}
+                                onClick={() => handleAssignUserToSeat(idx, user)}
+                                className="w-full p-1.5 rounded flex items-center justify-between text-left transition hover:bg-slate-800 text-slate-300"
+                              >
+                                <div className="truncate">
+                                  <div className="text-[10px] font-medium text-slate-200 truncate">
+                                    {user.fullName}
+                                  </div>
+                                  <div className="text-[8px] text-slate-400 truncate">
+                                    {user.jobTitle} • {user.department}
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
             </div>
+          ) : (
+            /* Cas Bureau Solo : 1 seule personne assignée */
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  Collaborateur Assigné (Entra ID)
+                </span>
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                    selectedNode.assignedPerson
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                      : "bg-slate-800 text-slate-400 border-slate-700"
+                  }`}
+                >
+                  {selectedNode.assignedPerson ? "OCCUPÉ" : "FLEX / LIBRE"}
+                </span>
+              </div>
+
+              {/* Profil assigné ou sélection */}
+              {currentAssignedUser || selectedNode.assignedPerson ? (
+                <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                          currentAssignedUser?.avatarColor ?? "bg-blue-600"
+                        }`}
+                      >
+                        {(currentAssignedUser?.fullName ?? selectedNode.assignedPerson ?? "U")
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-100">
+                          {currentAssignedUser?.fullName ?? selectedNode.assignedPerson}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {currentAssignedUser?.jobTitle ?? selectedNode.department ?? "Collaborateur"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          assignedPerson: undefined,
+                          assignedUserId: undefined,
+                          department: undefined,
+                          seats: [],
+                        })
+                      }
+                      title="Libérer le poste (passer en flex)"
+                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-900 rounded transition"
+                    >
+                      <UserMinus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {currentAssignedUser && (
+                    <div className="pt-1.5 border-t border-slate-900 grid grid-cols-1 gap-1 text-[10px] text-slate-400">
+                      <div className="flex items-center gap-1.5">
+                        <Building className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                        <span>{currentAssignedUser.department}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-400">
+                        <Mail className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                        <span className="truncate">{currentAssignedUser.email}</span>
+                      </div>
+                      {currentAssignedUser.phone && (
+                        <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-400">
+                          <Phone className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                          <span>{currentAssignedUser.phone}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setIsUserPickerOpen((prev) => !prev)}
+                    className="w-full py-1 px-2 text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-800 transition text-center"
+                  >
+                    {isUserPickerOpen ? "Fermer l'annuaire" : "Changer d'occupant..."}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-slate-400">
+                    Poste vacant ou flexible. Attribuez un collaborateur :
+                  </div>
+                  <button
+                    onClick={() => setIsUserPickerOpen((prev) => !prev)}
+                    className="w-full py-1.5 px-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs flex items-center justify-between transition"
+                  >
+                    <span className="flex items-center gap-1.5 text-slate-400">
+                      <Search className="w-3.5 h-3.5" />
+                      Sélectionner dans l'annuaire...
+                    </span>
+                    <span className="text-[10px] text-blue-400 font-mono">Entra ID</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Menu déroulant de l'Annuaire Entra ID */}
+              {isUserPickerOpen && (
+                <div className="p-2 bg-slate-950 border border-slate-800 rounded-lg space-y-2 mt-1 shadow-xl">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2" />
+                    <input
+                      type="text"
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      placeholder="Rechercher par nom, métier ou service..."
+                      className="w-full pl-7 pr-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 text-[10px] focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="max-h-44 overflow-y-auto space-y-1 pr-1 text-xs">
+                    {filteredUsers.map((user) => {
+                      const isCurrent = (currentAssignedUser?.id ?? selectedNode.assignedUserId) === user.id;
+                      return (
+                        <button
+                          key={user.id}
+                          onClick={() => {
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              assignedPerson: user.fullName,
+                              assignedUserId: user.id,
+                              department: user.department,
+                              seats: [
+                                {
+                                  seatIndex: 0,
+                                  seatLabel: "Place Unique",
+                                  userId: user.id,
+                                  fullName: user.fullName,
+                                  department: user.department,
+                                },
+                              ],
+                            });
+                            setIsUserPickerOpen(false);
+                          }}
+                          className={`w-full p-1.5 rounded flex items-center justify-between text-left transition ${
+                            isCurrent
+                              ? "bg-emerald-950/40 border border-emerald-500/40 text-emerald-300"
+                              : "hover:bg-slate-900 text-slate-300"
+                          }`}
+                        >
+                          <div className="truncate">
+                            <div className="text-[11px] font-medium text-slate-200 truncate flex items-center gap-1">
+                              {user.fullName}
+                              {isCurrent && <Check className="w-3 h-3 text-emerald-400" />}
+                            </div>
+                            <div className="text-[9px] text-slate-400 truncate">
+                              {user.jobTitle} • <span className="text-slate-500">{user.department}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* Champ Description & Notes du poste */}
@@ -623,42 +898,80 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
           {/* Gabarits rapides standards */}
           <div>
             <div className="text-[10px] text-slate-400 mb-1">Gabarits normalisés rapides :</div>
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-2 gap-1">
               <button
                 onClick={() =>
-                  onUpdateNodeProperties?.(selectedNode.id, { widthMm: 1600, heightMm: 800 })
+                  onUpdateNodeProperties?.(selectedNode.id, { widthMm: 1600, heightMm: 800, subType: "DESK_SOLO" })
                 }
                 className={`py-1 px-1 rounded text-[10px] font-mono border transition ${
-                  currentWidth === 1600 && currentHeight === 800
+                  currentWidth === 1600 && currentHeight === 800 && selectedNode.subType === "DESK_SOLO"
                     ? "bg-blue-600 text-white border-blue-500 font-bold"
                     : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
                 }`}
               >
-                160 × 80 cm
+                Solo 160 × 80 cm
               </button>
               <button
                 onClick={() =>
-                  onUpdateNodeProperties?.(selectedNode.id, { widthMm: 1200, heightMm: 700 })
+                  onUpdateNodeProperties?.(selectedNode.id, { widthMm: 1200, heightMm: 700, subType: "DESK_COMPACT" })
                 }
                 className={`py-1 px-1 rounded text-[10px] font-mono border transition ${
-                  currentWidth === 1200 && currentHeight === 700
+                  currentWidth === 1200 && currentHeight === 700 && selectedNode.subType === "DESK_COMPACT"
                     ? "bg-blue-600 text-white border-blue-500 font-bold"
                     : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
                 }`}
               >
-                120 × 70 cm
+                Solo 120 × 70 cm
               </button>
               <button
-                onClick={() =>
-                  onUpdateNodeProperties?.(selectedNode.id, { widthMm: 1600, heightMm: 1600, subType: "BENCH_DOUBLE" })
-                }
+                onClick={() => {
+                  const dblLabels = getDefaultSeatLabels("BENCH_DOUBLE");
+                  const initSeats: DeskSeatOccupant[] = dblLabels.map((lbl, i) => ({
+                    seatIndex: i,
+                    seatLabel: lbl,
+                    userId: selectedNode.seats?.[i]?.userId,
+                    fullName: selectedNode.seats?.[i]?.fullName,
+                    department: selectedNode.seats?.[i]?.department,
+                  }));
+                  onUpdateNodeProperties?.(selectedNode.id, {
+                    widthMm: 1600,
+                    heightMm: 1600,
+                    subType: "BENCH_DOUBLE",
+                    seats: initSeats,
+                  });
+                }}
                 className={`py-1 px-1 rounded text-[10px] font-mono border transition ${
-                  currentWidth === 1600 && currentHeight === 1600
+                  currentWidth === 1600 && currentHeight === 1600 && selectedNode.subType === "BENCH_DOUBLE"
                     ? "bg-blue-600 text-white border-blue-500 font-bold"
                     : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
                 }`}
               >
-                Bench 160²
+                Bench 2P (160²)
+              </button>
+              <button
+                onClick={() => {
+                  const quadLabels = getDefaultSeatLabels("BENCH_QUAD");
+                  const initSeats: DeskSeatOccupant[] = quadLabels.map((lbl, i) => ({
+                    seatIndex: i,
+                    seatLabel: lbl,
+                    userId: selectedNode.seats?.[i]?.userId,
+                    fullName: selectedNode.seats?.[i]?.fullName,
+                    department: selectedNode.seats?.[i]?.department,
+                  }));
+                  onUpdateNodeProperties?.(selectedNode.id, {
+                    widthMm: 3200,
+                    heightMm: 1600,
+                    subType: "BENCH_QUAD",
+                    seats: initSeats,
+                  });
+                }}
+                className={`py-1 px-1 rounded text-[10px] font-mono border transition ${
+                  currentWidth === 3200 && currentHeight === 1600 && selectedNode.subType === "BENCH_QUAD"
+                    ? "bg-blue-600 text-white border-blue-500 font-bold"
+                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                }`}
+              >
+                Îlot 4P (320×160)
               </button>
             </div>
           </div>

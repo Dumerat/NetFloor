@@ -7,7 +7,7 @@ import { CircuitInspector } from "@/components/ui/CircuitInspector";
 import { EquipmentPalette, PaletteItem } from "@/components/ui/EquipmentPalette";
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
-import { NodeDisplay, RackDisplay, OutletRole } from "@/components/canvas/EquipmentLayer";
+import { NodeDisplay, RackDisplay, OutletRole, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
 import { CableData } from "@/components/canvas/CableLayer";
 import {
   ZoomIn,
@@ -43,8 +43,10 @@ export default function NetFloorApp() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
 
-  // Filtre de vue métier (Vue Globale, Vue RH, Vue Technique DSI & Câblage)
-  const [activeViewMode, setActiveViewMode] = useState<"ALL" | "HR" | "TECH">("ALL");
+  // Vue Métier active
+  const [activeViewMode, setActiveViewMode] = useState<
+    "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK"
+  >("ALL");
 
   // Étage
   const [floorData] = useState({
@@ -52,27 +54,104 @@ export default function NetFloorApp() {
     heightMm: 35000,
   });
 
-  // Baies Informatiques
+  // Baies informatiques
   const [racks, setRacks] = useState<RackDisplay[]>([
     {
       id: "rack-01",
-      name: "BAIE-LT4A-01",
-      uHeight: 42,
-      xMm: 8500,
-      yMm: 6500,
+      name: "BAIE-PRINCIPALE-RDC",
+      xMm: 8000,
+      yMm: 18000,
       widthMm: 600,
       depthMm: 800,
+      uHeight: 42,
     },
   ]);
 
-  // Nœuds d'équipements : Mobilier RH, Prises/Nourrices Maintenance, et Infra DSI
+  // Nœuds du plateau (Bureaux multi-places RH, Prises Réseau, Boîtes de Sol, Wi-Fi)
   const [nodes, setNodes] = useState<NodeDisplay[]>([
+    // 1. Îlot Bench 4 Postes (4 collaborateurs distincts assignés)
+    {
+      id: "bench-402",
+      type: "DESK",
+      name: "Bureau 402",
+      xMm: 23000,
+      yMm: 15000,
+      widthMm: 3200,
+      heightMm: 1600,
+      subType: "BENCH_QUAD",
+      assignedPerson: "Thomas Roux, Sarah Benali, Lucas Vidal, Sophie Mercier",
+      department: "Pôle Collaboratif Tech & RH",
+      description: "Îlot central 4 postes avec cloisonnettes acoustiques croisées et colonnes de câblage intégrées.",
+      chairPosition: "BOTTOM",
+      seats: [
+        {
+          seatIndex: 0,
+          seatLabel: "Place 1 (Haut-Gauche)",
+          userId: "usr-005",
+          fullName: "Thomas Roux",
+          department: "Tech Lab",
+        },
+        {
+          seatIndex: 1,
+          seatLabel: "Place 2 (Haut-Droite)",
+          userId: "usr-002",
+          fullName: "Sarah Benali",
+          department: "Ressources Humaines",
+        },
+        {
+          seatIndex: 2,
+          seatLabel: "Place 3 (Bas-Gauche)",
+          userId: "usr-006",
+          fullName: "Lucas Vidal",
+          department: "Support & Réseaux",
+        },
+        {
+          seatIndex: 3,
+          seatLabel: "Place 4 (Bas-Droite)",
+          userId: "usr-007",
+          fullName: "Sophie Mercier",
+          department: "Ressources Humaines",
+        },
+      ],
+    },
+    // 2. Bench Double Face-à-Face (2 collaborateurs distincts)
+    {
+      id: "bench-401",
+      type: "DESK",
+      name: "Bureau 401",
+      xMm: 29000,
+      yMm: 15000,
+      widthMm: 1600,
+      heightMm: 1600,
+      subType: "BENCH_DOUBLE",
+      assignedPerson: "Julie Dupont, Marc Lefebvre",
+      department: "Direction & Infra",
+      description: "Bench 2 postes face-à-face avec cloisonnette acoustique centrale.",
+      chairPosition: "BOTTOM",
+      seats: [
+        {
+          seatIndex: 0,
+          seatLabel: "Place 1 (Face Nord)",
+          userId: "usr-003",
+          fullName: "Julie Dupont",
+          department: "Direction Digitale",
+        },
+        {
+          seatIndex: 1,
+          seatLabel: "Place 2 (Face Sud)",
+          userId: "usr-004",
+          fullName: "Marc Lefebvre",
+          department: "Infrastructure IT",
+        },
+      ],
+    },
+    // 3. Bureau Solo Standard
     {
       id: "desk-408",
       type: "DESK",
       name: "Bureau 408",
-      xMm: 42000,
-      yMm: 17500,
+      xMm: 37000,
+      yMm: 15000,
       widthMm: 1600,
       heightMm: 800,
       subType: "DESK_SOLO",
@@ -81,28 +160,23 @@ export default function NetFloorApp() {
       department: "Tech Lab",
       description: "Station de développement double écran 27\", station d'accueil Thunderbolt USB-C.",
       chairPosition: "BOTTOM",
+      seats: [
+        {
+          seatIndex: 0,
+          seatLabel: "Place Unique",
+          userId: "usr-001",
+          fullName: "Alexandre Martin",
+          department: "Tech Lab",
+        },
+      ],
     },
-    {
-      id: "desk-409",
-      type: "DESK",
-      name: "Bureau 409",
-      xMm: 42000,
-      yMm: 21500,
-      widthMm: 1600,
-      heightMm: 800,
-      subType: "DESK_SOLO",
-      assignedPerson: "Sarah Benali",
-      assignedUserId: "usr-002",
-      department: "Ressources Humaines",
-      description: "Poste RH recrutement et entretiens, proche salle d'attente.",
-      chairPosition: "BOTTOM",
-    },
+    // 4. Prises réseau solidaires du Bureau 408
     {
       id: "outlet-408-a",
       type: "WALL_OUTLET",
       name: "PRISE-DESK-408-A",
-      xMm: 43600,
-      yMm: 17700,
+      xMm: 38800,
+      yMm: 15200,
       portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
       attachedToDeskId: "desk-408",
       outletRole: "DATA",
@@ -111,17 +185,39 @@ export default function NetFloorApp() {
       id: "outlet-408-b",
       type: "WALL_OUTLET",
       name: "PRISE-DESK-408-B",
-      xMm: 43600,
-      yMm: 18150,
+      xMm: 38800,
+      yMm: 15650,
       portId: "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d",
       attachedToDeskId: "desk-408",
       outletRole: "VOIP",
     },
+    // 5. Prises réseau pour l'îlot 402
+    {
+      id: "outlet-402-a",
+      type: "WALL_OUTLET",
+      name: "PRISE-BENCH-402-A",
+      xMm: 26400,
+      yMm: 15200,
+      portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
+      attachedToDeskId: "bench-402",
+      outletRole: "DATA",
+    },
+    {
+      id: "outlet-402-b",
+      type: "WALL_OUTLET",
+      name: "PRISE-BENCH-402-B",
+      xMm: 26400,
+      yMm: 15650,
+      portId: "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d",
+      attachedToDeskId: "bench-402",
+      outletRole: "VOIP",
+    },
+    // 6. Boîte de Sol Centrale
     {
       id: "floorbox-01",
       type: "WALL_OUTLET",
       name: "BOITE-SOL-CENTRE-01",
-      xMm: 35000,
+      xMm: 33000,
       yMm: 20000,
       widthMm: 300,
       heightMm: 300,
@@ -129,24 +225,26 @@ export default function NetFloorApp() {
       portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
       outletRole: "DATA",
     },
+    // 7. Borne Wi-Fi Plafond
     {
       id: "wifi-01",
       type: "WALL_OUTLET",
       name: "AP-WIFI-OPENSPACE-04",
-      xMm: 32000,
-      yMm: 13000,
+      xMm: 28000,
+      yMm: 11000,
       widthMm: 350,
       heightMm: 350,
       subType: "WIFI_AP",
       outletRole: "WIFI",
       portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
     },
+    // 8. Copieur Multifonction Départemental
     {
       id: "printer-01",
       type: "WALL_OUTLET",
       name: "COPIEUR-RH-ETAGE-4",
-      xMm: 25000,
-      yMm: 22000,
+      xMm: 22000,
+      yMm: 21000,
       widthMm: 800,
       heightMm: 700,
       subType: "PRINTER_STATION",
@@ -513,6 +611,15 @@ export default function NetFloorApp() {
     const newY = 16000 + Math.floor(nodes.length / 6) * 1600;
     const newId = `node-${item.category.toLowerCase()}-${Date.now()}`;
 
+    const defaultLabels = item.targetType === "DESK" ? getDefaultSeatLabels(item.subType) : [];
+    const initialSeats =
+      item.targetType === "DESK"
+        ? defaultLabels.map((lbl, i) => ({
+            seatIndex: i,
+            seatLabel: lbl,
+          }))
+        : undefined;
+
     const newNode: NodeDisplay = {
       id: newId,
       type: item.targetType,
@@ -526,6 +633,7 @@ export default function NetFloorApp() {
       assignedPerson: item.category === "FURNITURE" ? "Poste vacant / Flex" : undefined,
       department: item.category === "FURNITURE" ? "Espace Collaboratif" : undefined,
       chairPosition: item.category === "FURNITURE" ? "BOTTOM" : "NONE",
+      seats: initialSeats,
       portId:
         item.targetType === "WALL_OUTLET"
           ? item.outletRole === "VOIP"

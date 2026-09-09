@@ -30,6 +30,35 @@ export type NodeSubType =
   | "RACK_42U"
   | "RACK_18U";
 
+export interface DeskSeatOccupant {
+  seatIndex: number;
+  seatLabel?: string | undefined;
+  userId?: string | undefined;
+  fullName?: string | undefined;
+  department?: string | undefined;
+}
+
+export function getDeskSeatCount(subType?: NodeSubType): number {
+  if (subType === "BENCH_QUAD") return 4;
+  if (subType === "BENCH_DOUBLE") return 2;
+  return 1;
+}
+
+export function getDefaultSeatLabels(subType?: NodeSubType): string[] {
+  if (subType === "BENCH_QUAD") {
+    return [
+      "Place 1 (Haut-Gauche)",
+      "Place 2 (Haut-Droite)",
+      "Place 3 (Bas-Gauche)",
+      "Place 4 (Bas-Droite)",
+    ];
+  }
+  if (subType === "BENCH_DOUBLE") {
+    return ["Place 1 (Face Nord)", "Place 2 (Face Sud)"];
+  }
+  return ["Place Unique"];
+}
+
 export interface NodeDisplay {
   id: string;
   type: "WALL_OUTLET" | "PATCH_PANEL" | "SWITCH" | "DESK";
@@ -48,6 +77,7 @@ export interface NodeDisplay {
   department?: string | undefined;
   description?: string | undefined;
   chairPosition?: "BOTTOM" | "TOP" | "LEFT" | "RIGHT" | "NONE" | undefined;
+  seats?: DeskSeatOccupant[] | undefined;
 }
 
 interface EquipmentLayerProps {
@@ -247,22 +277,44 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
         </Group>
       ))}
 
-      {/* 2. Mobilier & Postes Réalistes (Bureaux avec écrans, chaises et côtes) */}
+      {/* 2. Mobilier & Postes Réalistes (Bureaux Solo, Bench Double 2P, Îlot Quad 4P) */}
       {nodes
         .filter((n) => n.type === "DESK")
         .map((desk) => {
           const isSelected = activeSelectedId === desk.id;
           const width = desk.widthMm ?? 1600;
           const height = desk.heightMm ?? 800;
+          const rotDeg = desk.rotationDeg ?? 0;
           const isMeeting = desk.subType === "MEETING_TABLE";
+          const isBenchQuad = desk.subType === "BENCH_QUAD";
           const isBenchDouble = desk.subType === "BENCH_DOUBLE";
+
+          // Intitulé court : "Bureau {N}"
+          const matchNum = desk.name.match(/\d+/);
+          const shortTitle = matchNum ? `Bureau ${matchNum[0]}` : desk.name.replace(/^Poste\s+/i, "Bureau ");
+
+          // Récupération sécurisée d'un occupant de place
+          const getSeat = (idx: number): DeskSeatOccupant | undefined => {
+            if (desk.seats && desk.seats[idx]) {
+              return desk.seats[idx];
+            }
+            if (idx === 0 && desk.assignedPerson) {
+              return {
+                seatIndex: 0,
+                fullName: desk.assignedPerson,
+                userId: desk.assignedUserId,
+                department: desk.department,
+              };
+            }
+            return undefined;
+          };
 
           return (
             <Group
               key={desk.id}
               x={desk.xMm}
               y={desk.yMm}
-              rotation={desk.rotationDeg ?? 0}
+              rotation={rotDeg}
               draggable
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
@@ -294,7 +346,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 listening={false}
               />
 
-              {/* Cloisonnette acoustique centrale pour bench double face-à-face */}
+              {/* Cloisonnettes acoustiques centrales pour Bench Double et Îlot Quad */}
               {isBenchDouble && (
                 <Rect
                   x={30}
@@ -303,186 +355,256 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   height={30}
                   fill="#0284c7"
                   cornerRadius={10}
-                  opacity={0.8}
+                  opacity={0.85}
                   listening={false}
                 />
               )}
-
-              {/* Moniteur(s) réaliste(s) et clavier vu du dessus */}
-              {!isMeeting && (
+              {isBenchQuad && (
                 <Group listening={false}>
-                  {/* Écran Principal */}
+                  {/* Séparation acoustique horizontale */}
                   <Rect
-                    x={width / 2 - 220}
-                    y={isBenchDouble ? height / 4 - 30 : 90}
-                    width={440}
-                    height={40}
+                    x={30}
+                    y={height / 2 - 15}
+                    width={width - 60}
+                    height={30}
                     fill="#0284c7"
-                    stroke="#38bdf8"
-                    strokeWidth={8}
-                    cornerRadius={6}
+                    cornerRadius={10}
+                    opacity={0.85}
                   />
-                  {/* Pied de l'écran */}
+                  {/* Séparation acoustique verticale / colonne de câblage */}
                   <Rect
-                    x={width / 2 - 50}
-                    y={isBenchDouble ? height / 4 - 55 : 65}
-                    width={100}
-                    height={25}
-                    fill="#475569"
-                    cornerRadius={5}
+                    x={width / 2 - 15}
+                    y={30}
+                    width={30}
+                    height={height - 60}
+                    fill="#0284c7"
+                    cornerRadius={10}
+                    opacity={0.85}
                   />
-                  {/* Clavier & Pavé tactile */}
-                  <Rect
-                    x={width / 2 - 180}
-                    y={isBenchDouble ? height / 4 + 40 : 180}
-                    width={360}
-                    height={110}
-                    fill="#1e293b"
-                    stroke="#334155"
-                    strokeWidth={8}
-                    cornerRadius={8}
-                  />
+                </Group>
+              )}
 
-                  {/* 2ème écran si bench double (côté face) */}
-                  {isBenchDouble && (
+              {/* Équipements informatiques (écrans, claviers) & Chaises selon le type */}
+              {!isMeeting && isBenchQuad && (
+                <Group listening={false}>
+                  {/* Place 0 (Haut-Gauche) */}
+                  <Rect x={width / 4 - 210} y={height / 4 + 110} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={width / 4 - 45} y={height / 4 + 85} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 4 - 160} y={height / 4 - 130} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+
+                  {/* Place 1 (Haut-Droite) */}
+                  <Rect x={(3 * width) / 4 - 210} y={height / 4 + 110} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={(3 * width) / 4 - 45} y={height / 4 + 85} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={(3 * width) / 4 - 160} y={height / 4 - 130} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+
+                  {/* Place 2 (Bas-Gauche) */}
+                  <Rect x={width / 4 - 210} y={(3 * height) / 4 - 150} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={width / 4 - 45} y={(3 * height) / 4 - 175} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 4 - 160} y={(3 * height) / 4 + 65} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+
+                  {/* Place 3 (Bas-Droite) */}
+                  <Rect x={(3 * width) / 4 - 210} y={(3 * height) / 4 - 150} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={(3 * width) / 4 - 45} y={(3 * height) / 4 - 175} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={(3 * width) / 4 - 160} y={(3 * height) / 4 + 65} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+
+                  {/* 4 Chaises (2 en haut tournées vers le bas, 2 en bas tournées vers le haut) */}
+                  {desk.chairPosition !== "NONE" && (
                     <Group listening={false}>
-                      <Rect
-                        x={width / 2 - 220}
-                        y={(3 * height) / 4 - 10}
-                        width={440}
-                        height={40}
-                        fill="#0284c7"
-                        stroke="#38bdf8"
-                        strokeWidth={8}
-                        cornerRadius={6}
-                      />
-                      <Rect
-                        x={width / 2 - 180}
-                        y={(3 * height) / 4 + 50}
-                        width={360}
-                        height={110}
-                        fill="#1e293b"
-                        stroke="#334155"
-                        strokeWidth={8}
-                        cornerRadius={8}
-                      />
+                      {/* Chaise 0 (Top-Left) */}
+                      <Rect x={width / 4 - 190} y={-380} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
+                      <Rect x={width / 4 - 170} y={-360} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
+                      <Rect x={width / 4 - 210} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect x={width / 4 + 175} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+
+                      {/* Chaise 1 (Top-Right) */}
+                      <Rect x={(3 * width) / 4 - 190} y={-380} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
+                      <Rect x={(3 * width) / 4 - 170} y={-360} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
+                      <Rect x={(3 * width) / 4 - 210} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect x={(3 * width) / 4 + 175} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+
+                      {/* Chaise 2 (Bottom-Left) */}
+                      <Rect x={width / 4 - 190} y={height + 50} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
+                      <Rect x={width / 4 - 170} y={height + 280} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
+                      <Rect x={width / 4 - 210} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect x={width / 4 + 175} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
+
+                      {/* Chaise 3 (Bottom-Right) */}
+                      <Rect x={(3 * width) / 4 - 190} y={height + 50} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
+                      <Rect x={(3 * width) / 4 - 170} y={height + 280} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
+                      <Rect x={(3 * width) / 4 - 210} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect x={(3 * width) / 4 + 175} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
                     </Group>
                   )}
                 </Group>
               )}
 
-              {/* Fauteuil de bureau ergonomique vu du dessus */}
-              {!isMeeting && desk.chairPosition !== "NONE" && (
+              {!isMeeting && isBenchDouble && (
                 <Group listening={false}>
-                  {/* Assise */}
-                  <Rect
-                    x={width / 2 - 200}
-                    y={height + 50}
-                    width={400}
-                    height={350}
-                    fill="#1e293b"
-                    stroke="#475569"
-                    strokeWidth={12}
-                    cornerRadius={50}
-                  />
-                  {/* Dossier ergonomique courbé */}
-                  <Rect
-                    x={width / 2 - 180}
-                    y={height + 280}
-                    width={360}
-                    height={90}
-                    fill="#0f172a"
-                    stroke="#64748b"
-                    strokeWidth={10}
-                    cornerRadius={40}
-                  />
-                  {/* Accoudoirs */}
-                  <Rect
-                    x={width / 2 - 220}
-                    y={height + 110}
-                    width={40}
-                    height={180}
-                    fill="#334155"
-                    cornerRadius={15}
-                  />
-                  <Rect
-                    x={width / 2 + 180}
-                    y={height + 110}
-                    width={40}
-                    height={180}
-                    fill="#334155"
-                    cornerRadius={15}
-                  />
+                  {/* Écran & Clavier Place 0 (Haut) */}
+                  <Rect x={width / 2 - 210} y={height / 4 + 110} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={width / 2 - 45} y={height / 4 + 85} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 2 - 160} y={height / 4 - 130} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+
+                  {/* Écran & Clavier Place 1 (Bas) */}
+                  <Rect x={width / 2 - 210} y={(3 * height) / 4 - 150} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
+                  <Rect x={width / 2 - 45} y={(3 * height) / 4 - 175} width={90} height={22} fill="#475569" cornerRadius={5} />
+                  <Rect x={width / 2 - 160} y={(3 * height) / 4 + 65} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+
+                  {/* 2 Chaises (1 en haut tournée vers le bas, 1 en bas tournée vers le haut) */}
+                  {desk.chairPosition !== "NONE" && (
+                    <Group listening={false}>
+                      {/* Chaise 0 (Top) */}
+                      <Rect x={width / 2 - 190} y={-380} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
+                      <Rect x={width / 2 - 170} y={-360} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
+                      <Rect x={width / 2 - 210} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect x={width / 2 + 175} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+
+                      {/* Chaise 1 (Bottom) */}
+                      <Rect x={width / 2 - 190} y={height + 50} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
+                      <Rect x={width / 2 - 170} y={height + 280} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
+                      <Rect x={width / 2 - 210} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect x={width / 2 + 175} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
+                    </Group>
+                  )}
                 </Group>
               )}
 
-              {/* Cartouche d'identification épuré et toujours horizontal (ex: "Bureau 408" + Occupant) */}
-              {(() => {
-                const rotDeg = desk.rotationDeg ?? 0;
-                const isRotatedVertical = rotDeg % 180 !== 0;
-                const badgeWidth = isRotatedVertical
-                  ? Math.max(480, height - 90)
-                  : Math.max(540, width - 120);
-                const badgeHeight = 200;
+              {!isMeeting && !isBenchDouble && !isBenchQuad && (
+                <Group listening={false}>
+                  {/* Écran Principal Solo */}
+                  <Rect x={width / 2 - 220} y={90} width={440} height={40} fill="#0284c7" stroke="#38bdf8" strokeWidth={8} cornerRadius={6} />
+                  <Rect x={width / 2 - 50} y={65} width={100} height={25} fill="#475569" cornerRadius={5} />
+                  {/* Clavier Solo */}
+                  <Rect x={width / 2 - 180} y={180} width={360} height={110} fill="#1e293b" stroke="#334155" strokeWidth={8} cornerRadius={8} />
 
-                // Formate un intitulé court : "Bureau {N}"
-                const matchNum = desk.name.match(/\d+/);
-                const shortTitle = matchNum ? `Bureau ${matchNum[0]}` : desk.name.replace(/^Poste\s+/i, "Bureau ");
+                  {/* Fauteuil Solo Ergonomique */}
+                  {desk.chairPosition !== "NONE" && (
+                    <Group listening={false}>
+                      <Rect x={width / 2 - 200} y={height + 50} width={400} height={350} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={50} />
+                      <Rect x={width / 2 - 180} y={height + 280} width={360} height={90} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={40} />
+                      <Rect x={width / 2 - 220} y={height + 110} width={40} height={180} fill="#334155" cornerRadius={15} />
+                      <Rect x={width / 2 + 180} y={height + 110} width={40} height={180} fill="#334155" cornerRadius={15} />
+                    </Group>
+                  )}
+                </Group>
+              )}
 
-                return (
-                  <Group
-                    x={width / 2}
-                    y={height / 2 + (isBenchDouble ? 0 : 50)}
-                    rotation={-rotDeg}
-                    listening={false}
-                  >
-                    {/* Fond cartouche lisible et contrasté */}
-                    <Rect
-                      x={-badgeWidth / 2}
-                      y={-badgeHeight / 2}
-                      width={badgeWidth}
-                      height={badgeHeight}
-                      fill="rgba(15, 23, 42, 0.90)"
-                      stroke={isSelected ? "#60a5fa" : "#334155"}
-                      strokeWidth={8}
-                      cornerRadius={16}
-                      listening={false}
-                    />
-
-                    {/* Ligne 1 : "Bureau {N}" */}
-                    <Text
-                      x={-badgeWidth / 2 + 15}
-                      y={-badgeHeight / 2 + 25}
-                      width={badgeWidth - 30}
-                      text={shortTitle}
-                      fontSize={95}
-                      fontFamily="sans-serif"
-                      fontStyle="bold"
-                      fill="#f8fafc"
-                      align="center"
-                      listening={false}
-                    />
-
-                    {/* Ligne 2 : Personne dessus */}
-                    <Text
-                      x={-badgeWidth / 2 + 15}
-                      y={-badgeHeight / 2 + 115}
-                      width={badgeWidth - 30}
-                      text={
-                        desk.assignedPerson
-                          ? `👤 ${desk.assignedPerson}`
-                          : "👤 Poste vacant / Flex"
-                      }
-                      fontSize={80}
-                      fontFamily="sans-serif"
-                      fontStyle={desk.assignedPerson ? "bold" : "normal"}
-                      fill={desk.assignedPerson ? "#34d399" : "#94a3b8"}
-                      align="center"
-                      listening={false}
-                    />
+              {/* Cartouches d'identification épurés et TOUJOURS horizontaux (rotation={-rotDeg}) */}
+              {isBenchQuad ? (
+                // ÎLOT 4 POSTES : 4 Badges Distincts + Pill Centrale
+                <Group listening={false}>
+                  {/* Badge Central Îlot */}
+                  <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
+                    <Rect x={-260} y={-50} width={520} height={100} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={18} />
+                    <Text x={-250} y={-28} width={500} text={`${shortTitle} • Îlot 4P`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" />
                   </Group>
-                );
-              })()}
+
+                  {/* 4 Badges d'occupants dans les 4 quadrants */}
+                  {[
+                    { idx: 0, cx: width / 4, cy: height / 4 - 30 },
+                    { idx: 1, cx: (3 * width) / 4, cy: height / 4 - 30 },
+                    { idx: 2, cx: width / 4, cy: (3 * height) / 4 + 30 },
+                    { idx: 3, cx: (3 * width) / 4, cy: (3 * height) / 4 + 30 },
+                  ].map(({ idx, cx, cy }) => {
+                    const seat = getSeat(idx);
+                    const isOccupied = Boolean(seat?.fullName);
+                    const bW = 460;
+                    const bH = 135;
+                    return (
+                      <Group key={`quad-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
+                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.94)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={6} cornerRadius={14} />
+                        <Text x={-bW / 2 + 10} y={-bH / 2 + 16} width={bW - 20} text={`P${idx + 1} : ${seat?.fullName ? seat.fullName : "Libre / Flex"}`} fontSize={58} fontFamily="sans-serif" fontStyle="bold" fill={isOccupied ? "#f8fafc" : "#94a3b8"} align="center" />
+                        <Text x={-bW / 2 + 10} y={-bH / 2 + 76} width={bW - 20} text={seat?.department ?? "Place disponible"} fontSize={46} fontFamily="sans-serif" fill={isOccupied ? "#38bdf8" : "#64748b"} align="center" />
+                      </Group>
+                    );
+                  })}
+                </Group>
+              ) : isBenchDouble ? (
+                // BENCH DOUBLE 2 POSTES : 2 Badges Distincts + Pill Centrale
+                <Group listening={false}>
+                  {/* Badge Central Bench */}
+                  <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
+                    <Rect x={-240} y={-45} width={480} height={90} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={16} />
+                    <Text x={-230} y={-26} width={460} text={`${shortTitle} • Bench 2P`} fontSize={56} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" />
+                  </Group>
+
+                  {/* 2 Badges d'occupants (Place 1 Nord, Place 2 Sud) */}
+                  {[
+                    { idx: 0, cx: width / 2, cy: height / 4 - 30 },
+                    { idx: 1, cx: width / 2, cy: (3 * height) / 4 + 30 },
+                  ].map(({ idx, cx, cy }) => {
+                    const seat = getSeat(idx);
+                    const isOccupied = Boolean(seat?.fullName);
+                    const bW = 500;
+                    const bH = 140;
+                    return (
+                      <Group key={`double-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
+                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.94)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={6} cornerRadius={14} />
+                        <Text x={-bW / 2 + 10} y={-bH / 2 + 18} width={bW - 20} text={`P${idx + 1} : ${seat?.fullName ? seat.fullName : "Libre / Flex"}`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill={isOccupied ? "#f8fafc" : "#94a3b8"} align="center" />
+                        <Text x={-bW / 2 + 10} y={-bH / 2 + 80} width={bW - 20} text={seat?.department ?? "Place disponible"} fontSize={48} fontFamily="sans-serif" fill={isOccupied ? "#38bdf8" : "#64748b"} align="center" />
+                      </Group>
+                    );
+                  })}
+                </Group>
+              ) : (
+                // BUREAU SOLO OU TABLE DE RÉUNION
+                (() => {
+                  const isRotatedVertical = rotDeg % 180 !== 0;
+                  const badgeWidth = isRotatedVertical
+                    ? Math.max(480, height - 90)
+                    : Math.max(540, width - 120);
+                  const badgeHeight = 200;
+
+                  return (
+                    <Group
+                      x={width / 2}
+                      y={height / 2 + 50}
+                      rotation={-rotDeg}
+                      listening={false}
+                    >
+                      <Rect
+                        x={-badgeWidth / 2}
+                        y={-badgeHeight / 2}
+                        width={badgeWidth}
+                        height={badgeHeight}
+                        fill="rgba(15, 23, 42, 0.92)"
+                        stroke={isSelected ? "#60a5fa" : "#334155"}
+                        strokeWidth={8}
+                        cornerRadius={16}
+                        listening={false}
+                      />
+                      <Text
+                        x={-badgeWidth / 2 + 15}
+                        y={-badgeHeight / 2 + 25}
+                        width={badgeWidth - 30}
+                        text={shortTitle}
+                        fontSize={95}
+                        fontFamily="sans-serif"
+                        fontStyle="bold"
+                        fill="#f8fafc"
+                        align="center"
+                        listening={false}
+                      />
+                      <Text
+                        x={-badgeWidth / 2 + 15}
+                        y={-badgeHeight / 2 + 115}
+                        width={badgeWidth - 30}
+                        text={
+                          desk.assignedPerson
+                            ? `👤 ${desk.assignedPerson}`
+                            : "👤 Poste vacant / Flex"
+                        }
+                        fontSize={80}
+                        fontFamily="sans-serif"
+                        fontStyle={desk.assignedPerson ? "bold" : "normal"}
+                        fill={desk.assignedPerson ? "#34d399" : "#94a3b8"}
+                        align="center"
+                        listening={false}
+                      />
+                    </Group>
+                  );
+                })()
+              )}
             </Group>
           );
         })}
