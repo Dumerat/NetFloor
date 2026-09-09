@@ -48,8 +48,15 @@ const DynamicFloorCanvas = dynamic(
   }
 );
 
+function CameraScaleIndicator() {
+  const scale = useCameraStore((s) => s.viewport.scale);
+  return <span className="text-blue-400 font-semibold font-mono">{(1000 * scale).toFixed(1)} px/m</span>;
+}
+
 export default function NetFloorApp() {
-  const { viewport, zoomIn, zoomOut, fitFloor } = useCameraStore();
+  const zoomIn = useCameraStore((s) => s.zoomIn);
+  const zoomOut = useCameraStore((s) => s.zoomOut);
+  const fitFloor = useCameraStore((s) => s.fitFloor);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("outlet-408-a");
   const [traceResult, setTraceResult] = useState<CircuitTraceResult | null>(null);
   const [isTracing, setIsTracing] = useState(false);
@@ -1209,8 +1216,6 @@ export default function NetFloorApp() {
     URL.revokeObjectURL(url);
   };
 
-  const scaleMetersText = `${(1000 * viewport.scale).toFixed(1)} px/m`;
-
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 font-sans overflow-hidden">
       {/* 1. Header Toolbar Multi-Métiers */}
@@ -1270,7 +1275,7 @@ export default function NetFloorApp() {
         {/* Camera & Ingestion Controls */}
         <div className="flex items-center gap-2.5 text-xs font-mono">
           <div className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1 flex items-center gap-2 text-slate-400">
-            <span>Échelle : <span className="text-blue-400 font-semibold">{scaleMetersText}</span></span>
+            <span>Échelle : <CameraScaleIndicator /></span>
           </div>
 
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5">

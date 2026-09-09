@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState, memo, type FC } from "react";
 import { Line, Group, Circle, Rect, Text } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import {
@@ -45,7 +45,7 @@ interface CableLayerProps {
   onRemoveWaypoint?: ((cableId: string) => void) | undefined;
 }
 
-export const CableLayer: FC<CableLayerProps> = ({
+const CableLayerComponent: FC<CableLayerProps> = ({
   cables,
   activeCircuitCableIds = new Set(),
   activeViewMode = "ALL",
@@ -385,3 +385,5 @@ export const CableLayer: FC<CableLayerProps> = ({
     </Group>
   );
 };
+
+export const CableLayer = memo(CableLayerComponent);

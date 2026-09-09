@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, type FC } from "react";
+import { useState, useMemo, memo, type FC } from "react";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import {
   NodeDisplay,
@@ -232,7 +232,7 @@ export interface CircuitInspectorProps {
   onResetVlanStyles?: (() => void) | undefined;
 }
 
-export const CircuitInspector: FC<CircuitInspectorProps> = ({
+const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   traceResult,
   isLoading,
   selectedNode,
@@ -252,6 +252,8 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
   onUpdateVlanStyle,
   onResetVlanStyles,
 }) => {
+  // Mode de travail : Consultation (Rapide / Lecture seule) vs Modification (Formulaires d'édition)
+  const [inspectorMode, setInspectorMode] = useState<"VIEW" | "EDIT">("VIEW");
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false);
   const [pickingSeatIndex, setPickingSeatIndex] = useState<number | null>(null);
@@ -561,6 +563,49 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
     );
   }, [userSearchQuery]);
 
+  // Sélecteur de mode : Consultation (Lecture seule / Télémétrie rapide) vs Modification (Édition complète)
+  const renderModeBanner = () => (
+    <div className="flex items-center justify-between p-2 mb-2.5 bg-slate-900/90 border border-slate-800 rounded-lg flex-shrink-0">
+      <div className="flex items-center gap-2">
+        <div
+          className={`w-2 h-2 rounded-full ${
+            inspectorMode === "VIEW" ? "bg-emerald-400" : "bg-sky-400"
+          } animate-pulse`}
+        />
+        <span className="text-[11px] font-semibold text-slate-200">
+          {inspectorMode === "VIEW" ? "Mode Consultation" : "Mode Modification"}
+        </span>
+        <span className="text-[10px] text-slate-400 hidden sm:inline">
+          {inspectorMode === "VIEW" ? "(Lecture seule)" : "(Édition des paramètres)"}
+        </span>
+      </div>
+      <div className="flex items-center bg-slate-950 p-0.5 rounded-md border border-slate-800">
+        <button
+          onClick={() => setInspectorMode("VIEW")}
+          className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors flex items-center gap-1 ${
+            inspectorMode === "VIEW"
+              ? "bg-slate-800 text-emerald-300 font-bold shadow-sm border border-emerald-500/30"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+          title="Mode consultation rapide (lecture seule et télémétrie)"
+        >
+          👁️ Consultation
+        </button>
+        <button
+          onClick={() => setInspectorMode("EDIT")}
+          className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors flex items-center gap-1 ${
+            inspectorMode === "EDIT"
+              ? "bg-sky-600 text-white font-bold shadow-sm"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+          title="Mode modification (édition des paramètres, câblage, VLAN, ports)"
+        >
+          ✏️ Modification
+        </button>
+      </div>
+    </div>
+  );
+
   // Aucun équipement sélectionné
   if (!selectedNode) {
     return (
@@ -609,7 +654,153 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
 
       return (
         <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
-          {/* 1. En-tête Colonnette Multi-Ports */}
+          {renderModeBanner()}
+
+          {inspectorMode === "VIEW" ? (
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {/* Carte d'identité et statut rapide */}
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5 truncate">
+                    <span className="text-base">{selectedNode.customEmote || "🔲"}</span>
+                    <span className="truncate">{selectedNode.name}</span>
+                  </span>
+                  <button
+                    onClick={() => setInspectorMode("EDIT")}
+                    className="px-2.5 py-1 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 rounded text-[10px] font-semibold transition flex items-center gap-1 flex-shrink-0"
+                  >
+                    ✏️ Modifier
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 border-t border-slate-800">
+                  <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                    <div className="text-slate-400 text-[10px]">Châssis :</div>
+                    <div className="text-emerald-400 font-bold mt-0.5 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      {ports.length} ports Cat6A
+                    </div>
+                  </div>
+                  <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                    <div className="text-slate-400 text-[10px]">Emplacement :</div>
+                    <div className="text-sky-300 font-bold mt-0.5 truncate">
+                      {isLinked && linkedDesk ? `Bureau ${linkedDesk.name}` : "Prise Fixe"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Consultation des ports RJ45 du slot */}
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Network className="w-3.5 h-3.5 text-sky-400" />
+                    Ports RJ45 de la colonnette ({ports.length})
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Sélection rapide
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {ports.map((p, idx) => {
+                    const isPSelected = safeStackedPortIdx === idx;
+                    const pVlan = p.vlanId ?? 20;
+                    const vColor = vlanStyles?.[pVlan]?.color ?? DEFAULT_VLAN_STYLES[pVlan]?.color ?? "#38bdf8";
+                    const isOnline = p.pingStatus === "ONLINE";
+
+                    return (
+                      <div
+                        key={`view-port-${idx}`}
+                        onClick={() => setActiveStackedPortIdx(idx)}
+                        className={`p-2 rounded border cursor-pointer transition ${
+                          isPSelected
+                            ? "bg-slate-800/90 border-sky-500 ring-1 ring-sky-500/50 shadow-sm"
+                            : "bg-slate-950/70 border-slate-800 hover:bg-slate-850"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: isOnline ? "#22c55e" : "#ef4444" }}
+                            />
+                            <span className="font-mono font-bold text-slate-100 text-[11px]">{p.portLabel}</span>
+                            <span
+                              className="text-[9px] font-mono px-1.5 py-0.2 rounded border font-semibold"
+                              style={{
+                                borderColor: `${vColor}60`,
+                                backgroundColor: `${vColor}20`,
+                                color: vColor,
+                              }}
+                            >
+                              VLAN {pVlan}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {p.outletRole}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                          <span>{p.ipAddress || "10.42.20.x"}</span>
+                          <span>{p.assignedPerson ? `👤 ${p.assignedPerson}` : isOnline ? "🟢 3ms" : "🔴 Déconnecté"}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Télémétrie du port actif */}
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-sky-400" />
+                    Télémétrie : {curPort.portLabel}
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono">
+                    {curPort.pingStatus === "ONLINE" ? "En ligne (3ms)" : "Déconnecté"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                  <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                    <span className="text-slate-400">IP : </span>
+                    <span className="text-slate-200">{curPort.ipAddress || "Non assignée"}</span>
+                  </div>
+                  <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                    <span className="text-slate-400">MAC : </span>
+                    <span className="text-slate-200">{curPort.macAddress || "Non assignée"}</span>
+                  </div>
+                  <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                    <span className="text-slate-400">VLAN : </span>
+                    <span className="text-sky-300 font-bold">VLAN {curPort.vlanId ?? 20}</span>
+                  </div>
+                  <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                    <span className="text-slate-400">Rôle : </span>
+                    <span className="text-slate-200">{curPort.outletRole}</span>
+                  </div>
+                </div>
+                {curPort.assignedPerson && (
+                  <div className="p-2 bg-slate-950 rounded border border-slate-850 text-[10px] flex items-center justify-between">
+                    <span className="text-slate-400">Affecté à :</span>
+                    <span className="text-emerald-300 font-semibold font-mono">👤 {curPort.assignedPerson}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Bouton d'action pour passer en mode édition */}
+              <div className="pt-1">
+                <button
+                  onClick={() => setInspectorMode("EDIT")}
+                  className="w-full py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold shadow transition flex items-center justify-center gap-1.5"
+                >
+                  ✏️ Modifier les paramètres et ports
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* 1. En-tête Colonnette Multi-Ports */}
           <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
@@ -1002,12 +1193,128 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
             )}
           </div>
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
 
     return (
       <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
-        {/* 1. En-tête de la prise / boîte de sol */}
+        {renderModeBanner()}
+
+        {inspectorMode === "VIEW" ? (
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {/* Carte d'identité et statut */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5 truncate">
+                  <span className="text-base">{selectedNode.customEmote || "🔌"}</span>
+                  <span className="truncate">{selectedNode.name}</span>
+                </span>
+                <button
+                  onClick={() => setInspectorMode("EDIT")}
+                  className="px-2.5 py-1 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 rounded text-[10px] font-semibold transition flex items-center gap-1 flex-shrink-0"
+                >
+                  ✏️ Modifier
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 border-t border-slate-800">
+                <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                  <div className="text-slate-400 text-[10px]">Statut liaison :</div>
+                  <div className="text-emerald-400 font-bold mt-0.5 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Connecté ({selectedNode.pingLatencyMs ?? 2}ms)
+                  </div>
+                </div>
+                <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                  <div className="text-slate-400 text-[10px]">Emplacement :</div>
+                  <div className="text-sky-300 font-bold mt-0.5 truncate">
+                    {isLinked && linkedDesk ? `Bureau ${linkedDesk.name}` : "Prise Fixe"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Spécifications réseau & VLAN */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Network className="w-3.5 h-3.5 text-sky-400" />
+                  Spécifications Réseau
+                </span>
+                {selectedNode.vlanId && (
+                  <span
+                    className="text-[9px] font-mono px-2 py-0.5 rounded border font-bold"
+                    style={{
+                      borderColor: `${vlanStyles?.[selectedNode.vlanId]?.color ?? "#38bdf8"}60`,
+                      backgroundColor: `${vlanStyles?.[selectedNode.vlanId]?.color ?? "#38bdf8"}20`,
+                      color: vlanStyles?.[selectedNode.vlanId]?.color ?? "#38bdf8",
+                    }}
+                  >
+                    VLAN {selectedNode.vlanId}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                  <span className="text-slate-400">IP : </span>
+                  <span className="text-slate-200">{selectedNode.ipAddress || "Non assignée"}</span>
+                </div>
+                <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                  <span className="text-slate-400">MAC : </span>
+                  <span className="text-slate-200">{selectedNode.macAddress || "Non assignée"}</span>
+                </div>
+                <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                  <span className="text-slate-400">Rôle : </span>
+                  <span className="text-slate-200">{selectedNode.outletRole || "DATA"}</span>
+                </div>
+                <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                  <span className="text-slate-400">PoE : </span>
+                  <span className="text-amber-400 font-bold">{selectedNode.poeMode || "NONE"}</span>
+                </div>
+              </div>
+
+              {selectedNode.assignedPerson && (
+                <div className="p-2 bg-slate-950 rounded border border-slate-850 text-[10px] flex items-center justify-between">
+                  <span className="text-slate-400">Affecté à :</span>
+                  <span className="text-emerald-300 font-semibold font-mono">👤 {selectedNode.assignedPerson}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Traçage CTE vers Switch & Rack */}
+            {traceResult && (
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1.5 font-mono text-[10px]">
+                <div className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5 mb-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  Liaison CTE vers le Réseau
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-400">Longueur estimée :</span>
+                  <span className="text-sky-300 font-bold">{traceResult.totalCableLengthMeters} m</span>
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-400">Équipement d'accès :</span>
+                  <span className="text-slate-100">{traceResult.terminalNode?.name ?? "Switch 19\""}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Bouton d'action pour passer en mode édition */}
+            <div className="pt-1">
+              <button
+                onClick={() => setInspectorMode("EDIT")}
+                className="w-full py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold shadow transition flex items-center justify-center gap-1.5"
+              >
+                ✏️ Modifier les propriétés de la prise
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {/* 1. En-tête de la prise / boîte de sol */}
         <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
@@ -1570,8 +1877,10 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
           )}
         </div>
       </div>
-    );
-  }
+    )}
+  </div>
+);
+}
 
   // Cas 2 : Baie Informatique 19" / Équipement Réseau DSI
   if (
@@ -1613,7 +1922,123 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
 
     return (
       <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
-        {/* En-tête Baie */}
+        {renderModeBanner()}
+
+        {inspectorMode === "VIEW" ? (
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {/* Carte de supervision Baie */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5 truncate">
+                  <Server className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="truncate">{selectedNode.name}</span>
+                </span>
+                <button
+                  onClick={() => setInspectorMode("EDIT")}
+                  className="px-2.5 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded text-[10px] font-semibold transition flex items-center gap-1 flex-shrink-0"
+                >
+                  ✏️ Modifier
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 border-t border-slate-800">
+                <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                  <div className="text-slate-400 text-[10px]">Châssis 19" :</div>
+                  <div className="text-purple-300 font-bold mt-0.5">
+                    Baie standard 42U
+                  </div>
+                </div>
+                <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                  <div className="text-slate-400 text-[10px]">Liaisons brassées :</div>
+                  <div className="text-emerald-400 font-bold mt-0.5 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    {rackPatches.length} cordons actifs
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Aperçu des cordons de brassage internes */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-purple-400" />
+                  Cordons de Brassage Internes ({filteredPatches.length})
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Supervision
+                </span>
+              </div>
+
+              {/* Filtre VLAN rapide */}
+              <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px] font-mono">
+                {["ALL", "10", "20", "30", "40", "50", "99", "100"].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setRackVlanFilter(v)}
+                    className={`px-2 py-0.5 rounded border transition ${
+                      rackVlanFilter === v
+                        ? "bg-purple-600/30 text-purple-300 border-purple-500 font-bold shadow-sm"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    {v === "ALL" ? "Tous" : `VLAN ${v}`}
+                  </button>
+                ))}
+              </div>
+
+              {/* Liste des patchs */}
+              <div className="space-y-1.5">
+                {filteredPatches.map((patch) => {
+                  const vColor =
+                    vlanStyles?.[patch.vlanId]?.color ??
+                    DEFAULT_VLAN_STYLES[patch.vlanId]?.color ??
+                    "#c084fc";
+
+                  return (
+                    <div
+                      key={patch.id}
+                      className="p-2 rounded bg-slate-950/70 border border-slate-850 space-y-1"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-200 text-[11px]">
+                          {patch.serviceName}
+                        </span>
+                        <span
+                          className="text-[9px] font-mono px-1.5 py-0.2 rounded border font-bold"
+                          style={{
+                            borderColor: `${vColor}60`,
+                            backgroundColor: `${vColor}20`,
+                            color: vColor,
+                          }}
+                        >
+                          VLAN {patch.vlanId}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                        <span>{patch.sourceDevice} [{patch.sourcePort}]</span>
+                        <ArrowRight className="w-3 h-3 text-slate-600" />
+                        <span>{patch.targetDevice} [{patch.targetPort}]</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bouton d'action pour passer en mode édition */}
+            <div className="pt-1">
+              <button
+                onClick={() => setInspectorMode("EDIT")}
+                className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold shadow transition flex items-center justify-center gap-1.5"
+              >
+                ✏️ Gérer le brassage et les équipements
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {/* En-tête Baie */}
         <div className="border-b border-slate-800 pb-3 mb-2 flex-shrink-0">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
@@ -2196,17 +2621,193 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
           </div>
         </div>
       </div>
-    );
-  }
+    )}
+  </div>
+);
+}
 
   // Cas 3 : Bureau / Mobilier (RH, Dimensions réelles & fausses mesures)
   const attachedOutlets = allNodes.filter((n) => n.attachedToDeskId === selectedNode.id);
   const currentWidth = selectedNode.widthMm ?? 1600;
   const currentHeight = selectedNode.heightMm ?? 800;
 
-  return (
-    <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
-      {/* En-tête Bureau */}
+    return (
+      <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
+        {renderModeBanner()}
+
+        {inspectorMode === "VIEW" ? (
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {/* Carte d'identité du bureau */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5 truncate">
+                  <Monitor className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="truncate">{selectedNode.name}</span>
+                </span>
+                <button
+                  onClick={() => setInspectorMode("EDIT")}
+                  className="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-semibold transition flex items-center gap-1 flex-shrink-0"
+                >
+                  ✏️ Modifier
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 border-t border-slate-800">
+                <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                  <div className="text-slate-400 text-[10px]">Type de mobilier :</div>
+                  <div className="text-emerald-400 font-bold mt-0.5">
+                    {selectedNode.subType === "BENCH_QUAD"
+                      ? "Îlot 4 Postes (Quad)"
+                      : selectedNode.subType === "BENCH_DOUBLE"
+                      ? "Bench 2 Postes (Double)"
+                      : selectedNode.subType === "MEETING_TABLE"
+                      ? "Table de Réunion"
+                      : selectedNode.subType === "DESK_EXECUTIVE"
+                      ? "Bureau Direction"
+                      : selectedNode.subType === "DESK_COMPACT"
+                      ? "Poste Compact"
+                      : "Bureau Solo Standard"}
+                  </div>
+                </div>
+                <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                  <div className="text-slate-400 text-[10px]">Dimensions :</div>
+                  <div className="text-slate-200 font-bold mt-0.5">
+                    {(currentWidth / 1000).toFixed(2)} × {(currentHeight / 1000).toFixed(2)} m
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Places RH et Collaborateurs assignés */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-blue-400" />
+                  Places & Occupants ({occupiedSeatsCount}/{deskSeatCount} occupés)
+                </span>
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                    occupiedSeatsCount === deskSeatCount
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold"
+                      : occupiedSeatsCount > 0
+                      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                      : "bg-slate-800 text-slate-400 border-slate-700"
+                  }`}
+                >
+                  {occupiedSeatsCount === deskSeatCount
+                    ? "COMPLET"
+                    : occupiedSeatsCount > 0
+                    ? "PARTIEL"
+                    : "DISPONIBLE"}
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                {currentSeats.map((seat, idx) => {
+                  const isOccupied = Boolean(seat.fullName);
+                  const assignedUser = seat.userId
+                    ? ENTERPRISE_DIRECTORY.find((u) => u.id === seat.userId)
+                    : seat.fullName
+                    ? ENTERPRISE_DIRECTORY.find(
+                        (u) => u.fullName.toLowerCase() === seat.fullName?.toLowerCase()
+                      )
+                    : null;
+
+                  return (
+                    <div
+                      key={`seat-view-${idx}`}
+                      className="p-2 rounded bg-slate-950/70 border border-slate-850 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-300 flex items-center justify-center text-[10px] font-mono font-bold">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <div className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                            {seat.fullName ? `👤 ${seat.fullName}` : "Poste Libre / Flex"}
+                          </div>
+                          <div className="text-[9px] text-slate-400 font-mono">
+                            {assignedUser?.jobTitle ?? seat.department ?? seat.seatLabel ?? `Place ${idx + 1}`}
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[8px] font-mono px-1.5 py-0.5 rounded border ${
+                          isOccupied
+                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold"
+                            : "bg-slate-800 text-slate-400 border-slate-700"
+                        }`}
+                      >
+                        {isOccupied ? "OCCUPÉ" : "LIBRE"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Prises et équipements connectés à ce bureau */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-sky-400" />
+                  Prises Rattachées ({attachedOutlets.length})
+                </span>
+              </div>
+
+              {attachedOutlets.length > 0 ? (
+                <div className="space-y-1">
+                  {attachedOutlets.map((outlet) => {
+                    const isStacked = Boolean(outlet.stackedPorts && outlet.stackedPorts.length > 0);
+                    const vColor =
+                      vlanStyles?.[outlet.vlanId ?? 20]?.color ??
+                      DEFAULT_VLAN_STYLES[outlet.vlanId ?? 20]?.color ??
+                      "#38bdf8";
+
+                    return (
+                      <div
+                        key={outlet.id}
+                        className="p-1.5 rounded bg-slate-950/70 border border-slate-850 flex items-center justify-between text-[10px]"
+                      >
+                        <span className="font-medium text-slate-200 flex items-center gap-1.5">
+                          <span>{outlet.customEmote || (isStacked ? "🔲" : "🔌")}</span>
+                          <span>{outlet.name}</span>
+                        </span>
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <span
+                            className="text-[8px] px-1 py-0.2 rounded border font-semibold"
+                            style={{
+                              borderColor: `${vColor}60`,
+                              backgroundColor: `${vColor}20`,
+                              color: vColor,
+                            }}
+                          >
+                            VLAN {outlet.vlanId ?? (outlet.outletRole === "VOIP" ? 30 : 20)}
+                          </span>
+                          <span className="text-slate-400">{outlet.outletRole || "DATA"}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-[10px] text-slate-400">Aucune prise rattachée à ce mobilier.</p>
+              )}
+            </div>
+
+            {/* Bouton d'action pour passer en mode édition */}
+            <div className="pt-1">
+              <button
+                onClick={() => setInspectorMode("EDIT")}
+                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition flex items-center justify-center gap-1.5"
+              >
+                ✏️ Modifier le mobilier et les collaborateurs
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {/* En-tête Bureau */}
       <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-slate-100 flex items-center gap-1.5">
@@ -2975,5 +3576,9 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
         </div>
       </div>
     </div>
-  );
+  )}
+</div>
+);
 };
+
+export const CircuitInspector = memo(CircuitInspectorComponent);

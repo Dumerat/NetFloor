@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FC } from "react";
+import { useState, useEffect, memo, type FC } from "react";
 import {
   Monitor,
   Users,
@@ -269,7 +269,7 @@ interface EquipmentPaletteProps {
   vlanStyles?: Record<number, VlanStyle> | undefined;
 }
 
-export const EquipmentPalette: FC<EquipmentPaletteProps> = ({
+const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   isOpen,
   onToggle,
   onAddItem,
@@ -771,3 +771,5 @@ export const EquipmentPalette: FC<EquipmentPaletteProps> = ({
     </aside>
   );
 };
+
+export const EquipmentPalette = memo(EquipmentPaletteComponent);

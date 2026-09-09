@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FC } from "react";
+import { useRef, useState, memo, type FC } from "react";
 import { Group, Rect, Text, Line, Circle } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
@@ -147,7 +147,7 @@ interface EquipmentLayerProps {
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
 }
 
-export const EquipmentLayer: FC<EquipmentLayerProps> = ({
+const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   racks,
   nodes,
   selectedOutletId,
@@ -849,11 +849,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 </Group>
               )}
 
-              {/* Cartouches d'identification épurés et TOUJOURS horizontaux (rotation={-rotDeg}) */}
+              {/* Cartouches d'identification épurés et TOUJOURS horizontaux (rotation={-rotDeg}) - VISIBLES EN PERMANENCE */}
               {(() => {
-                const shouldShowDeskLabel = showAllLabels || isSelected || hoveredNodeId === desk.id;
-                if (!shouldShowDeskLabel) return null;
-
                 if (isBenchQuad) {
                   // ÎLOT 4 POSTES : 4 Grands Badges Distincts + Pill Centrale
                   return (
@@ -1141,9 +1138,9 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 
                 {/* Libellé Boîte de Sol (au survol / sélection / global) */}
                 {shouldShowOutletLabel && (() => {
-                  const badgeHeight = 60;
-                  const textFontSize = 32;
-                  const badgeWidth = 420;
+                  const badgeHeight = 88;
+                  const textFontSize = 50;
+                  const badgeWidth = 520;
                   const labelPos = outlet.labelPosition || "RIGHT";
                   const { x: groupX, y: groupY } = getLabelCoordinates(
                     labelPos,
@@ -1161,15 +1158,17 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                         y={0}
                         width={badgeWidth}
                         height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.95)"
+                        fill="rgba(15, 23, 42, 0.96)"
                         stroke={isSelected ? "#ffffff" : isLinked ? "#38bdf8" : "#475569"}
-                        strokeWidth={4}
-                        cornerRadius={12}
+                        strokeWidth={5}
+                        cornerRadius={14}
+                        shadowColor={isSelected ? "#ffffff" : "#38bdf8"}
+                        shadowBlur={15}
                       />
                       <Text
-                        x={15}
+                        x={18}
                         y={(badgeHeight - textFontSize) / 2}
-                        width={badgeWidth - 30}
+                        width={badgeWidth - 36}
                         text="📦 Boîte de Sol (4x RJ45)"
                         fontSize={textFontSize}
                         fontFamily="sans-serif"
@@ -1226,9 +1225,9 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 
                 {/* Libellé Wi-Fi (au survol / sélection / global) */}
                 {shouldShowOutletLabel && (() => {
-                  const badgeHeight = 60;
-                  const textFontSize = 32;
-                  const badgeWidth = 380;
+                  const badgeHeight = 88;
+                  const textFontSize = 50;
+                  const badgeWidth = 480;
                   const labelPos = outlet.labelPosition || "RIGHT";
                   const { x: groupX, y: groupY } = getLabelCoordinates(
                     labelPos,
@@ -1246,15 +1245,17 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                         y={0}
                         width={badgeWidth}
                         height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.95)"
+                        fill="rgba(15, 23, 42, 0.96)"
                         stroke={isSelected ? "#ffffff" : vlan50Color}
-                        strokeWidth={4}
-                        cornerRadius={12}
+                        strokeWidth={5}
+                        cornerRadius={14}
+                        shadowColor={vlan50Color}
+                        shadowBlur={15}
                       />
                       <Text
-                        x={15}
+                        x={18}
                         y={(badgeHeight - textFontSize) / 2}
-                        width={badgeWidth - 30}
+                        width={badgeWidth - 36}
                         text="📡 Wi-Fi 6 • Plafonnier"
                         fontSize={textFontSize}
                         fontFamily="sans-serif"
@@ -1312,13 +1313,13 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 <Rect x={-160} y={-140} width={320} height={180} fill="#0f172a" stroke="#b45309" strokeWidth={10} cornerRadius={10} listening={false} />
                 <Rect x={-160} y={70} width={320} height={70} fill="#334155" cornerRadius={6} listening={false} />
                 {/* Voyant LED de statut vert ou rouge */}
-                <Circle x={140} y={-115} radius={12} fill={statusColor} listening={false} />
+                <Circle x={140} y={-115} radius={14} fill={statusColor} listening={false} />
 
                 {/* Libellé Copieur (au survol / sélection / global) */}
                 {shouldShowOutletLabel && (() => {
-                  const badgeHeight = 60;
-                  const textFontSize = 32;
-                  const badgeWidth = 340;
+                  const badgeHeight = 88;
+                  const textFontSize = 50;
+                  const badgeWidth = 440;
                   const labelPos = outlet.labelPosition || "RIGHT";
                   const { x: groupX, y: groupY } = getLabelCoordinates(
                     labelPos,
@@ -1336,15 +1337,17 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                         y={0}
                         width={badgeWidth}
                         height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.95)"
+                        fill="rgba(15, 23, 42, 0.96)"
                         stroke={isSelected ? "#ffffff" : "#d97706"}
-                        strokeWidth={4}
-                        cornerRadius={12}
+                        strokeWidth={5}
+                        cornerRadius={14}
+                        shadowColor={vlan40Color}
+                        shadowBlur={15}
                       />
                       <Text
-                        x={15}
+                        x={18}
                         y={(badgeHeight - textFontSize) / 2}
-                        width={badgeWidth - 30}
+                        width={badgeWidth - 36}
                         text="🖨️ Copieur RH"
                         fontSize={textFontSize}
                         fontFamily="sans-serif"
@@ -1496,10 +1499,13 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                       : "";
                   const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
                   const title = `${icon} Colonnette (${portsCount}P)${poeText}${vlanText} • ${outlet.name}`;
-                  const badgeHeight = 60;
-                  const textFontSize = 32;
-                  const badgeWidth = Math.min(680, Math.max(260, title.length * 20 + 40));
+                  const badgeHeight = 88;
+                  const textFontSize = 50;
+                  const badgeWidth = Math.min(950, Math.max(380, title.length * 28 + 60));
                   const labelPos = outlet.labelPosition || "RIGHT";
+                  const colonnetteVlan = outlet.vlanId ?? outlet.stackedPorts?.[0]?.vlanId ?? 20;
+                  const badgeVlanColor =
+                    vlanStyles?.[colonnetteVlan]?.color ?? DEFAULT_VLAN_STYLES[colonnetteVlan]?.color ?? "#38bdf8";
                   const { x: groupX, y: groupY } = getLabelCoordinates(
                     labelPos,
                     blockWidth,
@@ -1516,15 +1522,17 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                         y={0}
                         width={badgeWidth}
                         height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.95)"
-                        stroke={isSelected ? "#38bdf8" : "#475569"}
-                        strokeWidth={4}
-                        cornerRadius={12}
+                        fill="rgba(15, 23, 42, 0.96)"
+                        stroke={isSelected ? "#ffffff" : badgeVlanColor}
+                        strokeWidth={5}
+                        cornerRadius={14}
+                        shadowColor={badgeVlanColor}
+                        shadowBlur={15}
                       />
                       <Text
-                        x={15}
+                        x={18}
                         y={(badgeHeight - textFontSize) / 2}
-                        width={badgeWidth - 30}
+                        width={badgeWidth - 36}
                         text={title}
                         fontSize={textFontSize}
                         fontFamily="sans-serif"
@@ -1656,9 +1664,9 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   shortOutletText = `${roleIcon} ${cleanName}${poeText}${vlanText}`;
                 }
 
-                const badgeHeight = 60;
-                const textFontSize = 32;
-                const badgeWidth = Math.min(650, Math.max(220, shortOutletText.length * 20 + 40));
+                const badgeHeight = 88;
+                const textFontSize = 50;
+                const badgeWidth = Math.min(920, Math.max(360, shortOutletText.length * 30 + 60));
                 const labelPos = outlet.labelPosition || "RIGHT";
                 const { x: groupX, y: groupY } = getLabelCoordinates(
                   labelPos,
@@ -1676,15 +1684,17 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                       y={0}
                       width={badgeWidth}
                       height={badgeHeight}
-                      fill="rgba(15, 23, 42, 0.95)"
+                      fill="rgba(15, 23, 42, 0.96)"
                       stroke={isSelected ? "#ffffff" : isLinked ? vlanColor : "#475569"}
-                      strokeWidth={4}
-                      cornerRadius={12}
+                      strokeWidth={5}
+                      cornerRadius={14}
+                      shadowColor={isLinked ? vlanColor : "#0f172a"}
+                      shadowBlur={15}
                     />
                     <Text
-                      x={15}
+                      x={18}
                       y={(badgeHeight - textFontSize) / 2}
-                      width={badgeWidth - 30}
+                      width={badgeWidth - 36}
                       text={shortOutletText}
                       fontSize={textFontSize}
                       fontFamily="sans-serif"
@@ -1702,3 +1712,5 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
     </Group>
   );
 };
+
+export const EquipmentLayer = memo(EquipmentLayerComponent);
