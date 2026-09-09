@@ -213,3 +213,42 @@ export function snapToNodeAlignments(
     hasSnappedY: snapY !== null,
   };
 }
+
+/**
+ * Accrochage magnétique direct entre deux prises RJ45 (Docking côte-à-côte ou en ligne)
+ */
+export function snapToOutletDocking(
+  draggedPoint: Point2D,
+  otherOutletPoints: readonly { id: string; point: Point2D }[],
+  snapRadiusMm = 300,
+  spacingMm = 260
+): { snappedPoint: Point2D; dockedWithId: string | null } {
+  for (const other of otherOutletPoints) {
+    const dist = distanceBetween(draggedPoint, other.point);
+    if (dist < snapRadiusMm && dist > 40) {
+      const dx = draggedPoint.x - other.point.x;
+      const dy = draggedPoint.y - other.point.y;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // Côte à côte horizontal
+        return {
+          snappedPoint: {
+            x: other.point.x + (dx > 0 ? spacingMm : -spacingMm),
+            y: other.point.y,
+          },
+          dockedWithId: other.id,
+        };
+      } else {
+        // En ligne vertical
+        return {
+          snappedPoint: {
+            x: other.point.x,
+            y: other.point.y + (dy > 0 ? spacingMm : -spacingMm),
+          },
+          dockedWithId: other.id,
+        };
+      }
+    }
+  }
+  return { snappedPoint: draggedPoint, dockedWithId: null };
+}
+

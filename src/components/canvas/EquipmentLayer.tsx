@@ -59,6 +59,21 @@ export function getDefaultSeatLabels(subType?: NodeSubType): string[] {
   return ["Place Unique"];
 }
 
+export interface StackedPortItem {
+  portIndex: number; // 0, 1, 2, ... jusqu'à 7 (8 ports max)
+  portLabel: string; // ex: "RJ45-1", "Port 1"
+  outletRole: OutletRole; // "DATA", "VOIP", "PRINTER", "WIFI"
+  assignedPerson?: string | undefined;
+  assignedUserId?: string | undefined;
+  attachedSeatIndex?: number | undefined;
+  ipAddress?: string | undefined;
+  macAddress?: string | undefined;
+  pingStatus?: "ONLINE" | "OFFLINE" | "DEGRADED" | undefined;
+  pingLatencyMs?: number | undefined;
+  portId?: string | undefined;
+  vlanId?: number | undefined;
+}
+
 export interface NodeDisplay {
   id: string;
   type: "WALL_OUTLET" | "PATCH_PANEL" | "SWITCH" | "DESK";
@@ -83,6 +98,7 @@ export interface NodeDisplay {
   macAddress?: string | undefined;
   pingStatus?: "ONLINE" | "OFFLINE" | "DEGRADED" | undefined;
   pingLatencyMs?: number | undefined;
+  stackedPorts?: StackedPortItem[] | undefined;
 }
 
 interface EquipmentLayerProps {
@@ -1082,6 +1098,168 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                     fill={isSelected ? "#ffffff" : "#fbbf24"}
                   />
                 </Group>
+              </Group>
+            );
+          }
+
+          // Rendu Colonnette / Plastron Multi-Ports RJ45 (Stacké 2 à 8 ports)
+          if (outlet.stackedPorts && outlet.stackedPorts.length > 1) {
+            const portsCount = Math.min(8, outlet.stackedPorts.length);
+            const isTwoColumns = portsCount >= 5;
+            const blockWidth = isTwoColumns ? 520 : 340;
+            const rows = isTwoColumns ? Math.ceil(portsCount / 2) : portsCount;
+            const blockHeight = 100 + rows * 95;
+
+            return (
+              <Group
+                key={outlet.id}
+                x={outlet.xMm}
+                y={outlet.yMm}
+                draggable
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                onDragStart={handleDragStart}
+                onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
+                onDragEnd={(e) => handleDragEnd(outlet.id, e)}
+                onClick={() => {
+                  onSelectOutlet(outlet);
+                  onSelectNode?.(outlet);
+                }}
+                onTap={() => {
+                  onSelectOutlet(outlet);
+                  onSelectNode?.(outlet);
+                }}
+              >
+                {/* Châssis métallique de la colonnette multi-ports */}
+                <Rect
+                  x={-blockWidth / 2}
+                  y={-blockHeight / 2}
+                  width={blockWidth}
+                  height={blockHeight}
+                  fill={isSelected ? "#0f172a" : "#1e293b"}
+                  stroke={isSelected ? "#38bdf8" : isLinked ? "#0284c7" : "#475569"}
+                  strokeWidth={isSelected ? 30 : 18}
+                  cornerRadius={24}
+                />
+                {/* En-tête bandeau colonnette */}
+                <Rect
+                  x={-blockWidth / 2 + 10}
+                  y={-blockHeight / 2 + 10}
+                  width={blockWidth - 20}
+                  height={45}
+                  fill="#0f172a"
+                  cornerRadius={12}
+                  listening={false}
+                />
+                <Text
+                  x={-blockWidth / 2 + 20}
+                  y={-blockHeight / 2 + 20}
+                  text={`COLONNETTE ${portsCount}x RJ45`}
+                  fontSize={26}
+                  fontFamily="sans-serif"
+                  fontStyle="bold"
+                  fill="#94a3b8"
+                  listening={false}
+                />
+
+                {/* Ports RJ45 individuels dans le châssis */}
+                {outlet.stackedPorts.map((sp, idx) => {
+                  const col = isTwoColumns ? (idx % 2 === 0 ? 0 : 1) : 0;
+                  const row = isTwoColumns ? Math.floor(idx / 2) : idx;
+                  const portX = isTwoColumns
+                    ? (col === 0 ? -blockWidth / 4 : blockWidth / 4)
+                    : 0;
+                  const portY = -blockHeight / 2 + 80 + row * 90;
+
+                  const spColor =
+                    sp.outletRole === "VOIP"
+                      ? "#c084fc"
+                      : sp.outletRole === "PRINTER"
+                      ? "#fbbf24"
+                      : "#38bdf8";
+
+                  return (
+                    <Group key={`sp-${sp.portIndex}`} x={portX} y={portY} listening={false}>
+                      {/* Embase RJ45 */}
+                      <Rect
+                        x={-90}
+                        y={-35}
+                        width={180}
+                        height={70}
+                        fill="#0f172a"
+                        stroke={spColor}
+                        strokeWidth={5}
+                        cornerRadius={8}
+                      />
+                      {/* Prise RJ45 */}
+                      <Rect
+                        x={-75}
+                        y={-22}
+                        width={45}
+                        height={45}
+                        fill="#1e293b"
+                        stroke="#64748b"
+                        strokeWidth={4}
+                        cornerRadius={6}
+                      />
+                      {/* LED d'activité */}
+                      <Circle
+                        x={-15}
+                        y={0}
+                        radius={6}
+                        fill={sp.pingStatus === "ONLINE" ? "#22c55e" : "#64748b"}
+                      />
+                      {/* Label port & rôle */}
+                      <Text
+                        x={0}
+                        y={-18}
+                        text={`P${idx + 1} ${sp.outletRole}`}
+                        fontSize={26}
+                        fontFamily="sans-serif"
+                        fontStyle="bold"
+                        fill={spColor}
+                      />
+                      <Text
+                        x={0}
+                        y={6}
+                        text={sp.assignedPerson ? sp.assignedPerson.slice(0, 12) : "Libre"}
+                        fontSize={20}
+                        fontFamily="sans-serif"
+                        fill="#94a3b8"
+                      />
+                    </Group>
+                  );
+                })}
+
+                {/* Cartouche latéral d'identification */}
+                {(() => {
+                  const title = `🔲 Colonnette (${portsCount}P) • ${outlet.name}`;
+                  const badgeWidth = Math.max(380, title.length * 25 + 60);
+                  return (
+                    <Group x={blockWidth / 2 + 30} y={0} listening={false}>
+                      <Rect
+                        x={0}
+                        y={-45}
+                        width={badgeWidth}
+                        height={90}
+                        fill="rgba(15, 23, 42, 0.94)"
+                        stroke={isSelected ? "#38bdf8" : "#475569"}
+                        strokeWidth={6}
+                        cornerRadius={16}
+                      />
+                      <Text
+                        x={20}
+                        y={-24}
+                        width={badgeWidth - 40}
+                        text={title}
+                        fontSize={64}
+                        fontFamily="sans-serif"
+                        fontStyle="bold"
+                        fill={isSelected ? "#ffffff" : "#38bdf8"}
+                      />
+                    </Group>
+                  );
+                })()}
               </Group>
             );
           }

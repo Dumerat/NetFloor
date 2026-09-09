@@ -9,8 +9,8 @@ import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { SettingsModal } from "@/components/ui/SettingsModal";
 import { DeviceTelemetry } from "@/data/settingsStore";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
-import { NodeDisplay, RackDisplay, OutletRole, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
-import { CableData } from "@/components/canvas/CableLayer";
+import { NodeDisplay, RackDisplay, OutletRole, StackedPortItem, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
+import { CableData, CableFilterMode } from "@/components/canvas/CableLayer";
 import {
   ZoomIn,
   ZoomOut,
@@ -51,6 +51,23 @@ export default function NetFloorApp() {
   const [activeViewMode, setActiveViewMode] = useState<
     "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK"
   >("ALL");
+
+  // Filtre actif des câbles (DSI / Réseau)
+  const [cableFilterMode, setCableFilterMode] = useState<CableFilterMode>("ALL");
+
+  // Waypoints de courbure personnalisés déplacés par l'utilisateur à la souris
+  const [customWaypoints, setCustomWaypoints] = useState<Record<string, { x: number; y: number }[]>>({});
+
+  const handleWaypointChange = useCallback(
+    (cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => {
+      setCustomWaypoints((prev) => {
+        const existing = prev[cableId] ? [...prev[cableId]] : [];
+        existing[waypointIndex] = newPos;
+        return { ...prev, [cableId]: existing };
+      });
+    },
+    []
+  );
 
   // Étage
   const [floorData] = useState({
@@ -254,6 +271,66 @@ export default function NetFloorApp() {
       pingStatus: "ONLINE",
       pingLatencyMs: 2,
     },
+    // 5b. Colonnette Multi-Ports RJ45 intégrée au centre de l'îlot 402 (1 slot groupé 4 ports)
+    {
+      id: "colonnette-402",
+      type: "WALL_OUTLET",
+      name: "Colonnette 402",
+      xMm: 23600,
+      yMm: 14800,
+      attachedToDeskId: "bench-402",
+      outletRole: "DATA",
+      stackedPorts: [
+        {
+          portIndex: 0,
+          portLabel: "RJ45-1",
+          outletRole: "DATA",
+          vlanId: 20,
+          attachedSeatIndex: 0,
+          assignedPerson: "Thomas Roux",
+          ipAddress: "10.42.20.101",
+          macAddress: "7C:10:C9:22:54:F1",
+          pingStatus: "ONLINE",
+          pingLatencyMs: 4,
+        },
+        {
+          portIndex: 1,
+          portLabel: "RJ45-2",
+          outletRole: "VOIP",
+          vlanId: 30,
+          attachedSeatIndex: 0,
+          assignedPerson: "Thomas Roux",
+          ipAddress: "10.42.30.101",
+          macAddress: "00:08:5D:9B:31:0D",
+          pingStatus: "ONLINE",
+          pingLatencyMs: 2,
+        },
+        {
+          portIndex: 2,
+          portLabel: "RJ45-3",
+          outletRole: "DATA",
+          vlanId: 20,
+          attachedSeatIndex: 1,
+          assignedPerson: "Sarah Benali",
+          ipAddress: "10.42.20.102",
+          macAddress: "7C:10:C9:22:54:F2",
+          pingStatus: "ONLINE",
+          pingLatencyMs: 3,
+        },
+        {
+          portIndex: 3,
+          portLabel: "RJ45-4",
+          outletRole: "VOIP",
+          vlanId: 30,
+          attachedSeatIndex: 1,
+          assignedPerson: "Sarah Benali",
+          ipAddress: "10.42.30.102",
+          macAddress: "00:08:5D:9B:31:0E",
+          pingStatus: "ONLINE",
+          pingLatencyMs: 2,
+        },
+      ],
+    },
     // 6. Boîte de Sol Centrale
     {
       id: "floorbox-01",
@@ -346,6 +423,8 @@ export default function NetFloorApp() {
       const isPrinter = outlet.outletRole === "PRINTER";
       const isWifi = outlet.outletRole === "WIFI";
 
+      const vlanId = isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20;
+
       const baseAlpha = "0.75";
 
       const cableColor = isVoip
@@ -356,14 +435,26 @@ export default function NetFloorApp() {
         ? `rgba(99, 102, 241, ${baseAlpha})`
         : `rgba(59, 130, 246, ${baseAlpha})`;
 
+      const cableId = `cable-run-${outlet.id}`;
+      const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + index * 35 };
+
+      // Point de courbure évitant les bureaux (cheminement dégagé)
+      const defaultMidX = Math.round((outlet.xMm + targetPos.x) / 2);
+      const defaultMidY = Math.round(Math.min(outlet.yMm, targetPos.y) - 2200);
+      const cableWaypoints = customWaypoints[cableId] ?? [{ x: defaultMidX, y: defaultMidY }];
+
       list.push({
-        id: `cable-run-${outlet.id}`,
+        id: cableId,
         cableType: "HORIZONTAL_RUN",
         category: "CAT6A",
         lengthMm: 44200 + index * 400,
         colorCode: cableColor,
         sourcePos: { x: outlet.xMm, y: outlet.yMm },
-        targetPos: { x: rack.xMm + 400, y: rack.yMm + 240 + index * 35 },
+        targetPos,
+        vlanId,
+        sourceNodeId: outlet.id,
+        targetNodeId: rack.id,
+        waypoints: cableWaypoints,
       });
     });
 
@@ -375,6 +466,9 @@ export default function NetFloorApp() {
       lengthMm: 1500,
       sourcePos: { x: rack.xMm + 100, y: rack.yMm + 260 },
       targetPos: { x: rack.xMm + 100, y: rack.yMm + 420 },
+      vlanId: 20,
+      sourceNodeId: rack.id,
+      targetNodeId: rack.id,
     });
 
     list.push({
@@ -384,10 +478,26 @@ export default function NetFloorApp() {
       lengthMm: 1500,
       sourcePos: { x: rack.xMm + 100, y: rack.yMm + 290 },
       targetPos: { x: rack.xMm + 100, y: rack.yMm + 450 },
+      vlanId: 30,
+      sourceNodeId: rack.id,
+      targetNodeId: rack.id,
+    });
+
+    // Liaison Backbone Trunk / Interconnexion Baie
+    list.push({
+      id: "cable-backbone-01",
+      cableType: "BACKBONE_TRUNK",
+      category: "OM4_FIBER",
+      lengthMm: 12000,
+      colorCode: "rgba(56, 189, 248, 0.9)",
+      sourcePos: { x: rack.xMm + 600, y: rack.yMm + 300 },
+      targetPos: { x: rack.xMm + 1400, y: rack.yMm + 300 },
+      vlanId: 20,
+      sourceNodeId: rack.id,
     });
 
     return list;
-  }, [nodes, racks, activeViewMode]);
+  }, [nodes, racks, activeViewMode, customWaypoints]);
 
   // Traçage CTE récursif lors du clic sur une prise murale
   const handleSelectOutlet = useCallback(async (outletNode: NodeDisplay) => {
@@ -592,6 +702,60 @@ export default function NetFloorApp() {
       };
 
       return [...prev, newOutlet];
+    });
+  };
+
+  // Option : Ajouter une colonnette multi-ports RJ45 (jusqu'à 8 ports) au centre d'un bureau
+  const handleAddColonnetteToDesk = (deskId: string, portsCount: number = 4) => {
+    setNodes((prev) => {
+      const desk = prev.find((d) => d.id === deskId);
+      if (!desk) return prev;
+
+      const deskW = desk.widthMm ?? 1600;
+      const deskH = desk.heightMm ?? 800;
+      const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+      const cos = Math.cos(rotRad);
+      const sin = Math.sin(rotRad);
+
+      // Position au centre du bureau
+      const localCenterX = deskW / 2;
+      const localCenterY = deskH / 2;
+      const worldCenterX = desk.xMm + localCenterX * cos - localCenterY * sin;
+      const worldCenterY = desk.yMm + localCenterX * sin + localCenterY * cos;
+
+      const colonnetteId = `colonnette-${deskId}-${Date.now()}`;
+      const deskNum = desk.name.replace(/^Bureau\s*/i, "").trim();
+
+      const numPorts = Math.min(8, Math.max(2, portsCount));
+      const initialPorts: StackedPortItem[] = Array.from({ length: numPorts }).map((_, i) => {
+        const isEven = i % 2 === 0;
+        const seatOccupant = desk.seats && desk.seats[i] ? desk.seats[i] : undefined;
+        return {
+          portIndex: i,
+          portLabel: `RJ45-${i + 1}`,
+          outletRole: isEven ? "DATA" : "VOIP",
+          vlanId: isEven ? 20 : 30,
+          assignedPerson: seatOccupant?.fullName,
+          attachedSeatIndex: seatOccupant ? i : undefined,
+          ipAddress: `10.42.${isEven ? 20 : 30}.${100 + i}`,
+          macAddress: `00:1A:2B:3C:4D:${String(i + 10).padStart(2, "0")}`,
+          pingStatus: "ONLINE",
+          pingLatencyMs: 2 + i,
+        };
+      });
+
+      const newColonnette: NodeDisplay = {
+        id: colonnetteId,
+        type: "WALL_OUTLET",
+        name: `Colonnette ${deskNum}`,
+        xMm: Math.round(worldCenterX),
+        yMm: Math.round(worldCenterY),
+        attachedToDeskId: deskId,
+        outletRole: "DATA",
+        stackedPorts: initialPorts,
+      };
+
+      return [...prev, newColonnette];
     });
   };
 
@@ -1046,6 +1210,100 @@ export default function NetFloorApp() {
 
         {/* Main Canvas Area */}
         <div className={`flex-1 h-full relative transition-all duration-300 ${isPaletteOpen ? "ml-80" : "ml-12"}`}>
+          {/* Barre de filtrage dynamique des câbles (DSI / Réseau / Maintenance) */}
+          {activeViewMode !== "HR" && (
+            <div className="absolute top-4 left-6 bg-slate-900/90 border border-slate-800 backdrop-blur-md rounded-xl p-1.5 shadow-2xl z-10 flex items-center gap-1 text-[11px] font-mono">
+              <span className="text-slate-400 px-2 flex items-center gap-1.5 text-[10px] font-semibold">
+                <Network className="w-3.5 h-3.5 text-sky-400" />
+                Filtre Câbles :
+              </span>
+              <button
+                onClick={() => setCableFilterMode("ALL")}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  cableFilterMode === "ALL"
+                    ? "bg-blue-600 text-white font-bold shadow"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                Tous ({cables.length})
+              </button>
+              <button
+                onClick={() => setCableFilterMode("BACKBONE_ONLY")}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  cableFilterMode === "BACKBONE_ONLY"
+                    ? "bg-blue-600 text-white font-bold shadow"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                Baie ➔ Switch
+              </button>
+              <button
+                onClick={() => setCableFilterMode("HORIZONTAL_ONLY")}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  cableFilterMode === "HORIZONTAL_ONLY"
+                    ? "bg-blue-600 text-white font-bold shadow"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                Horizontal
+              </button>
+              <button
+                onClick={() => setCableFilterMode("VLAN_20")}
+                className={`px-2 py-1 rounded-lg transition flex items-center gap-1 ${
+                  cableFilterMode === "VLAN_20"
+                    ? "bg-blue-600 text-white font-bold shadow"
+                    : "text-blue-400 hover:bg-slate-800"
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                VLAN 20 (Data)
+              </button>
+              <button
+                onClick={() => setCableFilterMode("VLAN_30")}
+                className={`px-2 py-1 rounded-lg transition flex items-center gap-1 ${
+                  cableFilterMode === "VLAN_30"
+                    ? "bg-purple-600 text-white font-bold shadow"
+                    : "text-purple-400 hover:bg-slate-800"
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                VLAN 30 (VoIP)
+              </button>
+              <button
+                onClick={() => setCableFilterMode("VLAN_40")}
+                className={`px-2 py-1 rounded-lg transition flex items-center gap-1 ${
+                  cableFilterMode === "VLAN_40"
+                    ? "bg-amber-600 text-white font-bold shadow"
+                    : "text-amber-400 hover:bg-slate-800"
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                VLAN 40 (Print)
+              </button>
+              <button
+                onClick={() => setCableFilterMode("VLAN_50")}
+                className={`px-2 py-1 rounded-lg transition flex items-center gap-1 ${
+                  cableFilterMode === "VLAN_50"
+                    ? "bg-indigo-600 text-white font-bold shadow"
+                    : "text-indigo-400 hover:bg-slate-800"
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                VLAN 50 (Wi-Fi)
+              </button>
+              <button
+                onClick={() => setCableFilterMode("SELECTED_ONLY")}
+                className={`px-2 py-1 rounded-lg transition ${
+                  cableFilterMode === "SELECTED_ONLY"
+                    ? "bg-sky-500 text-slate-950 font-bold shadow"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                Sélectionné
+              </button>
+            </div>
+          )}
+
           <DynamicFloorCanvas
             floorWidthMm={floorData.widthMm}
             floorHeightMm={floorData.heightMm}
@@ -1054,18 +1312,20 @@ export default function NetFloorApp() {
             cables={cables}
             selectedNodeId={selectedNodeId}
             activeViewMode={activeViewMode}
+            cableFilterMode={cableFilterMode}
             onSelectOutlet={handleSelectOutlet}
             onSelectNode={handleSelectNode}
             onNodePositionChange={handleNodeMoveEnd}
             onNodeDragMove={handleThrottledNodeDragMove}
             onRackDragMove={handleThrottledRackDragMove}
+            onWaypointChange={handleWaypointChange}
           />
 
           {/* Quick tips badge */}
           <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-800 backdrop-blur rounded-lg p-2.5 text-[11px] text-slate-400 shadow-xl font-mono flex items-center gap-2 pointer-events-none z-10">
             <Sparkles className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
             <span>
-              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Boîtes de sol encastrées inox • Dimensions éditables au mm près dans l&apos;inspecteur.
+              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Colonnettes RJ45 stackées jusqu&apos;à 8 ports • Tracés courbes et poignées de cintrage interactives.
             </span>
           </div>
         </div>
@@ -1084,6 +1344,7 @@ export default function NetFloorApp() {
             onSelectNode={handleSelectNode}
             onChangeRole={handleChangeRole}
             onAddOutletToDesk={handleAddOutletToDesk}
+            onAddColonnetteToDesk={handleAddColonnetteToDesk}
             onUpdateNodeProperties={handleUpdateNodeProperties}
           />
         </div>

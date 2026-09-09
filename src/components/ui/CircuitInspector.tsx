@@ -6,6 +6,7 @@ import {
   NodeDisplay,
   OutletRole,
   DeskSeatOccupant,
+  StackedPortItem,
   getDeskSeatCount,
   getDefaultSeatLabels,
 } from "@/components/canvas/EquipmentLayer";
@@ -40,6 +41,10 @@ import {
   Server,
   Network,
   Globe,
+  Layers,
+  Trash2,
+  ArrowLeftRight,
+  ArrowUpDown,
 } from "lucide-react";
 
 export interface CircuitInspectorProps {
@@ -54,6 +59,7 @@ export interface CircuitInspectorProps {
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onChangeRole?: ((outletId: string, role: OutletRole) => void) | undefined;
   onAddOutletToDesk?: ((deskId: string, role: OutletRole) => void) | undefined;
+  onAddColonnetteToDesk?: ((deskId: string, portsCount?: number | undefined) => void) | undefined;
   onUpdateNodeProperties?: ((nodeId: string, updates: Partial<NodeDisplay>) => void) | undefined;
 }
 
@@ -69,11 +75,179 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
   onSelectNode,
   onChangeRole,
   onAddOutletToDesk,
+  onAddColonnetteToDesk,
   onUpdateNodeProperties,
 }) => {
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false);
   const [pickingSeatIndex, setPickingSeatIndex] = useState<number | null>(null);
+  const [activeStackedPortIdx, setActiveStackedPortIdx] = useState(0);
+
+  // Sécuriser l'index du port actif pour le slot multi-ports
+  const safeStackedPortIdx = useMemo(() => {
+    if (!selectedNode?.stackedPorts || selectedNode.stackedPorts.length === 0) return 0;
+    return Math.min(activeStackedPortIdx, selectedNode.stackedPorts.length - 1);
+  }, [activeStackedPortIdx, selectedNode?.stackedPorts]);
+
+  // Ajouter un port au slot (jusqu'à 8 ports)
+  const handleAddStackedPort = () => {
+    if (!selectedNode) return;
+    const currentPorts = selectedNode.stackedPorts ?? [];
+    if (currentPorts.length >= 8) return;
+    const nextIdx = currentPorts.length;
+    const isEven = nextIdx % 2 === 0;
+    const newPort: StackedPortItem = {
+      portIndex: nextIdx,
+      portLabel: `RJ45-${nextIdx + 1}`,
+      outletRole: isEven ? "DATA" : "VOIP",
+      vlanId: isEven ? 20 : 30,
+      ipAddress: `10.42.${isEven ? 20 : 30}.${100 + nextIdx}`,
+      macAddress: `00:1A:2B:3C:4D:${String(nextIdx + 10).padStart(2, "0")}`,
+      pingStatus: "ONLINE",
+      pingLatencyMs: 3,
+    };
+    onUpdateNodeProperties?.(selectedNode.id, {
+      stackedPorts: [...currentPorts, newPort],
+    });
+    setActiveStackedPortIdx(nextIdx);
+  };
+
+  // Retirer un port du slot
+  const handleRemoveStackedPort = (portIdx: number) => {
+    if (!selectedNode || !selectedNode.stackedPorts) return;
+    if (selectedNode.stackedPorts.length <= 1) return;
+    const updated = selectedNode.stackedPorts
+      .filter((_, idx) => idx !== portIdx)
+      .map((p, idx) => ({ ...p, portIndex: idx, portLabel: `RJ45-${idx + 1}` }));
+    onUpdateNodeProperties?.(selectedNode.id, {
+      stackedPorts: updated,
+    });
+    setActiveStackedPortIdx(Math.max(0, portIdx - 1));
+  };
+
+  // Mettre à jour les propriétés d'un port spécifique du slot
+  const handleUpdateStackedPort = (portIdx: number, updates: Partial<StackedPortItem>) => {
+    if (!selectedNode || !selectedNode.stackedPorts) return;
+    const updated = selectedNode.stackedPorts.map((p, idx) =>
+      idx === portIdx ? { ...p, ...updates } : p
+    );
+    onUpdateNodeProperties?.(selectedNode.id, {
+      stackedPorts: updated,
+    });
+  };
+
+  // Convertir une prise simple en colonnette multi-ports (slot 2 à 8 ports)
+  const handleConvertSingleToColonnette = () => {
+    if (!selectedNode) return;
+    const defaultPorts: StackedPortItem[] = [
+      {
+        portIndex: 0,
+        portLabel: "RJ45-1",
+        outletRole: selectedNode.outletRole || "DATA",
+        assignedPerson: selectedNode.assignedPerson,
+        assignedUserId: selectedNode.assignedUserId,
+        attachedSeatIndex: selectedNode.attachedSeatIndex,
+        ipAddress: selectedNode.ipAddress || "10.42.20.101",
+        macAddress: selectedNode.macAddress || "00:1A:2B:3C:4D:01",
+        pingStatus: selectedNode.pingStatus || "ONLINE",
+        pingLatencyMs: selectedNode.pingLatencyMs || 3,
+        vlanId: selectedNode.outletRole === "VOIP" ? 30 : 20,
+      },
+      {
+        portIndex: 1,
+        portLabel: "RJ45-2",
+        outletRole: "VOIP",
+        ipAddress: "10.42.30.101",
+        macAddress: "00:08:5D:8A:22:9C",
+        pingStatus: "ONLINE",
+        pingLatencyMs: 2,
+        vlanId: 30,
+      },
+    ];
+    onUpdateNodeProperties?.(selectedNode.id, {
+      name: selectedNode.name.replace(/Prise/i, "Colonnette"),
+      stackedPorts: defaultPorts,
+    });
+    setActiveStackedPortIdx(0);
+  };
+
+  // Dégrouper la colonnette en prise simple
+  const handleUngroupColonnette = () => {
+    if (!selectedNode) return;
+    onUpdateNodeProperties?.(selectedNode.id, {
+      name: selectedNode.name.replace(/Colonnette/i, "Prise"),
+      stackedPorts: undefined,
+    });
+  };
+
+  // Accoster / Magnétiser une prise contre la prise voisine la plus proche
+  const handleDockWithNearestOutlet = () => {
+    if (!selectedNode || selectedNode.type !== "WALL_OUTLET") return;
+    const otherOutlets = allNodes.filter(
+      (n) => n.type === "WALL_OUTLET" && n.id !== selectedNode.id
+    );
+    if (otherOutlets.length === 0 || !otherOutlets[0]) return;
+    let closest = otherOutlets[0];
+    let minDist = Math.hypot(selectedNode.xMm - closest.xMm, selectedNode.yMm - closest.yMm);
+    for (const o of otherOutlets) {
+      const dist = Math.hypot(selectedNode.xMm - o.xMm, selectedNode.yMm - o.yMm);
+      if (dist < minDist) {
+        minDist = dist;
+        closest = o;
+      }
+    }
+    if (!closest) return;
+    // Coller à 280mm horizontalement
+    onUpdateNodeProperties?.(selectedNode.id, {
+      xMm: closest.xMm + 280,
+      yMm: closest.yMm,
+    });
+  };
+
+  // Accostage rapide bord à bord ou face à face d'un bureau avec son voisin
+  const handleDockDesk = (side: "LEFT" | "RIGHT" | "TOP" | "BOTTOM") => {
+    if (!selectedNode || selectedNode.type !== "DESK") return;
+    const otherDesks = desks.filter((d) => d.id !== selectedNode.id);
+    if (otherDesks.length === 0 || !otherDesks[0]) return;
+    let closest = otherDesks[0];
+    let minDist = Math.hypot(selectedNode.xMm - closest.xMm, selectedNode.yMm - closest.yMm);
+    for (const d of otherDesks) {
+      const dist = Math.hypot(selectedNode.xMm - d.xMm, selectedNode.yMm - d.yMm);
+      if (dist < minDist) {
+        minDist = dist;
+        closest = d;
+      }
+    }
+    if (!closest) return;
+
+    const curW = selectedNode.widthMm ?? 1600;
+    const curH = selectedNode.heightMm ?? 800;
+    const targetW = closest.widthMm ?? 1600;
+    const targetH = closest.heightMm ?? 800;
+
+    let newX = selectedNode.xMm;
+    let newY = selectedNode.yMm;
+
+    if (side === "LEFT") {
+      newX = closest.xMm - curW;
+      newY = closest.yMm;
+    } else if (side === "RIGHT") {
+      newX = closest.xMm + targetW;
+      newY = closest.yMm;
+    } else if (side === "TOP") {
+      newX = closest.xMm;
+      newY = closest.yMm - curH;
+    } else if (side === "BOTTOM") {
+      newX = closest.xMm;
+      newY = closest.yMm + targetH;
+    }
+
+    onUpdateNodeProperties?.(selectedNode.id, {
+      xMm: Math.round(newX),
+      yMm: Math.round(newY),
+      rotationDeg: closest.rotationDeg ?? 0,
+    });
+  };
 
   // Détection du nombre de places du bureau (1, 2 ou 4)
   const deskSeatCount = useMemo(() => {
@@ -224,6 +398,7 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
       ? desks.find((d) => d.id === selectedNode.attachedToDeskId)
       : undefined;
     const isLinked = Boolean(linkedDesk);
+    const isStacked = Boolean(selectedNode.stackedPorts && selectedNode.stackedPorts.length > 0);
 
     const isVoip = selectedNode.outletRole === "VOIP";
     const isPrinter = selectedNode.outletRole === "PRINTER";
@@ -241,6 +416,336 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
           (n) => n.type === "WALL_OUTLET" && n.attachedToDeskId === linkedDesk.id && n.id !== selectedNode.id
         )
       : [];
+
+    if (isStacked && selectedNode.stackedPorts && selectedNode.stackedPorts.length > 0) {
+      const ports = selectedNode.stackedPorts;
+      const curPort = ports[safeStackedPortIdx] ?? ports[0];
+      if (!curPort) return null;
+      const curPortRole = curPort.outletRole;
+
+      return (
+        <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
+          {/* 1. En-tête Colonnette Multi-Ports */}
+          <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
+                <Layers className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                {selectedNode.name}
+              </span>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded border bg-sky-500/20 text-sky-400 border-sky-500/30">
+                  COLONNETTE {ports.length}P
+                </span>
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                    isLinked
+                      ? "bg-sky-500/20 text-sky-400 border-sky-500/30"
+                      : "bg-slate-800 text-slate-400 border-slate-700"
+                  }`}
+                >
+                  {isLinked ? "SOLIDAIRE" : "FIXE"}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between font-mono">
+              <span>Slot multiposte ({ports.length}x RJ45 Cat6A)</span>
+              <span className="text-slate-500">
+                {(selectedNode.xMm / 1000).toFixed(1)}m, {(selectedNode.yMm / 1000).toFixed(1)}m
+              </span>
+            </div>
+
+            {/* Sélecteur d'onglets de Ports du slot (Port 1 à 8) */}
+            <div className="mt-2.5 pt-2 border-t border-slate-800">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] text-slate-400 font-medium">
+                  Ports RJ45 du slot ({ports.length}/8 max) :
+                </span>
+                <div className="flex items-center gap-1">
+                  {ports.length < 8 && (
+                    <button
+                      onClick={handleAddStackedPort}
+                      className="px-1.5 py-0.5 bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-500/30 rounded text-[9px] font-mono flex items-center gap-1 transition"
+                      title="Ajouter un port RJ45 au slot (jusqu'à 8)"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      + Port
+                    </button>
+                  )}
+                  {ports.length > 1 && (
+                    <button
+                      onClick={() => handleRemoveStackedPort(safeStackedPortIdx)}
+                      className="px-1.5 py-0.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-800/40 rounded text-[9px] font-mono flex items-center gap-1 transition"
+                      title="Retirer ce port du slot"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={handleUngroupColonnette}
+                    className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded text-[9px] font-mono transition"
+                    title="Dégrouper la colonnette en prise simple"
+                  >
+                    Dégrouper
+                  </button>
+                </div>
+              </div>
+
+              {/* Grille des onglets de ports (jusqu'à 8 ports) */}
+              <div className="grid grid-cols-4 gap-1">
+                {ports.map((p, pIdx) => {
+                  const isActive = pIdx === safeStackedPortIdx;
+                  const pRoleColor =
+                    p.outletRole === "VOIP"
+                      ? "border-purple-500/40 text-purple-300"
+                      : p.outletRole === "PRINTER"
+                      ? "border-amber-500/40 text-amber-300"
+                      : "border-blue-500/40 text-blue-300";
+
+                  return (
+                    <button
+                      key={`port-tab-${pIdx}`}
+                      onClick={() => setActiveStackedPortIdx(pIdx)}
+                      className={`p-1 rounded text-[10px] font-mono border text-center transition flex flex-col items-center justify-center ${
+                        isActive
+                          ? "bg-blue-600 text-white border-blue-400 font-bold shadow-sm"
+                          : `bg-slate-950 hover:bg-slate-900 ${pRoleColor}`
+                      }`}
+                    >
+                      <span>P{pIdx + 1}</span>
+                      <span className="text-[8px] opacity-80 uppercase tracking-tighter">
+                        {p.outletRole || "DATA"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {/* 2. Détails complets du Port Actif */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Network className="w-3.5 h-3.5 text-sky-400" />
+                  Configuration Port P{safeStackedPortIdx + 1} ({curPort.portLabel})
+                </span>
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                  {curPort.vlanId ? `VLAN ${curPort.vlanId}` : "VLAN 20"}
+                </span>
+              </div>
+
+              {/* Libellé du port */}
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Désignation du port :</label>
+                <input
+                  type="text"
+                  value={curPort.portLabel}
+                  onChange={(e) =>
+                    handleUpdateStackedPort(safeStackedPortIdx, { portLabel: e.target.value })
+                  }
+                  className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded font-mono text-slate-200 text-[11px] focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Service & VLAN */}
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Service affecté :</label>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={() =>
+                      handleUpdateStackedPort(safeStackedPortIdx, { outletRole: "DATA", vlanId: 20 })
+                    }
+                    className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
+                      curPortRole === "DATA"
+                        ? "bg-blue-600 text-white border-blue-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Laptop className="w-3 h-3" />
+                    PC Data
+                  </button>
+                  <button
+                    onClick={() =>
+                      handleUpdateStackedPort(safeStackedPortIdx, { outletRole: "VOIP", vlanId: 30 })
+                    }
+                    className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
+                      curPortRole === "VOIP"
+                        ? "bg-purple-600 text-white border-purple-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Phone className="w-3 h-3" />
+                    IP Phone
+                  </button>
+                  <button
+                    onClick={() =>
+                      handleUpdateStackedPort(safeStackedPortIdx, { outletRole: "PRINTER", vlanId: 40 })
+                    }
+                    className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
+                      curPortRole === "PRINTER"
+                        ? "bg-amber-600 text-white border-amber-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Printer className="w-3 h-3" />
+                    Copieur
+                  </button>
+                </div>
+              </div>
+
+              {/* Attribution à une place de bureau */}
+              {linkedDesk && (
+                <div className="pt-2 border-t border-slate-800/80">
+                  <label className="text-[10px] text-slate-400 block mb-1 flex items-center gap-1">
+                    <Users className="w-3 h-3 text-blue-400" />
+                    Attribution de ce port à la place :
+                  </label>
+                  <select
+                    value={curPort.attachedSeatIndex !== undefined ? curPort.attachedSeatIndex : ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "") {
+                        handleUpdateStackedPort(safeStackedPortIdx, {
+                          attachedSeatIndex: undefined,
+                          assignedPerson: undefined,
+                        });
+                      } else {
+                        const sIdx = Number(val);
+                        const occupant = linkedDesk.seats?.find((s) => s.seatIndex === sIdx);
+                        handleUpdateStackedPort(safeStackedPortIdx, {
+                          attachedSeatIndex: sIdx,
+                          assignedPerson: occupant?.fullName || undefined,
+                        });
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-200 focus:outline-none focus:border-blue-500 font-sans"
+                  >
+                    <option value="">🌐 Port commun (non affecté)</option>
+                    {Array.from({ length: getDeskSeatCount(linkedDesk.subType) }).map((_, i) => {
+                      const seatOccupant = linkedDesk.seats?.find((s) => s.seatIndex === i);
+                      const labels = getDefaultSeatLabels(linkedDesk.subType);
+                      const label = seatOccupant?.seatLabel ?? labels[i] ?? `Place ${i + 1}`;
+                      const occupantDesc = seatOccupant?.fullName ? ` (${seatOccupant.fullName})` : " (Libre)";
+                      return (
+                        <option key={`opt-port-seat-${i}`} value={i}>
+                          Place {i + 1} : {label}{occupantDesc}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {/* IPAM & Ping pour ce port individuel */}
+              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-slate-400 font-mono flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-slate-500" />
+                    IP Fixe / DHCP :
+                  </span>
+                  <input
+                    type="text"
+                    value={curPort.ipAddress ?? ""}
+                    placeholder={`Ex: 10.42.${curPort.vlanId || 20}.${100 + safeStackedPortIdx}`}
+                    onChange={(e) =>
+                      handleUpdateStackedPort(safeStackedPortIdx, {
+                        ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                      })
+                    }
+                    className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-slate-400 font-mono flex items-center gap-1">
+                    <Activity className="w-3 h-3 text-slate-500" />
+                    Adresse MAC :
+                  </span>
+                  <input
+                    type="text"
+                    value={curPort.macAddress ?? ""}
+                    placeholder="Ex: 00:1A:2B:3C:4D:5E"
+                    onChange={(e) =>
+                      handleUpdateStackedPort(safeStackedPortIdx, {
+                        macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                      })
+                    }
+                    className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Carte : Liaison Mobilier & Postes */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-blue-400" />
+                  Liaison au Mobilier
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">Solidarité</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-md border border-slate-800">
+                <button
+                  onClick={() => onToggleAttachment(selectedNode.id, desks[0]?.id)}
+                  className={`py-1 px-2 rounded text-[11px] font-medium transition flex items-center justify-center gap-1 ${
+                    isLinked
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+                >
+                  <Link2 className="w-3 h-3" />
+                  Solidaire
+                </button>
+                <button
+                  onClick={() => onToggleAttachment(selectedNode.id, undefined)}
+                  className={`py-1 px-2 rounded text-[11px] font-medium transition flex items-center justify-center gap-1 ${
+                    !isLinked
+                      ? "bg-slate-700 text-white shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+                >
+                  <MapPin className="w-3 h-3" />
+                  Fixe
+                </button>
+              </div>
+
+              {isLinked && linkedDesk && (
+                <div className="text-[11px] text-slate-300 bg-blue-950/40 border border-blue-900/50 p-2 rounded space-y-1">
+                  <div className="flex justify-between font-mono text-[10px]">
+                    <span className="text-slate-400">Bureau :</span>
+                    <span className="font-semibold text-slate-100">{linkedDesk.name}</span>
+                  </div>
+                  <div className="flex justify-between font-mono text-[10px]">
+                    <span className="text-slate-400">Écart relatif :</span>
+                    <span className="text-sky-300 font-semibold">
+                      ΔX: {deltaX > 0 ? `+${deltaX}` : deltaX}mm, ΔY: {deltaY > 0 ? `+${deltaY}` : deltaY}mm
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-mono text-[10px]">
+                    <span className="text-slate-400">Distance :</span>
+                    <span className="text-slate-200">{directDistanceM} m</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 4. Bouton Traçage CTE */}
+            {onTriggerTrace && (
+              <button
+                onClick={() => onTriggerTrace(selectedNode)}
+                className="w-full py-2 px-3 bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-medium rounded-lg shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition"
+              >
+                <Zap className="w-4 h-4" />
+                Tracer le circuit CTE récursif
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
@@ -404,6 +909,35 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                 className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
               />
             </div>
+          </div>
+        </div>
+
+        {/* 1c. Carte : Groupement Multi-Ports RJ45 & Magnétisme */}
+        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-sky-400" />
+              Stack Multi-Ports & Magnétisme
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            <button
+              onClick={handleConvertSingleToColonnette}
+              className="w-full py-1.5 px-2 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition"
+              title="Convertir cette prise en slot colonnette groupé (2 à 8 ports RJ45)"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Convertir en colonnette (slot 2 à 8 RJ45)
+            </button>
+            <button
+              onClick={handleDockWithNearestOutlet}
+              className="w-full py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition border border-slate-700"
+              title="Coller magnétiquement contre la prise voisine la plus proche"
+            >
+              <Target className="w-3.5 h-3.5 text-blue-400" />
+              Coller à la prise voisine
+            </button>
           </div>
         </div>
 
@@ -1446,6 +1980,56 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
           </div>
         </div>
 
+        {/* Section 2b : Accostage Rapide aux Bureaux Voisins */}
+        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5 text-blue-400" />
+              Accostage aux Bureaux Voisins
+            </span>
+            <span className="text-[9px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+              Magnétisme bord à bord
+            </span>
+          </div>
+          <div className="text-[10px] text-slate-400">
+            Coller ce bureau contre le bureau voisin le plus proche :
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => handleDockDesk("LEFT")}
+              className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+              title="Coller bord à gauche du bureau voisin"
+            >
+              <ArrowLeftRight className="w-3 h-3 text-sky-400" />
+              Coller à Gauche
+            </button>
+            <button
+              onClick={() => handleDockDesk("RIGHT")}
+              className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+              title="Coller bord à droite du bureau voisin"
+            >
+              <ArrowLeftRight className="w-3 h-3 text-sky-400" />
+              Coller à Droite
+            </button>
+            <button
+              onClick={() => handleDockDesk("TOP")}
+              className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+              title="Coller face-à-face au-dessus"
+            >
+              <ArrowUpDown className="w-3 h-3 text-emerald-400" />
+              Face-à-Face (Haut)
+            </button>
+            <button
+              onClick={() => handleDockDesk("BOTTOM")}
+              className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+              title="Coller face-à-face en-dessous"
+            >
+              <ArrowUpDown className="w-3 h-3 text-emerald-400" />
+              Face-à-Face (Bas)
+            </button>
+          </div>
+        </div>
+
         {/* Section 3 : Prises Solidaires & Câblage Réseau */}
         <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
           <div className="flex items-center justify-between">
@@ -1455,26 +2039,39 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
             </span>
           </div>
 
-          {onAddOutletToDesk && (
-            <div className="grid grid-cols-2 gap-1.5">
+          <div className="space-y-1.5">
+            {onAddColonnetteToDesk && (
               <button
-                onClick={() => onAddOutletToDesk(selectedNode.id, "VOIP")}
-                className="py-1.5 px-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+                onClick={() => onAddColonnetteToDesk(selectedNode.id, 4)}
+                className="w-full py-1.5 px-2 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition"
+                title="Ajouter une colonnette 4 ports RJ45 au milieu du bureau"
               >
-                <Plus className="w-3 h-3" />
-                <Phone className="w-3 h-3 text-purple-400" />
-                + Prise IP Phone
+                <Layers className="w-3.5 h-3.5 text-sky-400" />
+                + Colonnette 4x RJ45 (Centre bureau)
               </button>
-              <button
-                onClick={() => onAddOutletToDesk(selectedNode.id, "DATA")}
-                className="py-1.5 px-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
-              >
-                <Plus className="w-3 h-3" />
-                <Laptop className="w-3 h-3 text-blue-400" />
-                + Prise Data
-              </button>
-            </div>
-          )}
+            )}
+
+            {onAddOutletToDesk && (
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => onAddOutletToDesk(selectedNode.id, "VOIP")}
+                  className="py-1.5 px-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+                >
+                  <Plus className="w-3 h-3" />
+                  <Phone className="w-3 h-3 text-purple-400" />
+                  + Prise IP Phone
+                </button>
+                <button
+                  onClick={() => onAddOutletToDesk(selectedNode.id, "DATA")}
+                  className="py-1.5 px-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
+                >
+                  <Plus className="w-3 h-3" />
+                  <Laptop className="w-3 h-3 text-blue-400" />
+                  + Prise Data
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-1.5 pt-1">
             {attachedOutlets.map((outlet) => {
