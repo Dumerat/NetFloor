@@ -19,6 +19,7 @@ import {
   Users,
   Layers,
   Sparkles,
+  Download,
 } from "lucide-react";
 
 // Chargement dynamique du canvas Konva sans SSR
@@ -54,21 +55,33 @@ export default function NetFloorApp() {
     heightMm: 35000,
   });
 
-  // Baies informatiques
+  // Baies informatiques (Local Technique DSI)
   const [racks, setRacks] = useState<RackDisplay[]>([
     {
       id: "rack-01",
       name: "BAIE-PRINCIPALE-RDC",
-      xMm: 8000,
-      yMm: 18000,
-      widthMm: 600,
-      depthMm: 800,
+      xMm: 12000,
+      yMm: 14000,
+      widthMm: 800,
+      depthMm: 1000,
       uHeight: 42,
     },
   ]);
 
-  // Nœuds du plateau (Bureaux multi-places RH, Prises Réseau, Boîtes de Sol, Wi-Fi)
+  // Nœuds du plateau (Bureaux multi-places RH, Prises Réseau, Boîtes de Sol, Wi-Fi, Baies DSI)
   const [nodes, setNodes] = useState<NodeDisplay[]>([
+    // 0. Baie informatique principale (Local Technique)
+    {
+      id: "rack-01",
+      type: "PATCH_PANEL",
+      name: "BAIE-PRINCIPALE-RDC",
+      xMm: 12000,
+      yMm: 14000,
+      widthMm: 800,
+      heightMm: 1000,
+      subType: "RACK_42U",
+      description: "Baie principale de brassage & serveurs 42U avec commutateur Cisco Catalyst 9300 et bandeau Cat6A.",
+    },
     // 1. Îlot Bench 4 Postes (4 collaborateurs distincts assignés)
     {
       id: "bench-402",
@@ -262,11 +275,26 @@ export default function NetFloorApp() {
   // Bureaux disponibles pour la liaison
   const desks = useMemo(() => nodes.filter((n) => n.type === "DESK"), [nodes]);
 
-  // Nœud actuellement sélectionné (synchronisé en direct)
-  const selectedNode = useMemo(
-    () => nodes.find((n) => n.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId]
-  );
+  // Nœud actuellement sélectionné (synchronisé en direct, incluant les baies)
+  const selectedNode = useMemo(() => {
+    const fromNodes = nodes.find((n) => n.id === selectedNodeId);
+    if (fromNodes) return fromNodes;
+    const fromRacks = racks.find((r) => r.id === selectedNodeId);
+    if (fromRacks) {
+      return {
+        id: fromRacks.id,
+        type: "PATCH_PANEL" as const,
+        name: fromRacks.name,
+        xMm: fromRacks.xMm,
+        yMm: fromRacks.yMm,
+        widthMm: fromRacks.widthMm,
+        heightMm: fromRacks.depthMm,
+        subType: "RACK_42U" as const,
+        description: `Baie informatique 19" (${fromRacks.uHeight}U) dans le local technique.`,
+      };
+    }
+    return null;
+  }, [nodes, racks, selectedNodeId]);
 
   // Calcul dynamique des câbles : ils suivent TOUTES les prises en direct
   const cables: CableData[] = useMemo(() => {
@@ -415,16 +443,6 @@ export default function NetFloorApp() {
     }
   }, [handleNodeUpdate]);
 
-  // Fin du déplacement d'un nœud (commit immédiat avec magnétisme)
-  const handleNodeMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
-    if (rafNodeDragRef.current) {
-      cancelAnimationFrame(rafNodeDragRef.current);
-      rafNodeDragRef.current = null;
-    }
-    pendingNodeDragRef.current = null;
-    handleNodeUpdate(id, newPos);
-  }, [handleNodeUpdate]);
-
   // Déplacement d'une baie informatique
   const handleRackUpdate = useCallback((id: string, newPos: { x: number; y: number }) => {
     setRacks((prev) => {
@@ -432,7 +450,28 @@ export default function NetFloorApp() {
       if (!current || (current.xMm === newPos.x && current.yMm === newPos.y)) return prev;
       return prev.map((r) => (r.id === id ? { ...r, xMm: newPos.x, yMm: newPos.y } : r));
     });
+    setNodes((prev) => {
+      const current = prev.find((n) => n.id === id);
+      if (!current || (current.xMm === newPos.x && current.yMm === newPos.y)) return prev;
+      return prev.map((n) => (n.id === id ? { ...n, xMm: newPos.x, yMm: newPos.y } : n));
+    });
   }, []);
+
+  // Fin du déplacement d'un nœud ou d'une baie (commit immédiat avec magnétisme)
+  const handleNodeMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
+    if (rafNodeDragRef.current) {
+      cancelAnimationFrame(rafNodeDragRef.current);
+      rafNodeDragRef.current = null;
+    }
+    if (rafRackDragRef.current) {
+      cancelAnimationFrame(rafRackDragRef.current);
+      rafRackDragRef.current = null;
+    }
+    pendingNodeDragRef.current = null;
+    pendingRackDragRef.current = null;
+    handleNodeUpdate(id, newPos);
+    handleRackUpdate(id, newPos);
+  }, [handleNodeUpdate, handleRackUpdate]);
 
   // Déplacement d'une baie throttlé par RAF
   const handleThrottledRackDragMove = useCallback((id: string, newPos: { x: number; y: number }) => {
@@ -627,7 +666,16 @@ export default function NetFloorApp() {
           }))
         : undefined;
 
+    const isRack =
+      item.subType === "RACK_42U" ||
+      item.subType === "RACK_18U" ||
+      item.targetType === "PATCH_PANEL";
+
     const computeName = () => {
+      if (isRack) {
+        const rackCount = racks.length;
+        return `BAIE-DSI-0${rackCount + 1}`;
+      }
       if (item.targetType === "DESK") {
         const deskCount = nodes.filter((n) => n.type === "DESK").length;
         return `Bureau ${403 + deskCount}`;
@@ -648,10 +696,25 @@ export default function NetFloorApp() {
       return `Prise ${403 + outletCount}`;
     };
 
+    const finalName = computeName();
+
+    if (isRack) {
+      const newRack: RackDisplay = {
+        id: newId,
+        name: finalName,
+        xMm: newX,
+        yMm: newY,
+        widthMm: item.widthMm ?? 800,
+        depthMm: item.heightMm ?? 1000,
+        uHeight: item.subType === "RACK_18U" ? 18 : 42,
+      };
+      setRacks((prev) => [...prev, newRack]);
+    }
+
     const newNode: NodeDisplay = {
       id: newId,
       type: item.targetType,
-      name: computeName(),
+      name: finalName,
       xMm: newX,
       yMm: newY,
       widthMm: item.widthMm,
@@ -672,6 +735,89 @@ export default function NetFloorApp() {
 
     setNodes((prev) => [...prev, newNode]);
     setSelectedNodeId(newId);
+  };
+
+  // Export du carnet de câblage au format CSV conforme au schéma CablingRowSchema
+  const handleExportCsv = () => {
+    const headers = [
+      "outlet_name",
+      "outlet_port",
+      "desk_number",
+      "floor_name",
+      "rack_name",
+      "patch_panel_name",
+      "patch_panel_port",
+      "cable_category",
+      "cable_length_m",
+      "switch_name",
+      "switch_port",
+      "vlan_vid",
+      "vlan_name",
+    ];
+
+    const wallOutlets = nodes.filter((n) => n.type === "WALL_OUTLET");
+    const primaryRack = racks[0] ?? { name: "BAIE-PRINCIPALE-RDC", xMm: 12000, yMm: 14000 };
+
+    const rows = wallOutlets.map((outlet, index) => {
+      const linkedDesk = outlet.attachedToDeskId
+        ? nodes.find((n) => n.id === outlet.attachedToDeskId)
+        : null;
+      const deskNumber = linkedDesk ? linkedDesk.name : "";
+      const portNum = String(index + 1).padStart(2, "0");
+      const isVoip = outlet.outletRole === "VOIP";
+      const isPrinter = outlet.outletRole === "PRINTER";
+      const isWifi = outlet.outletRole === "WIFI";
+
+      const vlanVid = isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20;
+      const vlanName = isVoip
+        ? "VLAN_VOIP"
+        : isPrinter
+        ? "VLAN_PRINT"
+        : isWifi
+        ? "VLAN_WIFI_INFRA"
+        : "VLAN_CORP_DATA";
+
+      const directDist = linkedDesk
+        ? Math.round(
+            Math.hypot(
+              outlet.xMm - (primaryRack.xMm ?? 12000),
+              outlet.yMm - (primaryRack.yMm ?? 14000)
+            ) / 1000 + 4
+          )
+        : 25.0;
+
+      return [
+        outlet.name,
+        "RJ45-1",
+        deskNumber,
+        "Étage 4 - Plateau",
+        primaryRack.name,
+        "PP-24P-CAT6A-U24",
+        portNum,
+        "CAT6A",
+        directDist.toFixed(1),
+        "SW-ACCESS-4A-U22",
+        `Gi1/0/${index + 1}`,
+        vlanVid,
+        vlanName,
+      ]
+        .map((val) => `"${String(val).replace(/"/g, '""')}"`)
+        .join(",");
+    });
+
+    const csvContent = [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `carnet_cablage_netfloor_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const scaleMetersText = `${(1000 * viewport.scale).toFixed(1)} px/m`;
@@ -764,10 +910,18 @@ export default function NetFloorApp() {
 
           <button
             onClick={() => setIsImportModalOpen(true)}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-sans font-medium rounded-lg shadow-lg shadow-blue-600/30 flex items-center gap-1.5 transition text-xs"
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-sans font-medium rounded-lg border border-slate-700 flex items-center gap-1.5 transition text-xs shadow-sm"
           >
-            <UploadCloud className="w-4 h-4" />
-            Importer Carnet (CSV)
+            <UploadCloud className="w-3.5 h-3.5 text-blue-400" />
+            Importer CSV
+          </button>
+          <button
+            onClick={handleExportCsv}
+            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-sans font-medium rounded-lg shadow-lg shadow-blue-600/30 flex items-center gap-1.5 transition text-xs"
+            title="Exporter l'inventaire complet en carnet de câblage CSV"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Exporter CSV
           </button>
         </div>
       </header>

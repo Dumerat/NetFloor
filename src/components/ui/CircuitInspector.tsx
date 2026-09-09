@@ -37,6 +37,7 @@ import {
   Building,
   UserCheck,
   Users,
+  Server,
 } from "lucide-react";
 
 export interface CircuitInspectorProps {
@@ -571,7 +572,176 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
     );
   }
 
-  // Cas 2 : Bureau / Mobilier (RH, Dimensions réelles & fausses mesures)
+  // Cas 2 : Baie Informatique 19" / Équipement Réseau DSI
+  if (
+    selectedNode.type === "PATCH_PANEL" ||
+    selectedNode.type === "SWITCH" ||
+    selectedNode.subType === "RACK_42U" ||
+    selectedNode.subType === "RACK_18U"
+  ) {
+    const rackWidthMm = selectedNode.widthMm ?? 800;
+    const rackDepthMm = selectedNode.heightMm ?? 1000;
+    const connectedOutlets = allNodes.filter((n) => n.type === "WALL_OUTLET");
+
+    return (
+      <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
+        {/* En-tête Baie */}
+        <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
+              <Server className="w-4 h-4 text-purple-400 flex-shrink-0" />
+              {selectedNode.name}
+            </span>
+            <span className="text-[10px] font-mono bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30 flex-shrink-0">
+              BAIE 19&quot; (42U)
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between font-mono">
+            <span>
+              Châssis : {(rackWidthMm / 1000).toFixed(2)} × {(rackDepthMm / 1000).toFixed(2)} m
+            </span>
+            <span className="text-slate-500">
+              {(selectedNode.xMm / 1000).toFixed(1)}m, {(selectedNode.yMm / 1000).toFixed(1)}m
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          {/* Section 1 : Équipements internes 19 pouces */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-blue-400" />
+              Équipements Rackables Normalisés (U)
+            </span>
+
+            <div className="space-y-1.5">
+              {/* U24 Panneau de brassage */}
+              <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-400" />
+                    U24 : PP-24P-CAT6A-U24
+                  </span>
+                  <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                    {connectedOutlets.length}/24 brassés
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Panneau RJ45 Cat6A blindé STP • Câblage horizontal des bureaux
+                </div>
+              </div>
+
+              {/* U22 Switch Cisco */}
+              <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    U22 : SW-ACCESS-4A-U22
+                  </span>
+                  <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
+                    Cisco C9300
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  24 Ports 1GbE PoE+ 370W • Uplink 10GbE SFP+ vers Cœur de réseau
+                </div>
+              </div>
+
+              {/* U01 PDU */}
+              <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-amber-400" />
+                    U01 : PDU-APC-16A
+                  </span>
+                  <span className="text-[9px] font-mono text-amber-400">230V Ondulé</span>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Alimentation secourue sur onduleur centralisé
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2 : VLANs Actifs Distribués */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              VLANs & Segmentation Réseau
+            </span>
+
+            <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+              <div className="p-1.5 bg-slate-950 rounded border border-blue-500/30 text-blue-300">
+                <div className="font-bold">VLAN 20</div>
+                <div className="text-[9px] text-slate-400">VLAN_CORP_DATA</div>
+              </div>
+              <div className="p-1.5 bg-slate-950 rounded border border-purple-500/30 text-purple-300">
+                <div className="font-bold">VLAN 30</div>
+                <div className="text-[9px] text-slate-400">VLAN_VOIP (QoS)</div>
+              </div>
+              <div className="p-1.5 bg-slate-950 rounded border border-amber-500/30 text-amber-300">
+                <div className="font-bold">VLAN 40</div>
+                <div className="text-[9px] text-slate-400">VLAN_PRINT</div>
+              </div>
+              <div className="p-1.5 bg-slate-950 rounded border border-indigo-500/30 text-indigo-300">
+                <div className="font-bold">VLAN 50</div>
+                <div className="text-[9px] text-slate-400">VLAN_WIFI_INFRA</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3 : Liaisons vers les prises du plateau */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+              <Link2 className="w-3.5 h-3.5 text-blue-400" />
+              Prises Raccordées ({connectedOutlets.length})
+            </span>
+
+            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+              {connectedOutlets.map((outlet, oIdx) => (
+                <button
+                  key={outlet.id}
+                  onClick={() => onSelectNode?.(outlet)}
+                  className="w-full p-1.5 bg-slate-950 hover:bg-slate-800 rounded border border-slate-800 text-left flex items-center justify-between transition group"
+                >
+                  <span className="font-mono text-[10px] text-slate-300 group-hover:text-white flex items-center gap-1.5">
+                    {outlet.outletRole === "VOIP" ? (
+                      <Phone className="w-3 h-3 text-purple-400" />
+                    ) : (
+                      <Laptop className="w-3 h-3 text-blue-400" />
+                    )}
+                    {outlet.name}
+                  </span>
+                  <span className="text-[9px] font-mono text-slate-500 group-hover:text-blue-400">
+                    Port {String(oIdx + 1).padStart(2, "0")} →
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Champ Description éditable */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1.5">
+            <label className="text-[10px] text-slate-400 block flex items-center gap-1">
+              <FileText className="w-3 h-3 text-blue-400" />
+              Notes & Description de la baie :
+            </label>
+            <textarea
+              rows={2}
+              value={selectedNode.description ?? ""}
+              placeholder="Ex: Baie principale RDC, clés au local sécurité, maintenance annuelle effectuée..."
+              onChange={(e) =>
+                onUpdateNodeProperties?.(selectedNode.id, { description: e.target.value })
+              }
+              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[11px] focus:outline-none focus:border-blue-500 resize-none font-sans"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Cas 3 : Bureau / Mobilier (RH, Dimensions réelles & fausses mesures)
   const attachedOutlets = allNodes.filter((n) => n.attachedToDeskId === selectedNode.id);
   const currentWidth = selectedNode.widthMm ?? 1600;
   const currentHeight = selectedNode.heightMm ?? 800;

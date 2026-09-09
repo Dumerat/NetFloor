@@ -202,99 +202,266 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 
       {/* 1. Baies Informatiques 19" Réalistes (Racks 42U) - Masquées en vue RH */}
       {activeViewMode !== "HR" &&
-        racks.map((rack) => (
-        <Group
-          key={rack.id}
-          x={rack.xMm}
-          y={rack.yMm}
-          draggable
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          onDragStart={handleDragStart}
-          onDragMove={(e) => handleRackDragMove(rack.id, e)}
-          onDragEnd={(e) => handleDragEnd(rack.id, e)}
-        >
-          {/* Corps de la baie */}
-          <Rect
-            width={rack.depthMm} // 800mm
-            height={rack.widthMm} // 600mm
-            fill="#0f172a"
-            stroke="#3b82f6"
-            strokeWidth={30}
-            cornerRadius={40}
-          />
-          {/* Grille de ventilation supérieure */}
-          <Circle
-            x={rack.depthMm / 2 - 150}
-            y={rack.widthMm / 2}
-            radius={80}
-            stroke="#334155"
-            strokeWidth={15}
-            listening={false}
-          />
-          <Circle
-            x={rack.depthMm / 2 + 150}
-            y={rack.widthMm / 2}
-            radius={80}
-            stroke="#334155"
-            strokeWidth={15}
-            listening={false}
-          />
-          {/* Titre Baie */}
-          <Text
-            x={40}
-            y={50}
-            text={`${rack.name} (${rack.uHeight}U)`}
-            fontSize={130}
-            fontFamily="monospace"
-            fontStyle="bold"
-            fill="#38bdf8"
-            listening={false}
-          />
-          {/* Bandeau de Brassage U24 */}
-          <Rect
-            x={40}
-            y={190}
-            width={rack.depthMm - 80}
-            height={110}
-            fill="#1e293b"
-            stroke="#64748b"
-            strokeWidth={12}
-            cornerRadius={16}
-            listening={false}
-          />
-          <Text
-            x={60}
-            y={225}
-            text="U24: PP-24P-CAT6A (Data/VoIP)"
-            fontSize={75}
-            fontFamily="monospace"
-            fill="#cbd5e1"
-            listening={false}
-          />
-          {/* Switch Cisco U22 */}
-          <Rect
-            x={40}
-            y={330}
-            width={rack.depthMm - 80}
-            height={110}
-            fill="#1e3a8a"
-            stroke="#2563eb"
-            strokeWidth={12}
-            cornerRadius={16}
-            listening={false}
-          />
-          <Text
-            x={60}
-            y={365}
-            text="U22: CISCO C9300 (Gi1/0/8-9)"
-            fontSize={75}
-            fontFamily="monospace"
-            fill="#93c5fd"
-            listening={false}
-          />
-        </Group>
-      ))}
+        racks.map((rack) => {
+          const isSelected = activeSelectedId === rack.id;
+          const rWidth = rack.widthMm ?? 800;
+          const rDepth = rack.depthMm ?? 1000;
+
+          return (
+            <Group
+              key={rack.id}
+              x={rack.xMm}
+              y={rack.yMm}
+              draggable
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+              onDragStart={handleDragStart}
+              onDragMove={(e) => handleRackDragMove(rack.id, e)}
+              onDragEnd={(e) => handleDragEnd(rack.id, e)}
+              onClick={() =>
+                onSelectNode?.({
+                  id: rack.id,
+                  type: "PATCH_PANEL",
+                  name: rack.name,
+                  xMm: rack.xMm,
+                  yMm: rack.yMm,
+                  widthMm: rWidth,
+                  heightMm: rDepth,
+                  subType: "RACK_42U",
+                  description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
+                })
+              }
+              onTap={() =>
+                onSelectNode?.({
+                  id: rack.id,
+                  type: "PATCH_PANEL",
+                  name: rack.name,
+                  xMm: rack.xMm,
+                  yMm: rack.yMm,
+                  widthMm: rWidth,
+                  heightMm: rDepth,
+                  subType: "RACK_42U",
+                  description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
+                })
+              }
+            >
+              {/* Châssis extérieur métallique de la baie 19" */}
+              <Rect
+                width={rWidth}
+                height={rDepth}
+                fill={isSelected ? "#1e293b" : "#0f172a"}
+                stroke={isSelected ? "#38bdf8" : "#3b82f6"}
+                strokeWidth={isSelected ? 32 : 22}
+                cornerRadius={30}
+              />
+              {/* Bordure intérieure de porte vitrée fumée */}
+              <Rect
+                x={25}
+                y={25}
+                width={rWidth - 50}
+                height={rDepth - 50}
+                stroke="#334155"
+                strokeWidth={10}
+                cornerRadius={20}
+                fill="rgba(15, 23, 42, 0.65)"
+                listening={false}
+              />
+              {/* Montants intérieurs normalisés 19 pouces (Rails de rack) */}
+              <Rect
+                x={70}
+                y={130}
+                width={16}
+                height={rDepth - 220}
+                fill="#64748b"
+                cornerRadius={4}
+                listening={false}
+              />
+              <Rect
+                x={rWidth - 86}
+                y={130}
+                width={16}
+                height={rDepth - 220}
+                fill="#64748b"
+                cornerRadius={4}
+                listening={false}
+              />
+
+              {/* Bandeau supérieur d'identification & Statut Baie */}
+              <Rect
+                x={40}
+                y={40}
+                width={rWidth - 80}
+                height={95}
+                fill="rgba(2, 6, 23, 0.92)"
+                stroke={isSelected ? "#38bdf8" : "#2563eb"}
+                strokeWidth={8}
+                cornerRadius={14}
+                listening={false}
+              />
+              <Text
+                x={55}
+                y={58}
+                width={rWidth - 190}
+                text={`⚡ ${rack.name}`}
+                fontSize={56}
+                fontFamily="monospace"
+                fontStyle="bold"
+                fill="#38bdf8"
+                wrap="none"
+                ellipsis={true}
+                listening={false}
+              />
+              <Text
+                x={rWidth - 165}
+                y={60}
+                width={110}
+                text={`${rack.uHeight}U`}
+                fontSize={52}
+                fontFamily="monospace"
+                fontStyle="bold"
+                fill="#93c5fd"
+                align="right"
+                wrap="none"
+                listening={false}
+              />
+
+              {/* Voyants LED d'état (Power vert, Uplink bleu) */}
+              <Circle
+                x={rWidth - 195}
+                y={75}
+                radius={12}
+                fill="#22c55e"
+                shadowColor="#22c55e"
+                shadowBlur={15}
+                listening={false}
+              />
+              <Circle
+                x={rWidth - 225}
+                y={75}
+                radius={12}
+                fill="#38bdf8"
+                shadowColor="#38bdf8"
+                shadowBlur={15}
+                listening={false}
+              />
+
+              {/* Équipement U24 : Panneau de Brassage Cat6A (24 ports) */}
+              <Rect
+                x={95}
+                y={160}
+                width={rWidth - 190}
+                height={120}
+                fill="#1e293b"
+                stroke="#64748b"
+                strokeWidth={8}
+                cornerRadius={12}
+                listening={false}
+              />
+              <Text
+                x={115}
+                y={180}
+                width={rWidth - 230}
+                text="U24: PP-24P-CAT6A (Data/VoIP)"
+                fontSize={46}
+                fontFamily="monospace"
+                fontStyle="bold"
+                fill="#f1f5f9"
+                wrap="none"
+                ellipsis={true}
+                listening={false}
+              />
+              {/* Ports RJ45 du bandeau */}
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Rect
+                  key={`pp-port-${i}`}
+                  x={120 + i * ((rWidth - 250) / 12)}
+                  y={235}
+                  width={22}
+                  height={22}
+                  fill={i < 8 ? "#38bdf8" : "#334155"}
+                  cornerRadius={4}
+                  listening={false}
+                />
+              ))}
+
+              {/* Équipement U22 : Switch Cisco Catalyst 9300 */}
+              <Rect
+                x={95}
+                y={305}
+                width={rWidth - 190}
+                height={120}
+                fill="#172554"
+                stroke="#3b82f6"
+                strokeWidth={8}
+                cornerRadius={12}
+                listening={false}
+              />
+              <Text
+                x={115}
+                y={325}
+                width={rWidth - 230}
+                text="U22: CISCO C9300-24P (Gigabit)"
+                fontSize={46}
+                fontFamily="monospace"
+                fontStyle="bold"
+                fill="#93c5fd"
+                wrap="none"
+                ellipsis={true}
+                listening={false}
+              />
+              {/* LED d'activité des ports du switch */}
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Circle
+                  key={`sw-led-${i}`}
+                  x={125 + i * ((rWidth - 250) / 12)}
+                  y={385}
+                  radius={7}
+                  fill={i < 7 ? "#22c55e" : "#475569"}
+                  listening={false}
+                />
+              ))}
+
+              {/* Équipement U18 : Guide-câbles horizontal 1U */}
+              <Rect
+                x={95}
+                y={445}
+                width={rWidth - 190}
+                height={70}
+                fill="#0f172a"
+                stroke="#334155"
+                strokeWidth={6}
+                cornerRadius={8}
+                listening={false}
+              />
+              <Text
+                x={115}
+                y={462}
+                width={rWidth - 230}
+                text="U18: Guide-câbles horizontal 1U"
+                fontSize={38}
+                fontFamily="monospace"
+                fill="#64748b"
+                wrap="none"
+                ellipsis={true}
+                listening={false}
+              />
+
+              {/* Grille de ventilation inférieure */}
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Circle
+                  key={`fan-${i}`}
+                  x={160 + i * ((rWidth - 320) / 3)}
+                  y={rDepth - 100}
+                  radius={50}
+                  stroke="#334155"
+                  strokeWidth={10}
+                  fill="rgba(15, 23, 42, 0.8)"
+                  listening={false}
+                />
+              ))}
+            </Group>
+          );
+        })}
 
       {/* 2. Mobilier & Postes Réalistes (Bureaux Solo, Bench Double 2P, Îlot Quad 4P) */}
       {nodes
@@ -514,11 +681,11 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 <Group listening={false}>
                   {/* Badge Central Îlot */}
                   <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
-                    <Rect x={-260} y={-50} width={520} height={100} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={18} />
-                    <Text x={-250} y={-28} width={500} text={`${shortTitle} • Îlot 4P`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" />
+                    <Rect x={-270} y={-50} width={540} height={100} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={18} />
+                    <Text x={-260} y={-28} width={520} text={`${shortTitle} • Îlot 4P`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" wrap="none" ellipsis={true} />
                   </Group>
 
-                  {/* 4 Grands Badges d'occupants dans les 4 quadrants (sans P1/P2, police 82px) */}
+                  {/* 4 Grands Badges d'occupants dans les 4 quadrants (police adaptative + auto-ellipsis) */}
                   {[
                     { idx: 0, cx: width / 4, cy: 380 },
                     { idx: 1, cx: (3 * width) / 4, cy: 380 },
@@ -527,13 +694,39 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   ].map(({ idx, cx, cy }) => {
                     const seat = getSeat(idx);
                     const isOccupied = Boolean(seat?.fullName);
-                    const bW = 650;
-                    const bH = 175;
+                    const nameLen = seat?.fullName?.length ?? 12;
+                    const bW = Math.max(740, Math.min(840, nameLen * 36));
+                    const bH = 180;
+                    const nameFontSize = nameLen > 16 ? 68 : 78;
+
                     return (
                       <Group key={`quad-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
-                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.94)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
-                        <Text x={-bW / 2 + 15} y={-bH / 2 + 20} width={bW - 30} text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"} fontSize={82} fontFamily="sans-serif" fontStyle="bold" fill={isOccupied ? "#f8fafc" : "#94a3b8"} align="center" />
-                        <Text x={-bW / 2 + 15} y={-bH / 2 + 105} width={bW - 30} text={seat?.department ?? "Disponible / Flex"} fontSize={58} fontFamily="sans-serif" fill={isOccupied ? "#38bdf8" : "#64748b"} align="center" />
+                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.95)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
+                        <Text
+                          x={-bW / 2 + 15}
+                          y={-bH / 2 + 20}
+                          width={bW - 30}
+                          text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"}
+                          fontSize={nameFontSize}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill={isOccupied ? "#f8fafc" : "#94a3b8"}
+                          align="center"
+                          wrap="none"
+                          ellipsis={true}
+                        />
+                        <Text
+                          x={-bW / 2 + 15}
+                          y={-bH / 2 + 105}
+                          width={bW - 30}
+                          text={seat?.department ?? "Disponible / Flex"}
+                          fontSize={54}
+                          fontFamily="sans-serif"
+                          fill={isOccupied ? "#38bdf8" : "#64748b"}
+                          align="center"
+                          wrap="none"
+                          ellipsis={true}
+                        />
                       </Group>
                     );
                   })}
@@ -543,8 +736,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 <Group listening={false}>
                   {/* Badge Central Bench */}
                   <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
-                    <Rect x={-240} y={-45} width={480} height={90} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={16} />
-                    <Text x={-230} y={-26} width={460} text={`${shortTitle} • Bench 2P`} fontSize={56} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" />
+                    <Rect x={-250} y={-45} width={500} height={90} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={16} />
+                    <Text x={-240} y={-26} width={480} text={`${shortTitle} • Bench 2P`} fontSize={56} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" wrap="none" ellipsis={true} />
                   </Group>
 
                   {/* 2 Grands Badges d'occupants (Face Nord, Face Sud) */}
@@ -554,13 +747,39 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   ].map(({ idx, cx, cy }) => {
                     const seat = getSeat(idx);
                     const isOccupied = Boolean(seat?.fullName);
-                    const bW = 680;
-                    const bH = 175;
+                    const nameLen = seat?.fullName?.length ?? 12;
+                    const bW = Math.max(780, Math.min(920, nameLen * 38));
+                    const bH = 180;
+                    const nameFontSize = nameLen > 16 ? 70 : 80;
+
                     return (
                       <Group key={`double-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
-                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.94)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
-                        <Text x={-bW / 2 + 15} y={-bH / 2 + 20} width={bW - 30} text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"} fontSize={82} fontFamily="sans-serif" fontStyle="bold" fill={isOccupied ? "#f8fafc" : "#94a3b8"} align="center" />
-                        <Text x={-bW / 2 + 15} y={-bH / 2 + 105} width={bW - 30} text={seat?.department ?? "Disponible / Flex"} fontSize={58} fontFamily="sans-serif" fill={isOccupied ? "#38bdf8" : "#64748b"} align="center" />
+                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.95)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
+                        <Text
+                          x={-bW / 2 + 15}
+                          y={-bH / 2 + 20}
+                          width={bW - 30}
+                          text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"}
+                          fontSize={nameFontSize}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill={isOccupied ? "#f8fafc" : "#94a3b8"}
+                          align="center"
+                          wrap="none"
+                          ellipsis={true}
+                        />
+                        <Text
+                          x={-bW / 2 + 15}
+                          y={-bH / 2 + 105}
+                          width={bW - 30}
+                          text={seat?.department ?? "Disponible / Flex"}
+                          fontSize={54}
+                          fontFamily="sans-serif"
+                          fill={isOccupied ? "#38bdf8" : "#64748b"}
+                          align="center"
+                          wrap="none"
+                          ellipsis={true}
+                        />
                       </Group>
                     );
                   })}
@@ -569,10 +788,13 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 // BUREAU SOLO OU TABLE DE RÉUNION
                 (() => {
                   const isRotatedVertical = rotDeg % 180 !== 0;
-                  const badgeWidth = isRotatedVertical
-                    ? Math.max(500, height - 80)
-                    : Math.max(580, width - 100);
+                  const personLen = desk.assignedPerson?.length ?? 12;
+                  const baseBadgeW = isRotatedVertical
+                    ? Math.max(650, height - 60)
+                    : Math.max(760, Math.min(width - 60, personLen * 40));
+                  const badgeWidth = Math.max(baseBadgeW, 760);
                   const badgeHeight = 200;
+                  const personFontSize = personLen > 16 ? 70 : 82;
 
                   return (
                     <Group
@@ -586,7 +808,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                         y={-badgeHeight / 2}
                         width={badgeWidth}
                         height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.92)"
+                        fill="rgba(15, 23, 42, 0.94)"
                         stroke={isSelected ? "#60a5fa" : "#334155"}
                         strokeWidth={8}
                         cornerRadius={18}
@@ -602,6 +824,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                         fontStyle="bold"
                         fill="#f8fafc"
                         align="center"
+                        wrap="none"
+                        ellipsis={true}
                         listening={false}
                       />
                       <Text
@@ -613,11 +837,13 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                             ? `👤 ${desk.assignedPerson}`
                             : "👤 Poste Libre"
                         }
-                        fontSize={82}
+                        fontSize={personFontSize}
                         fontFamily="sans-serif"
                         fontStyle={desk.assignedPerson ? "bold" : "normal"}
                         fill={desk.assignedPerson ? "#34d399" : "#94a3b8"}
                         align="center"
+                        wrap="none"
+                        ellipsis={true}
                         listening={false}
                       />
                     </Group>
