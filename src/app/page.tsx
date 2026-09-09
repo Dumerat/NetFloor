@@ -387,13 +387,23 @@ export default function NetFloorApp() {
         : "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c";
 
       const yOffset = 200 + existingDeskOutlets.length * 450;
+      const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+      const cos = Math.cos(rotRad);
+      const sin = Math.sin(rotRad);
+
+      // Local offset: à droite du bureau
+      const localX = deskW + 150;
+      const localY = yOffset;
+
+      const worldX = desk.xMm + localX * cos - localY * sin;
+      const worldY = desk.yMm + localX * sin + localY * cos;
 
       const newOutlet: NodeDisplay = {
         id: newOutletId,
         type: "WALL_OUTLET",
         name: `PRISE-${desk.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()}-${suffixLetter}`,
-        xMm: desk.xMm + deskW,
-        yMm: desk.yMm + yOffset,
+        xMm: Math.round(worldX),
+        yMm: Math.round(worldY),
         portId: newPortId,
         attachedToDeskId: deskId,
         outletRole: role,
@@ -410,13 +420,22 @@ export default function NetFloorApp() {
       if (!desk) return prev;
       const deskW = desk.widthMm ?? 1600;
       const deskH = desk.heightMm ?? 800;
+      const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+      const cos = Math.cos(rotRad);
+      const sin = Math.sin(rotRad);
+
+      const localX = deskW + 180;
+      const localY = deskH / 2;
+
+      const worldX = desk.xMm + localX * cos - localY * sin;
+      const worldY = desk.yMm + localX * sin + localY * cos;
 
       return prev.map((n) => {
         if (n.id === outletId) {
           return {
             ...n,
-            xMm: desk.xMm + deskW + 200,
-            yMm: desk.yMm + deskH / 2,
+            xMm: Math.round(worldX),
+            yMm: Math.round(worldY),
             attachedToDeskId: deskId,
           };
         }
@@ -425,11 +444,63 @@ export default function NetFloorApp() {
     });
   };
 
-  // Option : Mise à jour libre des propriétés (RH, Dimensions réelles ou fausses mesures)
+  // Option : Mise à jour libre des propriétés (RH, Dimensions réelles ou fausses mesures, Rotation)
   const handleUpdateNodeProperties = (nodeId: string, updates: Partial<NodeDisplay>) => {
-    setNodes((prev) =>
-      prev.map((n) => (n.id === nodeId ? { ...n, ...updates } : n))
-    );
+    setNodes((prev) => {
+      const target = prev.find((n) => n.id === nodeId);
+      if (!target) return prev;
+
+      // Si c'est une rotation de bureau : rotationner sur le centre et faire pivoter les prises solidaires
+      if (updates.rotationDeg !== undefined && target.type === "DESK") {
+        const oldRotDeg = target.rotationDeg ?? 0;
+        const newRotDeg = updates.rotationDeg;
+        const deltaDeg = (newRotDeg - oldRotDeg + 360) % 360;
+
+        const deskW = target.widthMm ?? 1600;
+        const deskH = target.heightMm ?? 800;
+        const oldRad = (oldRotDeg * Math.PI) / 180;
+        const newRad = (newRotDeg * Math.PI) / 180;
+        const deltaRad = (deltaDeg * Math.PI) / 180;
+
+        // Centre réel actuel du bureau en coordonnées monde
+        const centerX = target.xMm + (deskW / 2) * Math.cos(oldRad) - (deskH / 2) * Math.sin(oldRad);
+        const centerY = target.yMm + (deskW / 2) * Math.sin(oldRad) + (deskH / 2) * Math.cos(oldRad);
+
+        // Nouvelle position (x, y) de l'origine du bureau pour que son centre reste identique en place
+        const newDeskX = centerX - (deskW / 2) * Math.cos(newRad) + (deskH / 2) * Math.sin(newRad);
+        const newDeskY = centerY - (deskW / 2) * Math.sin(newRad) - (deskH / 2) * Math.cos(newRad);
+
+        const cosDelta = Math.cos(deltaRad);
+        const sinDelta = Math.sin(deltaRad);
+
+        return prev.map((n) => {
+          if (n.id === nodeId) {
+            return {
+              ...n,
+              ...updates,
+              xMm: Math.round(newDeskX),
+              yMm: Math.round(newDeskY),
+              rotationDeg: newRotDeg,
+            };
+          }
+          // Faire pivoter les prises rattachées autour du même centre
+          if (n.attachedToDeskId === nodeId) {
+            const dx = n.xMm - centerX;
+            const dy = n.yMm - centerY;
+            const rotatedX = centerX + dx * cosDelta - dy * sinDelta;
+            const rotatedY = centerY + dx * sinDelta + dy * cosDelta;
+            return {
+              ...n,
+              xMm: Math.round(rotatedX),
+              yMm: Math.round(rotatedY),
+            };
+          }
+          return n;
+        });
+      }
+
+      return prev.map((n) => (n.id === nodeId ? { ...n, ...updates } : n));
+    });
   };
 
   // Ajout depuis la Palette d'équipements multi-métiers

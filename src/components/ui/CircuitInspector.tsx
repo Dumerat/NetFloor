@@ -546,10 +546,11 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                     rotationDeg: ((selectedNode.rotationDeg ?? 0) + 90) % 360,
                   })
                 }
-                title="Tourner le bureau de 90°"
-                className="p-1 text-slate-400 hover:text-white bg-slate-950 border border-slate-800 rounded hover:bg-slate-800 transition"
+                title="Pivoter le bureau de 90° (sens horaire)"
+                className="px-2 py-0.5 text-[10px] text-blue-400 hover:text-white bg-slate-950 border border-slate-800 rounded hover:bg-slate-800 transition flex items-center gap-1 font-mono"
               >
                 <RotateCw className="w-3.5 h-3.5" />
+                <span>{selectedNode.rotationDeg ?? 0}°</span>
               </button>
             </div>
           </div>

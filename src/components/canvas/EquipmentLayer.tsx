@@ -118,8 +118,10 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
           if (!desk) return null;
           const deskW = desk.widthMm ?? 1600;
           const deskH = desk.heightMm ?? 800;
-          const deskCenterX = desk.xMm + deskW / 2;
-          const deskCenterY = desk.yMm + deskH / 2;
+          const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+          // Centre réel du bureau en tenant compte de la rotation de celui-ci
+          const deskCenterX = desk.xMm + (deskW / 2) * Math.cos(rotRad) - (deskH / 2) * Math.sin(rotRad);
+          const deskCenterY = desk.yMm + (deskW / 2) * Math.sin(rotRad) + (deskH / 2) * Math.cos(rotRad);
 
           const isVoip = outlet.outletRole === "VOIP";
           const isPrinter = outlet.outletRole === "PRINTER";
@@ -413,57 +415,83 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 </Group>
               )}
 
-              {/* Libellé et identification RH du collaborateur */}
-              <Text
-                x={40}
-                y={height - 240}
-                text={desk.name}
-                fontSize={120}
-                fontFamily="sans-serif"
-                fontStyle="bold"
-                fill="#e2e8f0"
-                listening={false}
-              />
+              {/* Cartouche d'identification toujours horizontal et lisible (évite de lire à l'envers) */}
+              {(() => {
+                const rotDeg = desk.rotationDeg ?? 0;
+                // Si le meuble est orienté verticalement (90° ou 270°), la largeur disponible dans le meuble est 'height'
+                const isRotatedVertical = rotDeg % 180 !== 0;
+                const badgeWidth = isRotatedVertical
+                  ? Math.max(500, height - 90)
+                  : Math.max(650, width - 100);
+                const badgeHeight = 260;
 
-              {/* Collaborateur affecté RH */}
-              <Text
-                x={40}
-                y={height - 110}
-                text={
-                  desk.assignedPerson
-                    ? `👤 ${desk.assignedPerson}`
-                    : "👤 Poste vacant / Flex"
-                }
-                fontSize={100}
-                fontFamily="sans-serif"
-                fontStyle={desk.assignedPerson ? "bold" : "normal"}
-                fill={desk.assignedPerson ? "#34d399" : "#64748b"}
-                listening={false}
-              />
+                return (
+                  <Group
+                    x={width / 2}
+                    y={height / 2 + (isBenchDouble ? 0 : 50)}
+                    rotation={-rotDeg}
+                    listening={false}
+                  >
+                    {/* Fond cartouche lisible et contrasté */}
+                    <Rect
+                      x={-badgeWidth / 2}
+                      y={-badgeHeight / 2}
+                      width={badgeWidth}
+                      height={badgeHeight}
+                      fill="rgba(15, 23, 42, 0.90)"
+                      stroke={isSelected ? "#60a5fa" : "#334155"}
+                      strokeWidth={8}
+                      cornerRadius={18}
+                      listening={false}
+                    />
 
-              {/* Cotation métrique réelle ou personnalisée */}
-              <Text
-                x={width - 480}
-                y={height - 70}
-                text={dimText}
-                fontSize={85}
-                fontFamily="monospace"
-                fill="#64748b"
-                listening={false}
-              />
+                    {/* Nom du poste */}
+                    <Text
+                      x={-badgeWidth / 2 + 15}
+                      y={-badgeHeight / 2 + 20}
+                      width={badgeWidth - 30}
+                      text={desk.name}
+                      fontSize={95}
+                      fontFamily="sans-serif"
+                      fontStyle="bold"
+                      fill="#f8fafc"
+                      align="center"
+                      listening={false}
+                    />
 
-              {/* Prises solidaires attachées */}
-              {attachedOutlets.length > 0 && (
-                <Text
-                  x={40}
-                  y={40}
-                  text={`🔗 ${attachedOutlets.length} prise(s) rattachée(s)`}
-                  fontSize={90}
-                  fontFamily="monospace"
-                  fill="#38bdf8"
-                  listening={false}
-                />
-              )}
+                    {/* Collaborateur affecté RH */}
+                    <Text
+                      x={-badgeWidth / 2 + 15}
+                      y={-badgeHeight / 2 + 110}
+                      width={badgeWidth - 30}
+                      text={
+                        desk.assignedPerson
+                          ? `👤 ${desk.assignedPerson}`
+                          : "👤 Poste vacant / Flex"
+                      }
+                      fontSize={80}
+                      fontFamily="sans-serif"
+                      fontStyle={desk.assignedPerson ? "bold" : "normal"}
+                      fill={desk.assignedPerson ? "#34d399" : "#94a3b8"}
+                      align="center"
+                      listening={false}
+                    />
+
+                    {/* Dimensions & Prises solidaires */}
+                    <Text
+                      x={-badgeWidth / 2 + 15}
+                      y={-badgeHeight / 2 + 190}
+                      width={badgeWidth - 30}
+                      text={`${dimText}${attachedOutlets.length > 0 ? ` • 🔗 ${attachedOutlets.length} prise(s)` : ""}`}
+                      fontSize={65}
+                      fontFamily="monospace"
+                      fill={attachedOutlets.length > 0 ? "#38bdf8" : "#64748b"}
+                      align="center"
+                      listening={false}
+                    />
+                  </Group>
+                );
+              })()}
             </Group>
           );
         })}
