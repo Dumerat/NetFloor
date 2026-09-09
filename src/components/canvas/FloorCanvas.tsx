@@ -28,6 +28,7 @@ interface FloorCanvasProps {
   showAllLabels?: boolean | undefined;
   onSelectOutlet: (node: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
+  onNodeContextMenu?: ((node: NodeDisplay, pos: { x: number; y: number }) => void) | undefined;
   onNodePositionChange?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onNodeDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
@@ -50,6 +51,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   showAllLabels = false,
   onSelectOutlet,
   onSelectNode,
+  onNodeContextMenu,
   onNodePositionChange,
   onNodeDragMove,
   onRackDragMove,
@@ -224,6 +226,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             vlanStyles={vlanStyles}
             onSelectOutlet={onSelectOutlet}
             onSelectNode={onSelectNode}
+            onNodeContextMenu={onNodeContextMenu}
             onNodeMoveEnd={handleNodeMoveEnd}
             onNodeDragMove={onNodeDragMove}
             onRackDragMove={onRackDragMove}

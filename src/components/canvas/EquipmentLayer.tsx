@@ -142,6 +142,7 @@ interface EquipmentLayerProps {
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onSelectOutlet: (outletNode: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
+  onNodeContextMenu?: ((node: NodeDisplay, pos: { x: number; y: number }) => void) | undefined;
   onNodeMoveEnd: (id: string, newPos: { x: number; y: number }) => void;
   onNodeDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
@@ -157,6 +158,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   vlanStyles,
   onSelectOutlet,
   onSelectNode,
+  onNodeContextMenu,
   onNodeMoveEnd,
   onNodeDragMove,
   onRackDragMove,
@@ -418,6 +420,24 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
                 })
               }
+              onContextMenu={(e) => {
+                e.evt.preventDefault();
+                e.cancelBubble = true;
+                onNodeContextMenu?.(
+                  {
+                    id: rack.id,
+                    type: "PATCH_PANEL",
+                    name: rack.name,
+                    xMm: rack.xMm,
+                    yMm: rack.yMm,
+                    widthMm: rWidth,
+                    heightMm: rDepth,
+                    subType: "RACK_42U",
+                    description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
+                  },
+                  { x: e.evt.clientX, y: e.evt.clientY }
+                );
+              }}
             >
               {/* Châssis extérieur métallique de la baie 19" */}
               <Rect
@@ -683,6 +703,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               onDragEnd={(e) => handleDeskDragEnd(desk, e)}
               onClick={() => onSelectNode?.(desk)}
               onTap={() => onSelectNode?.(desk)}
+              onContextMenu={(e) => {
+                e.evt.preventDefault();
+                e.cancelBubble = true;
+                onNodeContextMenu?.(desk, { x: e.evt.clientX, y: e.evt.clientY });
+              }}
             >
               {/* Plateau de bureau réaliste (finition bois/anthracite) */}
               <Rect
@@ -1096,6 +1121,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   onSelectOutlet(outlet);
                   onSelectNode?.(outlet);
                 }}
+                onContextMenu={(e) => {
+                  e.evt.preventDefault();
+                  e.cancelBubble = true;
+                  onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
+                }}
               >
                 {/* Cadre inox extérieur de la boîte de sol */}
                 <Rect
@@ -1210,6 +1240,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   onSelectOutlet(outlet);
                   onSelectNode?.(outlet);
                 }}
+                onContextMenu={(e) => {
+                  e.evt.preventDefault();
+                  e.cancelBubble = true;
+                  onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
+                }}
               >
                 {/* Onde radio Wi-Fi externe */}
                 <Circle radius={180} stroke={vlan50Color} strokeWidth={10} dash={[30, 20]} opacity={0.6} listening={false} />
@@ -1296,6 +1331,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 onTap={() => {
                   onSelectOutlet(outlet);
                   onSelectNode?.(outlet);
+                }}
+                onContextMenu={(e) => {
+                  e.evt.preventDefault();
+                  e.cancelBubble = true;
+                  onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
                 }}
               >
                 {/* Corps de l'imprimante */}
@@ -1390,6 +1430,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 onTap={() => {
                   onSelectOutlet(outlet);
                   onSelectNode?.(outlet);
+                }}
+                onContextMenu={(e) => {
+                  e.evt.preventDefault();
+                  e.cancelBubble = true;
+                  onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
                 }}
               >
                 {/* Châssis métallique de la colonnette multi-ports */}
@@ -1576,6 +1621,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               onTap={() => {
                 onSelectOutlet(outlet);
                 onSelectNode?.(outlet);
+              }}
+              onContextMenu={(e) => {
+                e.evt.preventDefault();
+                e.cancelBubble = true;
+                onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
               }}
             >
               {/* Plastron mural épuré avec contour couleur VLAN */}

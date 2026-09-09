@@ -46,7 +46,6 @@ import {
   Trash2,
   Tag,
   ArrowLeftRight,
-  ArrowUpDown,
 } from "lucide-react";
 import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
@@ -227,6 +226,7 @@ export interface CircuitInspectorProps {
   onUpdateNodeProperties?: ((nodeId: string, updates: Partial<NodeDisplay>) => void) | undefined;
   onAddWaypoint?: ((cableId: string) => void) | undefined;
   onRemoveWaypoint?: ((cableId: string) => void) | undefined;
+  onDeleteNode?: ((nodeId: string) => void) | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
   onResetVlanStyles?: (() => void) | undefined;
@@ -248,6 +248,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   onUpdateNodeProperties,
   onAddWaypoint,
   onRemoveWaypoint,
+  onDeleteNode,
   vlanStyles,
   onUpdateVlanStyle,
   onResetVlanStyles,
@@ -387,51 +388,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     onUpdateNodeProperties?.(selectedNode.id, {
       xMm: closest.xMm + 280,
       yMm: closest.yMm,
-    });
-  };
-
-  // Accostage rapide bord à bord ou face à face d'un bureau avec son voisin
-  const handleDockDesk = (side: "LEFT" | "RIGHT" | "TOP" | "BOTTOM") => {
-    if (!selectedNode || selectedNode.type !== "DESK") return;
-    const otherDesks = desks.filter((d) => d.id !== selectedNode.id);
-    if (otherDesks.length === 0 || !otherDesks[0]) return;
-    let closest = otherDesks[0];
-    let minDist = Math.hypot(selectedNode.xMm - closest.xMm, selectedNode.yMm - closest.yMm);
-    for (const d of otherDesks) {
-      const dist = Math.hypot(selectedNode.xMm - d.xMm, selectedNode.yMm - d.yMm);
-      if (dist < minDist) {
-        minDist = dist;
-        closest = d;
-      }
-    }
-    if (!closest) return;
-
-    const curW = selectedNode.widthMm ?? 1600;
-    const curH = selectedNode.heightMm ?? 800;
-    const targetW = closest.widthMm ?? 1600;
-    const targetH = closest.heightMm ?? 800;
-
-    let newX = selectedNode.xMm;
-    let newY = selectedNode.yMm;
-
-    if (side === "LEFT") {
-      newX = closest.xMm - curW;
-      newY = closest.yMm;
-    } else if (side === "RIGHT") {
-      newX = closest.xMm + targetW;
-      newY = closest.yMm;
-    } else if (side === "TOP") {
-      newX = closest.xMm;
-      newY = closest.yMm - curH;
-    } else if (side === "BOTTOM") {
-      newX = closest.xMm;
-      newY = closest.yMm + targetH;
-    }
-
-    onUpdateNodeProperties?.(selectedNode.id, {
-      xMm: Math.round(newX),
-      yMm: Math.round(newY),
-      rotationDeg: closest.rotationDeg ?? 0,
     });
   };
 
@@ -579,29 +535,40 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
           {inspectorMode === "VIEW" ? "(Lecture seule)" : "(Édition des paramètres)"}
         </span>
       </div>
-      <div className="flex items-center bg-slate-950 p-0.5 rounded-md border border-slate-800">
-        <button
-          onClick={() => setInspectorMode("VIEW")}
-          className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors flex items-center gap-1 ${
-            inspectorMode === "VIEW"
-              ? "bg-slate-800 text-emerald-300 font-bold shadow-sm border border-emerald-500/30"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-          title="Mode consultation rapide (lecture seule et télémétrie)"
-        >
-          👁️ Consultation
-        </button>
-        <button
-          onClick={() => setInspectorMode("EDIT")}
-          className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors flex items-center gap-1 ${
-            inspectorMode === "EDIT"
-              ? "bg-sky-600 text-white font-bold shadow-sm"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-          title="Mode modification (édition des paramètres, câblage, VLAN, ports)"
-        >
-          ✏️ Modification
-        </button>
+      <div className="flex items-center gap-1.5">
+        <div className="flex items-center bg-slate-950 p-0.5 rounded-md border border-slate-800">
+          <button
+            onClick={() => setInspectorMode("VIEW")}
+            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors flex items-center gap-1 ${
+              inspectorMode === "VIEW"
+                ? "bg-slate-800 text-emerald-300 font-bold shadow-sm border border-emerald-500/30"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+            title="Mode consultation rapide (lecture seule et télémétrie)"
+          >
+            👁️ Consultation
+          </button>
+          <button
+            onClick={() => setInspectorMode("EDIT")}
+            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors flex items-center gap-1 ${
+              inspectorMode === "EDIT"
+                ? "bg-sky-600 text-white font-bold shadow-sm"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+            title="Mode modification (édition des paramètres, câblage, VLAN, ports)"
+          >
+            ✏️ Modification
+          </button>
+        </div>
+        {onDeleteNode && selectedNode && (
+          <button
+            onClick={() => onDeleteNode(selectedNode.id)}
+            title="Supprimer cet équipement du plan"
+            className="p-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-200 border border-red-800/50 hover:border-red-600 rounded-md transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -3403,56 +3370,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 <span>{selectedNode.rotationDeg ?? 0}°</span>
               </button>
             </div>
-          </div>
-        </div>
-
-        {/* Section 2b : Accostage Rapide aux Bureaux Voisins */}
-        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5 text-blue-400" />
-              Accostage aux Bureaux Voisins
-            </span>
-            <span className="text-[9px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-              Magnétisme bord à bord
-            </span>
-          </div>
-          <div className="text-[10px] text-slate-400">
-            Coller ce bureau contre le bureau voisin le plus proche :
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              onClick={() => handleDockDesk("LEFT")}
-              className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
-              title="Coller bord à gauche du bureau voisin"
-            >
-              <ArrowLeftRight className="w-3 h-3 text-sky-400" />
-              Coller à Gauche
-            </button>
-            <button
-              onClick={() => handleDockDesk("RIGHT")}
-              className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
-              title="Coller bord à droite du bureau voisin"
-            >
-              <ArrowLeftRight className="w-3 h-3 text-sky-400" />
-              Coller à Droite
-            </button>
-            <button
-              onClick={() => handleDockDesk("TOP")}
-              className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
-              title="Coller face-à-face au-dessus"
-            >
-              <ArrowUpDown className="w-3 h-3 text-emerald-400" />
-              Face-à-Face (Haut)
-            </button>
-            <button
-              onClick={() => handleDockDesk("BOTTOM")}
-              className="py-1.5 px-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
-              title="Coller face-à-face en-dessous"
-            >
-              <ArrowUpDown className="w-3 h-3 text-emerald-400" />
-              Face-à-Face (Bas)
-            </button>
           </div>
         </div>
 

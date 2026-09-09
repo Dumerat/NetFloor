@@ -25,7 +25,11 @@ import {
   Palette,
   Tag,
   X,
+  Trash2,
+  Unlink,
+  Search,
 } from "lucide-react";
+import { screenToWorld } from "@/engine/spatial/matrix";
 import {
   VlanStyle,
   DEFAULT_VLAN_STYLES,
@@ -78,6 +82,20 @@ export default function NetFloorApp() {
   // Styles visuels des câbles par VLAN (couleur, motif plein/pointillé, épaisseur)
   const [vlanStyles, setVlanStyles] = useState<Record<number, VlanStyle>>(DEFAULT_VLAN_STYLES);
   const [isVlanStyleModalOpen, setIsVlanStyleModalOpen] = useState(false);
+
+  // Menu contextuel au clic droit sur un équipement
+  const [contextMenu, setContextMenu] = useState<{
+    node: NodeDisplay;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Fermer le menu contextuel lors d'un clic ailleurs
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, []);
 
   // Chargement des styles VLAN stockés au montage
   useEffect(() => {
@@ -555,6 +573,12 @@ export default function NetFloorApp() {
     }
   };
 
+  // Ouverture du menu contextuel au clic droit sur un équipement
+  const handleNodeContextMenu = useCallback((node: NodeDisplay, pos: { x: number; y: number }) => {
+    setSelectedNodeId(node.id);
+    setContextMenu({ node, x: pos.x, y: pos.y });
+  }, []);
+
   // Traçage automatique au montage pour la prise 408-A
   useEffect(() => {
     const initialOutlet = nodes.find((n) => n.id === "outlet-408-a");
@@ -623,7 +647,7 @@ export default function NetFloorApp() {
     });
   }, []);
 
-  // Fin du déplacement d'un nœud ou d'une baie (commit immédiat avec magnétisme et détachement automatique fluide)
+  // Fin du déplacement d'un nœud ou d'une baie (liaison automatique si lâché sur un bureau, ou détachement fluide)
   const handleNodeMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
     if (rafNodeDragRef.current) {
       cancelAnimationFrame(rafNodeDragRef.current);
@@ -636,30 +660,72 @@ export default function NetFloorApp() {
     pendingNodeDragRef.current = null;
     pendingRackDragRef.current = null;
 
-    // Détachement automatique au glissé : si une prise liée à un meuble est tirée loin du meuble
     setNodes((prev) => {
       const node = prev.find((n) => n.id === id);
-      if (node && node.type === "WALL_OUTLET" && node.attachedToDeskId) {
-        const linkedDesk = prev.find((d) => d.id === node.attachedToDeskId);
-        if (linkedDesk) {
-          const deskW = linkedDesk.widthMm ?? 1600;
-          const deskH = linkedDesk.heightMm ?? 800;
-          const deskCenterX = linkedDesk.xMm + deskW / 2;
-          const deskCenterY = linkedDesk.yMm + deskH / 2;
-          const dist = Math.hypot(newPos.x - deskCenterX, newPos.y - deskCenterY);
-          const maxAttachDistance = Math.max(deskW, deskH) + 600;
-          if (dist > maxAttachDistance) {
-            return prev.map((n) =>
-              n.id === id
-                ? {
-                    ...n,
-                    xMm: newPos.x,
-                    yMm: newPos.y,
-                    attachedToDeskId: undefined,
-                    attachedSeatIndex: undefined,
-                  }
-                : n
-            );
+      if (node && node.type === "WALL_OUTLET") {
+        // 1. Détection si la prise est déposée sur un bureau
+        const hitDesk = prev.find((d) => {
+          if (d.type !== "DESK") return false;
+          const deskW = d.widthMm ?? 1600;
+          const deskH = d.heightMm ?? 800;
+          return (
+            newPos.x >= d.xMm &&
+            newPos.x <= d.xMm + deskW &&
+            newPos.y >= d.yMm &&
+            newPos.y <= d.yMm + deskH
+          );
+        });
+
+        if (hitDesk) {
+          let seatIdx: number | undefined = undefined;
+          if (hitDesk.subType === "BENCH_QUAD") {
+            const w = hitDesk.widthMm ?? 3200;
+            const h = hitDesk.heightMm ?? 1600;
+            const relX = newPos.x - hitDesk.xMm;
+            const relY = newPos.y - hitDesk.yMm;
+            const isRight = relX > w / 2;
+            const isBottom = relY > h / 2;
+            seatIdx = !isRight && !isBottom ? 0 : isRight && !isBottom ? 1 : !isRight && isBottom ? 2 : 3;
+          } else if (hitDesk.subType === "BENCH_DOUBLE") {
+            const h = hitDesk.heightMm ?? 1600;
+            const relY = newPos.y - hitDesk.yMm;
+            seatIdx = relY < h / 2 ? 0 : 1;
+          }
+
+          return prev.map((n) =>
+            n.id === id
+              ? {
+                  ...n,
+                  xMm: newPos.x,
+                  yMm: newPos.y,
+                  attachedToDeskId: hitDesk.id,
+                  attachedSeatIndex: seatIdx,
+                }
+              : n
+          );
+        } else if (node.attachedToDeskId) {
+          // 2. Si la prise était rattachée à un bureau et est tirée en dehors
+          const linkedDesk = prev.find((d) => d.id === node.attachedToDeskId);
+          if (linkedDesk) {
+            const deskW = linkedDesk.widthMm ?? 1600;
+            const deskH = linkedDesk.heightMm ?? 800;
+            const deskCenterX = linkedDesk.xMm + deskW / 2;
+            const deskCenterY = linkedDesk.yMm + deskH / 2;
+            const dist = Math.hypot(newPos.x - deskCenterX, newPos.y - deskCenterY);
+            const maxAttachDistance = Math.max(deskW, deskH) + 400;
+            if (dist > maxAttachDistance) {
+              return prev.map((n) =>
+                n.id === id
+                  ? {
+                      ...n,
+                      xMm: newPos.x,
+                      yMm: newPos.y,
+                      attachedToDeskId: undefined,
+                      attachedSeatIndex: undefined,
+                    }
+                  : n
+              );
+            }
           }
         }
       }
@@ -945,10 +1011,53 @@ export default function NetFloorApp() {
   };
 
   // Ajout depuis la Palette d'équipements multi-métiers (Générique, Profils Personnalisés, Mobilier, Baies)
-  const handleAddItemFromPalette = (item: PaletteItem) => {
+  // Supporte le placement aux coordonnées mondes exactes (Glisser-Déposer) et la liaison automatique aux bureaux
+  const handleAddItemFromPalette = (item: PaletteItem, position?: { x: number; y: number }) => {
     const offset = nodes.length % 6;
-    const newX = 32000 + offset * 1800;
-    const newY = 16000 + Math.floor(nodes.length / 6) * 1600;
+    let newX = position ? Math.round(position.x) : 32000 + offset * 1800;
+    let newY = position ? Math.round(position.y) : 16000 + Math.floor(nodes.length / 6) * 1600;
+
+    // Si déposé via glisser-déposer, centrer les meubles sur le curseur
+    if (position && item.targetType === "DESK") {
+      newX = Math.round(position.x - (item.widthMm ?? 1600) / 2);
+      newY = Math.round(position.y - (item.heightMm ?? 800) / 2);
+    }
+
+    // Liaison automatique : si une prise / colonnette est déposée sur un bureau, lier immédiatement !
+    let linkedDeskId: string | undefined = undefined;
+    let seatIndex: number | undefined = undefined;
+
+    if (item.targetType === "WALL_OUTLET") {
+      const hitDesk = nodes.find((d) => {
+        if (d.type !== "DESK") return false;
+        const deskW = d.widthMm ?? 1600;
+        const deskH = d.heightMm ?? 800;
+        return (
+          newX >= d.xMm &&
+          newX <= d.xMm + deskW &&
+          newY >= d.yMm &&
+          newY <= d.yMm + deskH
+        );
+      });
+
+      if (hitDesk) {
+        linkedDeskId = hitDesk.id;
+        if (hitDesk.subType === "BENCH_QUAD") {
+          const w = hitDesk.widthMm ?? 3200;
+          const h = hitDesk.heightMm ?? 1600;
+          const relX = newX - hitDesk.xMm;
+          const relY = newY - hitDesk.yMm;
+          const isRight = relX > w / 2;
+          const isBottom = relY > h / 2;
+          seatIndex = !isRight && !isBottom ? 0 : isRight && !isBottom ? 1 : !isRight && isBottom ? 2 : 3;
+        } else if (hitDesk.subType === "BENCH_DOUBLE") {
+          const h = hitDesk.heightMm ?? 1600;
+          const relY = newY - hitDesk.yMm;
+          seatIndex = relY < h / 2 ? 0 : 1;
+        }
+      }
+    }
+
     const newId = `node-${item.category.toLowerCase()}-${Date.now()}`;
 
     const defaultLabels = item.targetType === "DESK" ? getDefaultSeatLabels(item.subType) : [];
@@ -1043,6 +1152,8 @@ export default function NetFloorApp() {
       department: item.category === "FURNITURE" ? "Espace Collaboratif" : undefined,
       chairPosition: item.category === "FURNITURE" ? "BOTTOM" : "NONE",
       seats: initialSeats,
+      attachedToDeskId: linkedDeskId,
+      attachedSeatIndex: seatIndex,
       vlanId: assignedVlan,
       poeMode: item.poeMode,
       customEmote: item.customEmote,
@@ -1059,6 +1170,66 @@ export default function NetFloorApp() {
     setNodes((prev) => [...prev, newNode]);
     setSelectedNodeId(newId);
   };
+
+  // Suppression complète d'un équipement (par Clic droit, menu Inspecteur ou touches Suppr / Retour arrière)
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((prev) => {
+        const target = prev.find((n) => n.id === nodeId);
+        if (!target) return prev;
+        // Si c'est un meuble / bureau, détacher toutes les prises solidaires
+        if (target.type === "DESK") {
+          return prev
+            .filter((n) => n.id !== nodeId)
+            .map((n) =>
+              n.attachedToDeskId === nodeId
+                ? { ...n, attachedToDeskId: undefined, attachedSeatIndex: undefined }
+                : n
+            );
+        }
+        return prev.filter((n) => n.id !== nodeId);
+      });
+
+      // Retirer des baies si c'était une baie
+      setRacks((prev) => prev.filter((r) => r.id !== nodeId));
+
+      // Nettoyer les waypoints de câbles personnalisés rattachés
+      setCustomWaypoints((prev) => {
+        const copy = { ...prev };
+        delete copy[`cable-run-${nodeId}`];
+        return copy;
+      });
+
+      // Désélectionner si c'était l'élément inspecté
+      if (selectedNodeId === nodeId) {
+        setSelectedNodeId(null);
+        setTraceResult(null);
+      }
+
+      setContextMenu(null);
+    },
+    [selectedNodeId]
+  );
+
+  // Raccourci clavier de suppression pour l'équipement sélectionné (Touche Suppr ou Backspace)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedNodeId) {
+        handleDeleteNode(selectedNodeId);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedNodeId, handleDeleteNode]);
 
   // Synchronisation ou ajout d'un équipement découvert par SNMP sur le plateau 2D
   const handleImportDiscoveredDevice = (dev: DeviceTelemetry) => {
@@ -1331,8 +1502,32 @@ export default function NetFloorApp() {
           vlanStyles={vlanStyles}
         />
 
-        {/* Main Canvas Area */}
-        <div className={`flex-1 h-full relative transition-all duration-300 ${isPaletteOpen ? "ml-80" : "ml-12"}`}>
+        {/* Main Canvas Area avec support Glisser-Déposer depuis la palette */}
+        <div
+          className={`flex-1 h-full relative transition-all duration-300 ${isPaletteOpen ? "ml-80" : "ml-12"}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            const rawData = e.dataTransfer.getData("application/json");
+            if (!rawData) return;
+            try {
+              const item: PaletteItem = JSON.parse(rawData);
+              const rect = e.currentTarget.getBoundingClientRect();
+              const screenX = e.clientX - rect.left;
+              const screenY = e.clientY - rect.top;
+
+              const viewport = useCameraStore.getState().viewport;
+              const worldPos = screenToWorld({ x: screenX, y: screenY }, viewport);
+
+              handleAddItemFromPalette(item, worldPos);
+            } catch (err) {
+              console.error("Erreur lors du dépôt de l'équipement sur le plan :", err);
+            }
+          }}
+        >
           {/* Barre de filtrage dynamique des câbles (DSI / Réseau / Maintenance) */}
           {activeViewMode !== "HR" && (
             <div className="absolute top-4 left-6 bg-slate-900/90 border border-slate-800 backdrop-blur-md rounded-xl p-1.5 shadow-2xl z-10 flex items-center gap-1 text-[11px] font-mono">
@@ -1454,6 +1649,7 @@ export default function NetFloorApp() {
             showAllLabels={showAllLabels}
             onSelectOutlet={handleSelectOutlet}
             onSelectNode={handleSelectNode}
+            onNodeContextMenu={handleNodeContextMenu}
             onNodePositionChange={handleNodeMoveEnd}
             onNodeDragMove={handleThrottledNodeDragMove}
             onRackDragMove={handleThrottledRackDragMove}
@@ -1489,6 +1685,7 @@ export default function NetFloorApp() {
             onUpdateNodeProperties={handleUpdateNodeProperties}
             onAddWaypoint={handleAddWaypoint}
             onRemoveWaypoint={handleRemoveWaypoint}
+            onDeleteNode={handleDeleteNode}
             vlanStyles={vlanStyles}
             onUpdateVlanStyle={handleUpdateVlanStyle}
             onResetVlanStyles={handleResetVlanStyles}
@@ -1553,6 +1750,65 @@ export default function NetFloorApp() {
                 Appliquer & Fermer
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Menu Contextuel au Clic Droit sur un Équipement */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-slate-900/95 border border-slate-700/80 rounded-xl shadow-2xl backdrop-blur-md p-1.5 min-w-[220px] animate-in fade-in zoom-in-95 duration-100 font-sans"
+          style={{
+            left: Math.min(contextMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 230),
+            top: Math.min(contextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 800) - 160),
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-2.5 py-1.5 border-b border-slate-800 text-[11px] font-semibold text-slate-300 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 truncate">
+              <span>{contextMenu.node.type === "DESK" ? "🖥️" : contextMenu.node.type === "PATCH_PANEL" ? "⚡" : "🔌"}</span>
+              <span className="truncate">{contextMenu.node.name}</span>
+            </div>
+            <button
+              onClick={() => setContextMenu(null)}
+              className="text-slate-500 hover:text-slate-300 text-xs p-0.5"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="py-1 space-y-0.5 text-xs">
+            <button
+              onClick={() => {
+                handleSelectNode(contextMenu.node);
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 flex items-center gap-2 transition"
+            >
+              <Search className="w-3.5 h-3.5 text-blue-400" />
+              <span>Inspecter / Modifier</span>
+            </button>
+
+            {contextMenu.node.type === "WALL_OUTLET" && contextMenu.node.attachedToDeskId && (
+              <button
+                onClick={() => {
+                  handleToggleAttachment(contextMenu.node.id, undefined);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 flex items-center gap-2 transition"
+              >
+                <Unlink className="w-3.5 h-3.5" />
+                <span>Détacher du bureau</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => handleDeleteNode(contextMenu.node.id)}
+              className="w-full text-left px-2.5 py-1.5 rounded-lg text-red-400 hover:text-red-200 hover:bg-red-950/60 flex items-center gap-2 transition font-medium group"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-red-400 group-hover:scale-110 transition-transform" />
+              <span>Supprimer cet équipement</span>
+            </button>
           </div>
         </div>
       )}

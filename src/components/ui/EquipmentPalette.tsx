@@ -20,6 +20,7 @@ import {
   Plug,
   Trash2,
   Check,
+  GripVertical,
 } from "lucide-react";
 import {
   OutletRole,
@@ -42,19 +43,21 @@ export interface PaletteItem {
   description: string;
   personaTag: "RH" | "MAINTENANCE" | "DSI";
   iconName: string;
-  // Propriétés de personnalisation de ports / profils
-  portCount?: number | undefined;
-  poeMode?: PoeMode | undefined;
-  vlanId?: number | undefined;
   customEmote?: string | undefined;
   isCustomProfile?: boolean | undefined;
+  portCount?: number | undefined;
+  vlanId?: number | undefined;
+  poeMode?: PoeMode | undefined;
+  customPortCount?: number | undefined;
+  customPoeMode?: PoeMode | undefined;
+  customVlanId?: number | undefined;
 }
 
 export interface CustomPortProfile {
   id: string;
   name: string;
-  portCount: number;
-  poeMode: PoeMode;
+  portCount: number; // 1 à 8 ports
+  poeMode: PoeMode; // "NONE" | "POE" | "POE_PLUS" | "POE_PLUS_PLUS"
   vlanId: number;
   customEmote: string;
   createdAtIso: string;
@@ -68,7 +71,8 @@ export function loadCustomPortProfiles(): CustomPortProfile[] {
     const raw = localStorage.getItem(STORAGE_KEY_PROFILES);
     if (!raw) return [];
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.error("Erreur de lecture des profils de ports dans localStorage", err);
     return [];
   }
 }
@@ -95,30 +99,6 @@ export const PALETTE_CATALOG: PaletteItem[] = [
     description: "Échelle standard NF Environnement (1.60 × 0.80 m)",
     personaTag: "RH",
     iconName: "Monitor",
-  },
-  {
-    id: "furniture-desk-compact",
-    category: "FURNITURE",
-    name: "Bureau Solo Compact",
-    subType: "DESK_COMPACT",
-    targetType: "DESK",
-    widthMm: 1200,
-    heightMm: 700,
-    description: "Idéal pour petits espaces et flex office (1.20 × 0.70 m)",
-    personaTag: "RH",
-    iconName: "Monitor",
-  },
-  {
-    id: "furniture-desk-exec",
-    category: "FURNITURE",
-    name: "Bureau Direction / Manager",
-    subType: "DESK_EXECUTIVE",
-    targetType: "DESK",
-    widthMm: 1800,
-    heightMm: 900,
-    description: "Grand plateau spacieux (1.80 × 0.90 m)",
-    personaTag: "RH",
-    iconName: "Briefcase",
   },
   {
     id: "furniture-bench-double",
@@ -625,13 +605,40 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                 </div>
                 {customProfiles.map((p) => {
                   const vStyle = vlanStyles[p.vlanId] ?? DEFAULT_VLAN_STYLES[p.vlanId];
+                  const customItem: PaletteItem = {
+                    id: `custom-${p.id}`,
+                    category: "CONNECTIVITY",
+                    name: p.name,
+                    subType: "GENERIC_PORT",
+                    targetType: "WALL_OUTLET",
+                    outletRole: "GENERIC",
+                    widthMm: 250,
+                    heightMm: 250,
+                    description: `Profil personnalisé : ${p.portCount}P, ${p.poeMode}, VLAN ${p.vlanId}`,
+                    personaTag: "MAINTENANCE",
+                    customEmote: p.customEmote,
+                    customPortCount: p.portCount,
+                    customPoeMode: p.poeMode,
+                    customVlanId: p.vlanId,
+                    isCustomProfile: true,
+                    portCount: p.portCount,
+                    vlanId: p.vlanId,
+                    poeMode: p.poeMode,
+                    iconName: "Plug",
+                  };
                   return (
                     <div
                       key={p.id}
-                      className="p-2.5 bg-slate-900 border border-blue-500/40 hover:border-blue-400 rounded-lg transition space-y-1.5 group shadow-sm"
+                      draggable={true}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/json", JSON.stringify(customItem));
+                        e.dataTransfer.effectAllowed = "copy";
+                      }}
+                      className="p-2.5 bg-slate-900 border border-blue-500/40 hover:border-blue-400 rounded-lg transition space-y-1.5 group shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2">
+                          <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition flex-shrink-0" />
                           <span className="text-base">{p.customEmote}</span>
                           <div>
                             <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300">
@@ -697,10 +704,16 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                 return (
                   <div
                     key={item.id}
-                    className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg transition flex flex-col gap-1.5 group"
+                    draggable={true}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("application/json", JSON.stringify(item));
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                    className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg transition flex flex-col gap-1.5 group cursor-grab active:cursor-grabbing hover:shadow-md"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
+                        <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition flex-shrink-0" />
                         <div className="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center text-slate-300 group-hover:text-blue-400 transition">
                           {item.customEmote ? (
                             <span className="text-sm">{item.customEmote}</span>
@@ -741,7 +754,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
 
           {/* Guide d'aide bas de palette */}
           <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-500 flex-shrink-0 leading-relaxed">
-            💡 <strong>Astuce :</strong> Créez et nommez vos profils de ports pour les réutiliser à volonté.
+            💡 <strong>Astuce :</strong> Glissez-déposez directement un équipement sur le plan ou cliquez sur Ajouter.
           </div>
 
           {/* Bouton Paramètres DSI en bas */}
