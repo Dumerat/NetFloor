@@ -101,7 +101,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
         onWheel={handleWheel}
       >
         {/* Calque 1 : Grille Métrique (listening={false} pour 0 overhead hit-canvas) */}
-        <Layer>
+        <Layer listening={false}>
           <GridLayer
             floorWidthMm={floorWidthMm}
             floorHeightMm={floorHeightMm}
@@ -109,8 +109,8 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
           />
         </Layer>
 
-        {/* Calque 2 : Câblage physique dynamique */}
-        <Layer>
+        {/* Calque 2 : Câblage physique dynamique (listening={false} pour 0 overhead hit-canvas) */}
+        <Layer listening={false}>
           <CableLayer cables={cables} />
         </Layer>
 

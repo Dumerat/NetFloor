@@ -39,9 +39,6 @@ export const GridLayer: FC<GridLayerProps> = ({
         fill="#090d16"
         stroke="#1e293b"
         strokeWidth={100}
-        shadowColor="#000000"
-        shadowBlur={500}
-        shadowOpacity={0.8}
       />
 
       {/* Lignes verticales de grille */}

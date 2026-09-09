@@ -23,7 +23,7 @@ export const CableLayer: FC<CableLayerProps> = ({
   activeCircuitCableIds = new Set(),
 }) => {
   return (
-    <Group>
+    <Group listening={false}>
       {cables.map((cable) => {
         const isHighlighted = activeCircuitCableIds.has(cable.id);
 
@@ -47,10 +47,9 @@ export const CableLayer: FC<CableLayerProps> = ({
               points={points}
               stroke={isHighlighted ? (cable.colorCode ?? "#60a5fa") : (cable.colorCode ?? "rgba(59, 130, 246, 0.65)")}
               strokeWidth={isHighlighted ? 80 : 45}
-              shadowColor={isHighlighted ? (cable.colorCode ?? "#3b82f6") : "transparent"}
-              shadowBlur={isHighlighted ? 150 : 0}
               lineCap="round"
               lineJoin="round"
+              listening={false}
             />
           );
         }
@@ -74,9 +73,8 @@ export const CableLayer: FC<CableLayerProps> = ({
               bezier={true}
               stroke={isHighlighted ? "#facc15" : "rgba(234, 179, 8, 0.85)"}
               strokeWidth={isHighlighted ? 60 : 35}
-              shadowColor={isHighlighted ? "#eab308" : "transparent"}
-              shadowBlur={isHighlighted ? 120 : 0}
               lineCap="round"
+              listening={false}
             />
           );
         }

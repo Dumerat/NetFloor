@@ -75,6 +75,20 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 }) => {
   const activeSelectedId = selectedNodeId ?? selectedOutletId;
 
+  const handleMouseEnter = (e: KonvaEventObject<MouseEvent>) => {
+    const stage = e.target.getStage();
+    if (stage) {
+      stage.container().style.cursor = "move";
+    }
+  };
+
+  const handleMouseLeave = (e: KonvaEventObject<MouseEvent>) => {
+    const stage = e.target.getStage();
+    if (stage) {
+      stage.container().style.cursor = "grab";
+    }
+  };
+
   const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
   };
@@ -126,6 +140,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 strokeWidth={18}
                 dash={isVoip ? [60, 40] : [70, 50]}
                 opacity={activeViewMode === "HR" ? 0.35 : 0.75}
+                listening={false}
               />
             </Group>
           );
@@ -138,6 +153,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
           x={rack.xMm}
           y={rack.yMm}
           draggable
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           onDragStart={handleDragStart}
           onDragMove={(e) => handleRackDragMove(rack.id, e)}
           onDragEnd={(e) => handleDragEnd(rack.id, e)}
@@ -150,9 +167,6 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             stroke="#3b82f6"
             strokeWidth={30}
             cornerRadius={40}
-            shadowColor="#000"
-            shadowBlur={80}
-            shadowOpacity={0.6}
           />
           {/* Grille de ventilation supérieure */}
           <Circle
@@ -180,6 +194,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             fontFamily="monospace"
             fontStyle="bold"
             fill="#38bdf8"
+            listening={false}
           />
           {/* Bandeau de Brassage U24 */}
           <Rect
@@ -191,6 +206,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             stroke="#64748b"
             strokeWidth={12}
             cornerRadius={16}
+            listening={false}
           />
           <Text
             x={60}
@@ -199,6 +215,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             fontSize={75}
             fontFamily="monospace"
             fill="#cbd5e1"
+            listening={false}
           />
           {/* Switch Cisco U22 */}
           <Rect
@@ -210,6 +227,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             stroke="#2563eb"
             strokeWidth={12}
             cornerRadius={16}
+            listening={false}
           />
           <Text
             x={60}
@@ -218,6 +236,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             fontSize={75}
             fontFamily="monospace"
             fill="#93c5fd"
+            listening={false}
           />
         </Group>
       ))}
@@ -242,6 +261,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               y={desk.yMm}
               rotation={desk.rotationDeg ?? 0}
               draggable
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
               onDragStart={handleDragStart}
               onDragMove={(e) => handleNodeDragMove(desk.id, e)}
               onDragEnd={(e) => handleDragEnd(desk.id, e)}
@@ -256,9 +277,6 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 stroke={isSelected ? "#60a5fa" : isMeeting ? "#059669" : "#334155"}
                 strokeWidth={isSelected ? 35 : 22}
                 cornerRadius={isMeeting ? 80 : 25}
-                shadowColor="#000"
-                shadowBlur={isSelected ? 120 : 40}
-                shadowOpacity={0.7}
               />
 
               {/* Liseré de chanfrein intérieur */}
@@ -324,7 +342,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 
                   {/* 2ème écran si bench double (côté face) */}
                   {isBenchDouble && (
-                    <Group>
+                    <Group listening={false}>
                       <Rect
                         x={width / 2 - 220}
                         y={(3 * height) / 4 - 10}
@@ -404,6 +422,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 fontFamily="sans-serif"
                 fontStyle="bold"
                 fill="#e2e8f0"
+                listening={false}
               />
 
               {/* Collaborateur affecté RH */}
@@ -419,6 +438,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 fontFamily="sans-serif"
                 fontStyle={desk.assignedPerson ? "bold" : "normal"}
                 fill={desk.assignedPerson ? "#34d399" : "#64748b"}
+                listening={false}
               />
 
               {/* Cotation métrique réelle ou personnalisée */}
@@ -429,6 +449,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 fontSize={85}
                 fontFamily="monospace"
                 fill="#64748b"
+                listening={false}
               />
 
               {/* Prises solidaires attachées */}
@@ -440,6 +461,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   fontSize={90}
                   fontFamily="monospace"
                   fill="#38bdf8"
+                  listening={false}
                 />
               )}
             </Group>
@@ -469,6 +491,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
                 onDragStart={handleDragStart}
                 onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
                 onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -491,8 +515,6 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   stroke={isSelected ? "#93c5fd" : isLinked ? "#38bdf8" : "#94a3b8"}
                   strokeWidth={isSelected ? 35 : 22}
                   cornerRadius={20}
-                  shadowColor="#000"
-                  shadowBlur={isSelected ? 140 : 40}
                 />
                 {/* Trappe centrale encastrée avec rainures */}
                 <Rect
@@ -524,6 +546,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   fontFamily="monospace"
                   fontStyle="bold"
                   fill={isSelected ? "#ffffff" : "#38bdf8"}
+                  listening={false}
                 />
                 <Text
                   x={180}
@@ -536,6 +559,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   fontSize={105}
                   fontFamily="monospace"
                   fill={isLinked ? "#38bdf8" : "#94a3b8"}
+                  listening={false}
                 />
               </Group>
             );
@@ -549,6 +573,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
                 onDragStart={handleDragStart}
                 onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
                 onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -569,11 +595,9 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   fill={isSelected ? "#312e81" : "#1e1b4b"}
                   stroke={isSelected ? "#c7d2fe" : "#818cf8"}
                   strokeWidth={25}
-                  shadowColor="#6366f1"
-                  shadowBlur={isSelected ? 160 : 60}
                 />
                 {/* LED d'état centrale verte */}
-                <Circle radius={25} fill="#34d399" shadowColor="#10b981" shadowBlur={30} listening={false} />
+                <Circle radius={25} fill="#34d399" listening={false} />
 
                 <Text
                   x={160}
@@ -583,6 +607,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   fontFamily="monospace"
                   fontStyle="bold"
                   fill={isSelected ? "#ffffff" : "#c7d2fe"}
+                  listening={false}
                 />
                 <Text
                   x={160}
@@ -591,6 +616,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   fontSize={105}
                   fontFamily="monospace"
                   fill="#94a3b8"
+                  listening={false}
                 />
               </Group>
             );
@@ -604,6 +630,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
                 onDragStart={handleDragStart}
                 onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
                 onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -626,8 +654,6 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   stroke={isSelected ? "#fde68a" : "#d97706"}
                   strokeWidth={isSelected ? 30 : 20}
                   cornerRadius={25}
-                  shadowColor="#d97706"
-                  shadowBlur={isSelected ? 140 : 40}
                 />
                 {/* Vitre scanner & bac papier */}
                 <Rect x={-160} y={-140} width={320} height={180} fill="#0f172a" stroke="#b45309" strokeWidth={10} cornerRadius={10} listening={false} />
@@ -641,6 +667,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   fontFamily="monospace"
                   fontStyle="bold"
                   fill={isSelected ? "#ffffff" : "#fbbf24"}
+                  listening={false}
                 />
                 <Text
                   x={230}
@@ -649,6 +676,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   fontSize={105}
                   fontFamily="monospace"
                   fill="#94a3b8"
+                  listening={false}
                 />
               </Group>
             );
@@ -680,6 +708,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               x={outlet.xMm}
               y={outlet.yMm}
               draggable
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
               onDragStart={handleDragStart}
               onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
               onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -702,8 +732,6 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 stroke={roleStroke}
                 strokeWidth={isSelected ? 35 : 20}
                 cornerRadius={35}
-                shadowColor={isLinked ? (isVoip ? "#c084fc" : "#0284c7") : "#000"}
-                shadowBlur={isSelected ? 150 : 35}
               />
               {/* Connecteur RJ45 frontal */}
               <Rect x={-45} y={-45} width={90} height={90} fill="#0f172a" stroke="#475569" strokeWidth={8} cornerRadius={10} listening={false} />
@@ -716,6 +744,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 fontFamily="monospace"
                 fontStyle="bold"
                 fill={isSelected ? "#ffffff" : roleColor}
+                listening={false}
               />
               <Text
                 x={150}
@@ -728,6 +757,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 fontSize={105}
                 fontFamily="monospace"
                 fill={isLinked ? roleColor : "#94a3b8"}
+                listening={false}
               />
             </Group>
           );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
 import { CircuitInspector } from "@/components/ui/CircuitInspector";
@@ -264,11 +264,17 @@ export default function NetFloorApp() {
     }
   }, [handleSelectOutlet]);
 
+  // Références pour le throttling 60 FPS des déplacements en direct
+  const pendingNodeDragRef = useRef<{ id: string; pos: { x: number; y: number } } | null>(null);
+  const rafNodeDragRef = useRef<number | null>(null);
+  const pendingRackDragRef = useRef<{ id: string; pos: { x: number; y: number } } | null>(null);
+  const rafRackDragRef = useRef<number | null>(null);
+
   // Déplacement d'un nœud (bureau ou prise)
-  const handleNodeUpdate = (id: string, newPos: { x: number; y: number }) => {
+  const handleNodeUpdate = useCallback((id: string, newPos: { x: number; y: number }) => {
     setNodes((prev) => {
       const current = prev.find((n) => n.id === id);
-      if (!current) return prev;
+      if (!current || (current.xMm === newPos.x && current.yMm === newPos.y)) return prev;
 
       if (current.type === "DESK") {
         const deltaX = newPos.x - current.xMm;
@@ -287,7 +293,60 @@ export default function NetFloorApp() {
 
       return prev.map((n) => (n.id === id ? { ...n, xMm: newPos.x, yMm: newPos.y } : n));
     });
-  };
+  }, []);
+
+  // Déplacement direct d'un nœud cadencé à 60 FPS par requestAnimationFrame
+  const handleThrottledNodeDragMove = useCallback((id: string, newPos: { x: number; y: number }) => {
+    pendingNodeDragRef.current = { id, pos: newPos };
+    if (!rafNodeDragRef.current) {
+      rafNodeDragRef.current = requestAnimationFrame(() => {
+        if (pendingNodeDragRef.current) {
+          handleNodeUpdate(pendingNodeDragRef.current.id, pendingNodeDragRef.current.pos);
+        }
+        rafNodeDragRef.current = null;
+      });
+    }
+  }, [handleNodeUpdate]);
+
+  // Fin du déplacement d'un nœud (commit immédiat avec magnétisme)
+  const handleNodeMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
+    if (rafNodeDragRef.current) {
+      cancelAnimationFrame(rafNodeDragRef.current);
+      rafNodeDragRef.current = null;
+    }
+    pendingNodeDragRef.current = null;
+    handleNodeUpdate(id, newPos);
+  }, [handleNodeUpdate]);
+
+  // Déplacement d'une baie informatique
+  const handleRackUpdate = useCallback((id: string, newPos: { x: number; y: number }) => {
+    setRacks((prev) => {
+      const current = prev.find((r) => r.id === id);
+      if (!current || (current.xMm === newPos.x && current.yMm === newPos.y)) return prev;
+      return prev.map((r) => (r.id === id ? { ...r, xMm: newPos.x, yMm: newPos.y } : r));
+    });
+  }, []);
+
+  // Déplacement d'une baie throttlé par RAF
+  const handleThrottledRackDragMove = useCallback((id: string, newPos: { x: number; y: number }) => {
+    pendingRackDragRef.current = { id, pos: newPos };
+    if (!rafRackDragRef.current) {
+      rafRackDragRef.current = requestAnimationFrame(() => {
+        if (pendingRackDragRef.current) {
+          handleRackUpdate(pendingRackDragRef.current.id, pendingRackDragRef.current.pos);
+        }
+        rafRackDragRef.current = null;
+      });
+    }
+  }, [handleRackUpdate]);
+
+  // Nettoyage des timers RAF au démontage
+  useEffect(() => {
+    return () => {
+      if (rafNodeDragRef.current) cancelAnimationFrame(rafNodeDragRef.current);
+      if (rafRackDragRef.current) cancelAnimationFrame(rafRackDragRef.current);
+    };
+  }, []);
 
   // Option : Basculer ou assigner la liaison d'une prise à un bureau
   const handleToggleAttachment = (outletId: string, deskId?: string | undefined) => {
@@ -403,13 +462,6 @@ export default function NetFloorApp() {
 
     setNodes((prev) => [...prev, newNode]);
     setSelectedNodeId(newId);
-  };
-
-  // Déplacement d'une baie informatique
-  const handleRackUpdate = (id: string, newPos: { x: number; y: number }) => {
-    setRacks((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, xMm: newPos.x, yMm: newPos.y } : r))
-    );
   };
 
   const scaleMetersText = `${(1000 * viewport.scale).toFixed(1)} px/m`;
@@ -542,9 +594,9 @@ export default function NetFloorApp() {
             activeViewMode={activeViewMode}
             onSelectOutlet={handleSelectOutlet}
             onSelectNode={handleSelectNode}
-            onNodePositionChange={handleNodeUpdate}
-            onNodeDragMove={handleNodeUpdate}
-            onRackDragMove={handleRackUpdate}
+            onNodePositionChange={handleNodeMoveEnd}
+            onNodeDragMove={handleThrottledNodeDragMove}
+            onRackDragMove={handleThrottledRackDragMove}
           />
 
           {/* Quick tips badge */}
