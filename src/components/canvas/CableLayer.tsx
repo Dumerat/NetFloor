@@ -3,10 +3,14 @@
 import { useState, type FC } from "react";
 import { Line, Group, Circle, Rect, Text } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
+import {
+  VlanStyle,
+  DEFAULT_VLAN_STYLES,
+  getKonvaStrokeConfig,
+} from "@/data/vlanStyles";
 
 export type CableFilterMode =
   | "ALL"
-  | "BACKBONE_ONLY"
   | "HORIZONTAL_ONLY"
   | "VLAN_20"
   | "VLAN_30"
@@ -34,6 +38,7 @@ interface CableLayerProps {
   activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK" | undefined;
   cableFilterMode?: CableFilterMode | undefined;
   selectedNodeId?: string | null | undefined;
+  vlanStyles?: Record<number, VlanStyle> | undefined;
   onSelectNodeId?: ((nodeId: string) => void) | undefined;
   onWaypointChange?: ((cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => void) | undefined;
   onAddWaypoint?: ((cableId: string) => void) | undefined;
@@ -46,6 +51,7 @@ export const CableLayer: FC<CableLayerProps> = ({
   activeViewMode = "ALL",
   cableFilterMode = "ALL",
   selectedNodeId,
+  vlanStyles,
   onSelectNodeId,
   onWaypointChange,
   onAddWaypoint,
@@ -60,9 +66,6 @@ export const CableLayer: FC<CableLayerProps> = ({
   // Filtrage dynamique des câbles
   const filteredCables = cables.filter((cable) => {
     if (cableFilterMode === "ALL") return true;
-    if (cableFilterMode === "BACKBONE_ONLY") {
-      return cable.cableType === "BACKBONE_TRUNK";
-    }
     if (cableFilterMode === "HORIZONTAL_ONLY") {
       return cable.cableType === "HORIZONTAL_RUN";
     }
@@ -84,10 +87,11 @@ export const CableLayer: FC<CableLayerProps> = ({
   return (
     <Group>
       {filteredCables.map((cable) => {
-        const isHighlighted =
+        const isHighlighted = Boolean(
           activeCircuitCableIds.has(cable.id) ||
           (selectedNodeId &&
-            (cable.sourceNodeId === selectedNodeId || cable.targetNodeId === selectedNodeId));
+            (cable.sourceNodeId === selectedNodeId || cable.targetNodeId === selectedNodeId))
+        );
 
         const isCableSelected = Boolean(
           selectedNodeId &&
@@ -99,12 +103,7 @@ export const CableLayer: FC<CableLayerProps> = ({
         const waypoints =
           cable.waypoints && cable.waypoints.length > 0
             ? cable.waypoints
-            : [
-                {
-                  x: 14800,
-                  y: 9000,
-                },
-              ];
+            : [{ x: Math.round((cable.sourcePos.x + cable.targetPos.x) / 2), y: cable.sourcePos.y }];
 
         if (cable.cableType === "HORIZONTAL_RUN") {
           // Tracé Manhattan orthogonal strict à angles droits 90° traversant tous les coudes/waypoints déplaçables
@@ -126,7 +125,7 @@ export const CableLayer: FC<CableLayerProps> = ({
           // Raccordement horizontal direct dans la baie
           points.push(cable.targetPos.x, cable.targetPos.y);
         } else {
-          // Liaison Backbone Trunk droite
+          // Liaison droite directe
           points = [
             cable.sourcePos.x,
             cable.sourcePos.y,
@@ -135,16 +134,11 @@ export const CableLayer: FC<CableLayerProps> = ({
           ];
         }
 
-        // Couleur selon le rôle / VLAN
-        const strokeColor = isHighlighted
-          ? "#38bdf8"
-          : cable.vlanId === 30
-          ? "rgba(192, 132, 252, 0.9)" // Violet VoIP
-          : cable.vlanId === 40
-          ? "rgba(251, 191, 36, 0.9)" // Ambre Print
-          : cable.vlanId === 50
-          ? "rgba(129, 140, 248, 0.9)" // Indigo Wi-Fi
-          : "rgba(59, 130, 246, 0.85)"; // Bleu Data
+        // Configuration du style personnalisé du câble (couleur, tirets/pointillés, épaisseur)
+        const vlanStyle = cable.vlanId
+          ? vlanStyles?.[cable.vlanId] ?? DEFAULT_VLAN_STYLES[cable.vlanId]
+          : undefined;
+        const { strokeColor, strokeWidth, dash } = getKonvaStrokeConfig(vlanStyle, isHighlighted);
 
         return (
           <Group key={cable.id}>
@@ -154,7 +148,8 @@ export const CableLayer: FC<CableLayerProps> = ({
               points={points}
               tension={0} // Strictement zéro courbure : traits 100% droits à 90°
               stroke={strokeColor}
-              strokeWidth={isHighlighted ? 70 : 40}
+              strokeWidth={strokeWidth}
+              {...(dash ? { dash } : {})}
               hitStrokeWidth={120} // Très facile à cliquer / survoler
               lineCap="round"
               lineJoin="round"

@@ -40,6 +40,8 @@ import {
   saveStoredSettings,
   resetStoredSettings,
 } from "@/data/settingsStore";
+import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
+import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -47,6 +49,9 @@ interface SettingsModalProps {
   nodes: NodeDisplay[];
   onUpdateNodeProperties?: (nodeId: string, updates: Partial<NodeDisplay>) => void;
   onImportDiscoveredDevice?: (device: DeviceTelemetry) => void;
+  vlanStyles?: Record<number, VlanStyle> | undefined;
+  onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
+  onResetVlanStyles?: (() => void) | undefined;
 }
 
 type TabType = "sso" | "snmp" | "ipam" | "integrations";
@@ -57,6 +62,9 @@ export const SettingsModal: FC<SettingsModalProps> = ({
   nodes,
   onUpdateNodeProperties,
   onImportDiscoveredDevice,
+  vlanStyles,
+  onUpdateVlanStyle,
+  onResetVlanStyles,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("sso");
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
@@ -1233,6 +1241,15 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Personnalisation des Styles de Câbles par VLAN */}
+              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-lg">
+                <VlanStyleCustomizer
+                  vlanStyles={vlanStyles ?? DEFAULT_VLAN_STYLES}
+                  onUpdateVlanStyle={onUpdateVlanStyle ?? (() => {})}
+                  onResetVlanStyles={onResetVlanStyles}
+                />
               </div>
 
               {/* Barre de recherche et filtres */}

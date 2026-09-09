@@ -12,6 +12,7 @@ import {
 import { GridLayer } from "./GridLayer";
 import { CableLayer, CableData, CableFilterMode } from "./CableLayer";
 import { EquipmentLayer, RackDisplay, NodeDisplay } from "./EquipmentLayer";
+import { VlanStyle } from "@/data/vlanStyles";
 
 interface FloorCanvasProps {
   floorWidthMm: number;
@@ -23,6 +24,7 @@ interface FloorCanvasProps {
   selectedNodeId?: string | null | undefined;
   activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK" | undefined;
   cableFilterMode?: CableFilterMode | undefined;
+  vlanStyles?: Record<number, VlanStyle> | undefined;
   onSelectOutlet: (node: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onNodePositionChange?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
@@ -43,6 +45,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   selectedNodeId,
   activeViewMode = "ALL",
   cableFilterMode = "ALL",
+  vlanStyles,
   onSelectOutlet,
   onSelectNode,
   onNodePositionChange,
@@ -193,6 +196,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             activeViewMode={activeViewMode}
             cableFilterMode={cableFilterMode}
             selectedNodeId={selectedNodeId ?? selectedOutletId}
+            vlanStyles={vlanStyles}
             onSelectNodeId={(id) => {
               const node = nodes.find((n) => n.id === id);
               if (node) {

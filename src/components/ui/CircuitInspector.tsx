@@ -46,6 +46,8 @@ import {
   ArrowLeftRight,
   ArrowUpDown,
 } from "lucide-react";
+import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
+import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 
 export interface InternalRackPatch {
   id: string;
@@ -223,6 +225,9 @@ export interface CircuitInspectorProps {
   onUpdateNodeProperties?: ((nodeId: string, updates: Partial<NodeDisplay>) => void) | undefined;
   onAddWaypoint?: ((cableId: string) => void) | undefined;
   onRemoveWaypoint?: ((cableId: string) => void) | undefined;
+  vlanStyles?: Record<number, VlanStyle> | undefined;
+  onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
+  onResetVlanStyles?: (() => void) | undefined;
 }
 
 export const CircuitInspector: FC<CircuitInspectorProps> = ({
@@ -241,6 +246,9 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
   onUpdateNodeProperties,
   onAddWaypoint,
   onRemoveWaypoint,
+  vlanStyles,
+  onUpdateVlanStyle,
+  onResetVlanStyles,
 }) => {
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false);
@@ -1945,6 +1953,16 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                     <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded">Trunk</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Personnalisation du Tracé & Couleurs de Câbles par VLAN */}
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <VlanStyleCustomizer
+                  vlanStyles={vlanStyles ?? DEFAULT_VLAN_STYLES}
+                  onUpdateVlanStyle={onUpdateVlanStyle ?? (() => {})}
+                  onResetVlanStyles={onResetVlanStyles}
+                  compact={true}
+                />
               </div>
             </div>
           )}

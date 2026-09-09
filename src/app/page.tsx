@@ -22,7 +22,16 @@ import {
   Layers,
   Sparkles,
   Download,
+  Palette,
+  X,
 } from "lucide-react";
+import {
+  VlanStyle,
+  DEFAULT_VLAN_STYLES,
+  loadStoredVlanStyles,
+  saveStoredVlanStyles,
+} from "@/data/vlanStyles";
+import { VlanStyleCustomizer } from "@/components/ui/VlanStyleCustomizer";
 
 // Chargement dynamique du canvas Konva sans SSR
 const DynamicFloorCanvas = dynamic(
@@ -54,6 +63,40 @@ export default function NetFloorApp() {
 
   // Filtre actif des câbles (DSI / Réseau)
   const [cableFilterMode, setCableFilterMode] = useState<CableFilterMode>("ALL");
+
+  // Styles visuels des câbles par VLAN (couleur, motif plein/pointillé, épaisseur)
+  const [vlanStyles, setVlanStyles] = useState<Record<number, VlanStyle>>(DEFAULT_VLAN_STYLES);
+  const [isVlanStyleModalOpen, setIsVlanStyleModalOpen] = useState(false);
+
+  // Chargement des styles VLAN stockés au montage
+  useEffect(() => {
+    setVlanStyles(loadStoredVlanStyles());
+  }, []);
+
+  // Mise à jour d'un style de VLAN avec persistance
+  const handleUpdateVlanStyle = useCallback((vlanId: number, updates: Partial<VlanStyle>) => {
+    setVlanStyles((prev) => {
+      const existing = prev[vlanId] ?? DEFAULT_VLAN_STYLES[vlanId] ?? {
+        vlanId,
+        vlanName: `VLAN ${vlanId}`,
+        color: "#3b82f6",
+        strokePattern: "SOLID",
+        thickness: "NORMAL",
+      };
+      const updated = {
+        ...prev,
+        [vlanId]: { ...existing, ...updates },
+      };
+      saveStoredVlanStyles(updated);
+      return updated;
+    });
+  }, []);
+
+  // Réinitialisation des styles de VLAN aux valeurs par défaut
+  const handleResetVlanStyles = useCallback(() => {
+    setVlanStyles(DEFAULT_VLAN_STYLES);
+    saveStoredVlanStyles(DEFAULT_VLAN_STYLES);
+  }, []);
 
   // Waypoints de courbure personnalisés déplacés par l'utilisateur à la souris
   const [customWaypoints, setCustomWaypoints] = useState<Record<string, { x: number; y: number }[]>>({});
@@ -425,9 +468,12 @@ export default function NetFloorApp() {
 
       const vlanId = isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20;
 
-      const baseAlpha = "0.75";
+      const customColor = vlanStyles[vlanId]?.color;
+      const baseAlpha = "0.85";
 
-      const cableColor = isVoip
+      const cableColor = customColor
+        ? customColor
+        : isVoip
         ? `rgba(168, 85, 247, ${baseAlpha})`
         : isPrinter
         ? `rgba(245, 158, 11, ${baseAlpha})`
@@ -458,21 +504,8 @@ export default function NetFloorApp() {
       });
     });
 
-    // Liaison Backbone Trunk / Interconnexion Baie
-    list.push({
-      id: "cable-backbone-01",
-      cableType: "BACKBONE_TRUNK",
-      category: "OM4_FIBER",
-      lengthMm: 12000,
-      colorCode: "rgba(56, 189, 248, 0.9)",
-      sourcePos: { x: rack.xMm + 600, y: rack.yMm + 300 },
-      targetPos: { x: rack.xMm + 1400, y: rack.yMm + 300 },
-      vlanId: 20,
-      sourceNodeId: rack.id,
-    });
-
     return list;
-  }, [nodes, racks, activeViewMode, customWaypoints]);
+  }, [nodes, racks, activeViewMode, customWaypoints, vlanStyles]);
 
   // Traçage CTE récursif lors du clic sur une prise murale
   const handleSelectOutlet = useCallback(async (outletNode: NodeDisplay) => {
@@ -1279,16 +1312,6 @@ export default function NetFloorApp() {
                 Tous ({cables.length})
               </button>
               <button
-                onClick={() => setCableFilterMode("BACKBONE_ONLY")}
-                className={`px-2.5 py-1 rounded-lg transition ${
-                  cableFilterMode === "BACKBONE_ONLY"
-                    ? "bg-blue-600 text-white font-bold shadow"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                Baie ➔ Switch
-              </button>
-              <button
                 onClick={() => setCableFilterMode("HORIZONTAL_ONLY")}
                 className={`px-2.5 py-1 rounded-lg transition ${
                   cableFilterMode === "HORIZONTAL_ONLY"
@@ -1306,7 +1329,7 @@ export default function NetFloorApp() {
                     : "text-blue-400 hover:bg-slate-800"
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: vlanStyles[20]?.color ?? "#3b82f6" }} />
                 VLAN 20 (Data)
               </button>
               <button
@@ -1317,7 +1340,7 @@ export default function NetFloorApp() {
                     : "text-purple-400 hover:bg-slate-800"
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: vlanStyles[30]?.color ?? "#a855f7" }} />
                 VLAN 30 (VoIP)
               </button>
               <button
@@ -1328,7 +1351,7 @@ export default function NetFloorApp() {
                     : "text-amber-400 hover:bg-slate-800"
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: vlanStyles[40]?.color ?? "#f59e0b" }} />
                 VLAN 40 (Print)
               </button>
               <button
@@ -1339,7 +1362,7 @@ export default function NetFloorApp() {
                     : "text-indigo-400 hover:bg-slate-800"
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: vlanStyles[50]?.color ?? "#6366f1" }} />
                 VLAN 50 (Wi-Fi)
               </button>
               <button
@@ -1351,6 +1374,16 @@ export default function NetFloorApp() {
                 }`}
               >
                 Sélectionné
+              </button>
+
+              {/* Bouton direct de personnalisation des styles & tracés de câbles par VLAN */}
+              <button
+                onClick={() => setIsVlanStyleModalOpen(true)}
+                className="px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border border-sky-800/70 shadow-sm ml-1 hover:border-sky-500/50"
+                title="Personnaliser les couleurs, pointillés et épaisseurs des câbles par VLAN"
+              >
+                <Palette className="w-3.5 h-3.5 text-sky-400" />
+                Styles & Tracés
               </button>
             </div>
           )}
@@ -1364,6 +1397,7 @@ export default function NetFloorApp() {
             selectedNodeId={selectedNodeId}
             activeViewMode={activeViewMode}
             cableFilterMode={cableFilterMode}
+            vlanStyles={vlanStyles}
             onSelectOutlet={handleSelectOutlet}
             onSelectNode={handleSelectNode}
             onNodePositionChange={handleNodeMoveEnd}
@@ -1401,6 +1435,9 @@ export default function NetFloorApp() {
             onUpdateNodeProperties={handleUpdateNodeProperties}
             onAddWaypoint={handleAddWaypoint}
             onRemoveWaypoint={handleRemoveWaypoint}
+            vlanStyles={vlanStyles}
+            onUpdateVlanStyle={handleUpdateVlanStyle}
+            onResetVlanStyles={handleResetVlanStyles}
           />
         </div>
       </div>
@@ -1421,7 +1458,50 @@ export default function NetFloorApp() {
         nodes={nodes}
         onUpdateNodeProperties={handleUpdateNodeProperties}
         onImportDiscoveredDevice={handleImportDiscoveredDevice}
+        vlanStyles={vlanStyles}
+        onUpdateVlanStyle={handleUpdateVlanStyle}
+        onResetVlanStyles={handleResetVlanStyles}
       />
+
+      {/* 5. Modal Dédié Personnalisation Styles & Tracés des Câbles par VLAN */}
+      {isVlanStyleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-950 border border-slate-800 rounded-xl max-w-md w-full p-4 shadow-2xl space-y-3 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                  <Palette className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-100">Personnalisation des Tracés par VLAN</h3>
+                  <p className="text-[10px] text-slate-400">Couleurs, motifs (plein, pointillés, tirets) et épaisseurs</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsVlanStyleModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-[65vh] overflow-y-auto pr-1">
+              <VlanStyleCustomizer
+                vlanStyles={vlanStyles}
+                onUpdateVlanStyle={handleUpdateVlanStyle}
+                onResetVlanStyles={handleResetVlanStyles}
+              />
+            </div>
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setIsVlanStyleModalOpen(false)}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow transition"
+              >
+                Appliquer & Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
