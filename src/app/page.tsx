@@ -17,7 +17,6 @@ import {
   Network,
   Activity,
   Users,
-  Wrench,
   Layers,
   Sparkles,
 } from "lucide-react";
@@ -44,8 +43,8 @@ export default function NetFloorApp() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
 
-  // Filtre de vue métier (RH, Câbleur / Maintenance, Informatique / DSI)
-  const [activeViewMode, setActiveViewMode] = useState<"ALL" | "HR" | "MAINTENANCE" | "NETWORK">("ALL");
+  // Filtre de vue métier (Vue Globale, Vue RH, Vue Technique DSI & Câblage)
+  const [activeViewMode, setActiveViewMode] = useState<"ALL" | "HR" | "TECH">("ALL");
 
   // Étage
   const [floorData] = useState({
@@ -71,27 +70,31 @@ export default function NetFloorApp() {
     {
       id: "desk-408",
       type: "DESK",
-      name: "Poste 408 (Tech Lead)",
+      name: "Bureau 408",
       xMm: 42000,
       yMm: 17500,
       widthMm: 1600,
       heightMm: 800,
       subType: "DESK_SOLO",
-      assignedPerson: "Alexandre Martin (Tech Lead)",
+      assignedPerson: "Alexandre Martin",
+      assignedUserId: "usr-001",
       department: "Tech Lab",
+      description: "Station de développement double écran 27\", station d'accueil Thunderbolt USB-C.",
       chairPosition: "BOTTOM",
     },
     {
       id: "desk-409",
       type: "DESK",
-      name: "Poste 409 (RH Recrutement)",
+      name: "Bureau 409",
       xMm: 42000,
       yMm: 21500,
       widthMm: 1600,
       heightMm: 800,
       subType: "DESK_SOLO",
-      assignedPerson: "Sarah Benali (RH & Recrutement)",
-      department: "RH",
+      assignedPerson: "Sarah Benali",
+      assignedUserId: "usr-002",
+      department: "Ressources Humaines",
+      description: "Poste RH recrutement et entretiens, proche salle d'attente.",
       chairPosition: "BOTTOM",
     },
     {
@@ -163,6 +166,7 @@ export default function NetFloorApp() {
 
   // Calcul dynamique des câbles : ils suivent TOUTES les prises en direct
   const cables: CableData[] = useMemo(() => {
+    if (activeViewMode === "HR") return [];
     const rack = racks.find((r) => r.id === "rack-01") ?? racks[0];
     if (!rack) return [];
 
@@ -175,8 +179,7 @@ export default function NetFloorApp() {
       const isPrinter = outlet.outletRole === "PRINTER";
       const isWifi = outlet.outletRole === "WIFI";
 
-      // Opacité atténuée si en vue RH pour ne pas surcharger la vue spatiale
-      const baseAlpha = activeViewMode === "HR" ? "0.2" : "0.75";
+      const baseAlpha = "0.75";
 
       const cableColor = isVoip
         ? `rgba(168, 85, 247, ${baseAlpha})`
@@ -581,26 +584,15 @@ export default function NetFloorApp() {
             🏢 Vue RH & Espace
           </button>
           <button
-            onClick={() => setActiveViewMode("MAINTENANCE")}
+            onClick={() => setActiveViewMode("TECH")}
             className={`px-3 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
-              activeViewMode === "MAINTENANCE"
+              activeViewMode === "TECH"
                 ? "bg-blue-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-blue-400"
             }`}
           >
-            <Wrench className="w-3.5 h-3.5" />
-            🔌 Vue Câbleur & Terrain
-          </button>
-          <button
-            onClick={() => setActiveViewMode("NETWORK")}
-            className={`px-3 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
-              activeViewMode === "NETWORK"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-slate-400 hover:text-purple-400"
-            }`}
-          >
             <Network className="w-3.5 h-3.5" />
-            ⚡ Vue DSI & VLAN
+            ⚡ Vue DSI & Câblage
           </button>
         </div>
 

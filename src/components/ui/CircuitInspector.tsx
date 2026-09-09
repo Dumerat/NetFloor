@@ -1,8 +1,9 @@
 "use client";
 
-import type { FC } from "react";
+import { useState, useMemo, type FC } from "react";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import { NodeDisplay, OutletRole } from "@/components/canvas/EquipmentLayer";
+import { ENTERPRISE_DIRECTORY } from "@/data/directory";
 import {
   Zap,
   ShieldCheck,
@@ -17,12 +18,18 @@ import {
   Printer,
   Plus,
   ArrowRight,
-  User,
   Ruler,
   RotateCw,
   Armchair,
   Box,
   Wifi,
+  Search,
+  Check,
+  UserMinus,
+  FileText,
+  Mail,
+  Building,
+  UserCheck,
 } from "lucide-react";
 
 export interface CircuitInspectorProps {
@@ -54,6 +61,35 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
   onAddOutletToDesk,
   onUpdateNodeProperties,
 }) => {
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [isUserPickerOpen, setIsUserPickerOpen] = useState(false);
+
+  // Recherche de l'utilisateur actuellement assigné
+  const currentAssignedUser = useMemo(() => {
+    if (!selectedNode) return null;
+    if (selectedNode.assignedUserId) {
+      return ENTERPRISE_DIRECTORY.find((u) => u.id === selectedNode.assignedUserId) ?? null;
+    }
+    if (selectedNode.assignedPerson) {
+      const match = selectedNode.assignedPerson.replace(/\s*\(.*\)/, "").trim().toLowerCase();
+      return ENTERPRISE_DIRECTORY.find((u) => u.fullName.toLowerCase().includes(match)) ?? null;
+    }
+    return null;
+  }, [selectedNode]);
+
+  // Filtrage de l'annuaire selon la recherche
+  const filteredUsers = useMemo(() => {
+    if (!userSearchQuery.trim()) return ENTERPRISE_DIRECTORY;
+    const q = userSearchQuery.toLowerCase();
+    return ENTERPRISE_DIRECTORY.filter(
+      (u) =>
+        u.fullName.toLowerCase().includes(q) ||
+        u.jobTitle.toLowerCase().includes(q) ||
+        u.department.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q)
+    );
+  }, [userSearchQuery]);
+
   // Aucun équipement sélectionné
   if (!selectedNode) {
     return (
@@ -402,12 +438,12 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-        {/* Section 1 : Affectation RH (Collaborateur & Service) */}
-        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+        {/* Section 1 : Affectation RH (Annuaire Entra ID / Active Directory & Description) */}
+        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-emerald-400" />
-              Affectation RH (Occupant)
+              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+              Collaborateur Assigné (Entra ID)
             </span>
             <span
               className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
@@ -416,20 +452,160 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                   : "bg-slate-800 text-slate-400 border-slate-700"
               }`}
             >
-              {selectedNode.assignedPerson ? "OCCUPÉ" : "VACANT"}
+              {selectedNode.assignedPerson ? "OCCUPÉ" : "FLEX / LIBRE"}
             </span>
           </div>
 
-          <div>
-            <label className="text-[10px] text-slate-400 block mb-1">Nom du Collaborateur :</label>
-            <input
-              type="text"
-              value={selectedNode.assignedPerson ?? ""}
-              placeholder="Ex: Alexandre Martin (Tech Lead)"
+          {/* Profil assigné ou sélection */}
+          {currentAssignedUser || selectedNode.assignedPerson ? (
+            <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                      currentAssignedUser?.avatarColor ?? "bg-blue-600"
+                    }`}
+                  >
+                    {(currentAssignedUser?.fullName ?? selectedNode.assignedPerson ?? "U")
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-100">
+                      {currentAssignedUser?.fullName ?? selectedNode.assignedPerson}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {currentAssignedUser?.jobTitle ?? selectedNode.department ?? "Collaborateur"}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() =>
+                    onUpdateNodeProperties?.(selectedNode.id, {
+                      assignedPerson: undefined,
+                      assignedUserId: undefined,
+                      department: undefined,
+                    })
+                  }
+                  title="Libérer le poste (passer en flex)"
+                  className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-900 rounded transition"
+                >
+                  <UserMinus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {currentAssignedUser && (
+                <div className="pt-1.5 border-t border-slate-900 grid grid-cols-1 gap-1 text-[10px] text-slate-400">
+                  <div className="flex items-center gap-1.5">
+                    <Building className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                    <span>{currentAssignedUser.department}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-400">
+                    <Mail className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                    <span className="truncate">{currentAssignedUser.email}</span>
+                  </div>
+                  {currentAssignedUser.phone && (
+                    <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-400">
+                      <Phone className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                      <span>{currentAssignedUser.phone}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={() => setIsUserPickerOpen((prev) => !prev)}
+                className="w-full py-1 px-2 text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-300 rounded border border-slate-800 transition text-center"
+              >
+                {isUserPickerOpen ? "Fermer l'annuaire" : "Changer d'occupant..."}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <div className="text-[10px] text-slate-400">
+                Poste vacant ou flexible. Attribuez un collaborateur :
+              </div>
+              <button
+                onClick={() => setIsUserPickerOpen((prev) => !prev)}
+                className="w-full py-1.5 px-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs flex items-center justify-between transition"
+              >
+                <span className="flex items-center gap-1.5 text-slate-400">
+                  <Search className="w-3.5 h-3.5" />
+                  Sélectionner dans l'annuaire...
+                </span>
+                <span className="text-[10px] text-blue-400 font-mono">Entra ID</span>
+              </button>
+            </div>
+          )}
+
+          {/* Menu déroulant de l'Annuaire Entra ID */}
+          {isUserPickerOpen && (
+            <div className="p-2 bg-slate-950 border border-slate-800 rounded-lg space-y-2 mt-1 shadow-xl">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2" />
+                <input
+                  type="text"
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  placeholder="Rechercher par nom, métier ou service..."
+                  className="w-full pl-7 pr-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 text-[10px] focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="max-h-44 overflow-y-auto space-y-1 pr-1 text-xs">
+                {filteredUsers.map((user) => {
+                  const isCurrent = (currentAssignedUser?.id ?? selectedNode.assignedUserId) === user.id;
+                  return (
+                    <button
+                      key={user.id}
+                      onClick={() => {
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          assignedPerson: user.fullName,
+                          assignedUserId: user.id,
+                          department: user.department,
+                        });
+                        setIsUserPickerOpen(false);
+                      }}
+                      className={`w-full p-1.5 rounded flex items-center justify-between text-left transition ${
+                        isCurrent
+                          ? "bg-emerald-950/40 border border-emerald-500/40 text-emerald-300"
+                          : "hover:bg-slate-900 text-slate-300"
+                      }`}
+                    >
+                      <div className="truncate">
+                        <div className="text-[11px] font-medium text-slate-200 truncate flex items-center gap-1">
+                          {user.fullName}
+                          {isCurrent && <Check className="w-3 h-3 text-emerald-400" />}
+                        </div>
+                        <div className="text-[9px] text-slate-400 truncate">
+                          {user.jobTitle} • <span className="text-slate-500">{user.department}</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Champ Description & Notes du poste */}
+          <div className="pt-2 border-t border-slate-800/80">
+            <label className="text-[10px] text-slate-400 block mb-1 flex items-center gap-1">
+              <FileText className="w-3 h-3 text-blue-400" />
+              Description & Notes du poste :
+            </label>
+            <textarea
+              rows={2}
+              value={selectedNode.description ?? ""}
+              placeholder="Ex: Double écran 27 pouces, station d'accueil USB-C, proche baie vitrée..."
               onChange={(e) =>
-                onUpdateNodeProperties?.(selectedNode.id, { assignedPerson: e.target.value })
+                onUpdateNodeProperties?.(selectedNode.id, { description: e.target.value })
               }
-              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[11px] focus:outline-none focus:border-blue-500"
+              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[11px] focus:outline-none focus:border-blue-500 resize-none font-sans"
             />
           </div>
         </div>

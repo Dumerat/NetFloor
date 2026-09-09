@@ -44,7 +44,9 @@ export interface NodeDisplay {
   attachedToDeskId?: string | undefined;
   outletRole?: OutletRole | undefined;
   assignedPerson?: string | undefined;
+  assignedUserId?: string | undefined;
   department?: string | undefined;
+  description?: string | undefined;
   chairPosition?: "BOTTOM" | "TOP" | "LEFT" | "RIGHT" | "NONE" | undefined;
 }
 
@@ -53,7 +55,7 @@ interface EquipmentLayerProps {
   nodes: NodeDisplay[];
   selectedOutletId?: string | null | undefined;
   selectedNodeId?: string | null | undefined;
-  activeViewMode?: "ALL" | "HR" | "MAINTENANCE" | "NETWORK";
+  activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK";
   onSelectOutlet: (outletNode: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onNodeMoveEnd: (id: string, newPos: { x: number; y: number }) => void;
@@ -110,46 +112,48 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 
   return (
     <Group>
-      {/* 0. Lignes d'ancrage en pointillés reliant les prises solidaires à leur bureau */}
-      {nodes
-        .filter((n) => n.type === "WALL_OUTLET" && n.attachedToDeskId)
-        .map((outlet) => {
-          const desk = nodes.find((d) => d.id === outlet.attachedToDeskId);
-          if (!desk) return null;
-          const deskW = desk.widthMm ?? 1600;
-          const deskH = desk.heightMm ?? 800;
-          const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
-          // Centre réel du bureau en tenant compte de la rotation de celui-ci
-          const deskCenterX = desk.xMm + (deskW / 2) * Math.cos(rotRad) - (deskH / 2) * Math.sin(rotRad);
-          const deskCenterY = desk.yMm + (deskW / 2) * Math.sin(rotRad) + (deskH / 2) * Math.cos(rotRad);
+      {/* 0. Lignes d'ancrage en pointillés reliant les prises solidaires à leur bureau (masquées en vue RH) */}
+      {activeViewMode !== "HR" &&
+        nodes
+          .filter((n) => n.type === "WALL_OUTLET" && n.attachedToDeskId)
+          .map((outlet) => {
+            const desk = nodes.find((d) => d.id === outlet.attachedToDeskId);
+            if (!desk) return null;
+            const deskW = desk.widthMm ?? 1600;
+            const deskH = desk.heightMm ?? 800;
+            const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+            // Centre réel du bureau en tenant compte de la rotation de celui-ci
+            const deskCenterX = desk.xMm + (deskW / 2) * Math.cos(rotRad) - (deskH / 2) * Math.sin(rotRad);
+            const deskCenterY = desk.yMm + (deskW / 2) * Math.sin(rotRad) + (deskH / 2) * Math.cos(rotRad);
 
-          const isVoip = outlet.outletRole === "VOIP";
-          const isPrinter = outlet.outletRole === "PRINTER";
-          const isFloorBox = outlet.subType === "FLOOR_BOX";
-          const lineColor = isVoip
-            ? "#c084fc"
-            : isPrinter
-            ? "#fbbf24"
-            : isFloorBox
-            ? "#38bdf8"
-            : "#38bdf8";
+            const isVoip = outlet.outletRole === "VOIP";
+            const isPrinter = outlet.outletRole === "PRINTER";
+            const isFloorBox = outlet.subType === "FLOOR_BOX";
+            const lineColor = isVoip
+              ? "#c084fc"
+              : isPrinter
+              ? "#fbbf24"
+              : isFloorBox
+              ? "#38bdf8"
+              : "#38bdf8";
 
-          return (
-            <Group key={`anchor-link-${outlet.id}`} listening={false}>
-              <Line
-                points={[deskCenterX, deskCenterY, outlet.xMm, outlet.yMm]}
-                stroke={lineColor}
-                strokeWidth={18}
-                dash={isVoip ? [60, 40] : [70, 50]}
-                opacity={activeViewMode === "HR" ? 0.35 : 0.75}
-                listening={false}
-              />
-            </Group>
-          );
-        })}
+            return (
+              <Group key={`anchor-link-${outlet.id}`} listening={false}>
+                <Line
+                  points={[deskCenterX, deskCenterY, outlet.xMm, outlet.yMm]}
+                  stroke={lineColor}
+                  strokeWidth={18}
+                  dash={isVoip ? [60, 40] : [70, 50]}
+                  opacity={0.75}
+                  listening={false}
+                />
+              </Group>
+            );
+          })}
 
-      {/* 1. Baies Informatiques 19" Réalistes (Racks 42U) */}
-      {racks.map((rack) => (
+      {/* 1. Baies Informatiques 19" Réalistes (Racks 42U) - Masquées en vue RH */}
+      {activeViewMode !== "HR" &&
+        racks.map((rack) => (
         <Group
           key={rack.id}
           x={rack.xMm}
@@ -252,9 +256,6 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
           const height = desk.heightMm ?? 800;
           const isMeeting = desk.subType === "MEETING_TABLE";
           const isBenchDouble = desk.subType === "BENCH_DOUBLE";
-          const attachedOutlets = nodes.filter((n) => n.attachedToDeskId === desk.id);
-
-          const dimText = `${(width / 1000).toFixed(2)} × ${(height / 1000).toFixed(2)} m`;
 
           return (
             <Group
@@ -415,15 +416,18 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 </Group>
               )}
 
-              {/* Cartouche d'identification toujours horizontal et lisible (évite de lire à l'envers) */}
+              {/* Cartouche d'identification épuré et toujours horizontal (ex: "Bureau 408" + Occupant) */}
               {(() => {
                 const rotDeg = desk.rotationDeg ?? 0;
-                // Si le meuble est orienté verticalement (90° ou 270°), la largeur disponible dans le meuble est 'height'
                 const isRotatedVertical = rotDeg % 180 !== 0;
                 const badgeWidth = isRotatedVertical
-                  ? Math.max(500, height - 90)
-                  : Math.max(650, width - 100);
-                const badgeHeight = 260;
+                  ? Math.max(480, height - 90)
+                  : Math.max(540, width - 120);
+                const badgeHeight = 200;
+
+                // Formate un intitulé court : "Bureau {N}"
+                const matchNum = desk.name.match(/\d+/);
+                const shortTitle = matchNum ? `Bureau ${matchNum[0]}` : desk.name.replace(/^Poste\s+/i, "Bureau ");
 
                 return (
                   <Group
@@ -441,16 +445,16 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                       fill="rgba(15, 23, 42, 0.90)"
                       stroke={isSelected ? "#60a5fa" : "#334155"}
                       strokeWidth={8}
-                      cornerRadius={18}
+                      cornerRadius={16}
                       listening={false}
                     />
 
-                    {/* Nom du poste */}
+                    {/* Ligne 1 : "Bureau {N}" */}
                     <Text
                       x={-badgeWidth / 2 + 15}
-                      y={-badgeHeight / 2 + 20}
+                      y={-badgeHeight / 2 + 25}
                       width={badgeWidth - 30}
-                      text={desk.name}
+                      text={shortTitle}
                       fontSize={95}
                       fontFamily="sans-serif"
                       fontStyle="bold"
@@ -459,10 +463,10 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                       listening={false}
                     />
 
-                    {/* Collaborateur affecté RH */}
+                    {/* Ligne 2 : Personne dessus */}
                     <Text
                       x={-badgeWidth / 2 + 15}
-                      y={-badgeHeight / 2 + 110}
+                      y={-badgeHeight / 2 + 115}
                       width={badgeWidth - 30}
                       text={
                         desk.assignedPerson
@@ -476,19 +480,6 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                       align="center"
                       listening={false}
                     />
-
-                    {/* Dimensions & Prises solidaires */}
-                    <Text
-                      x={-badgeWidth / 2 + 15}
-                      y={-badgeHeight / 2 + 190}
-                      width={badgeWidth - 30}
-                      text={`${dimText}${attachedOutlets.length > 0 ? ` • 🔗 ${attachedOutlets.length} prise(s)` : ""}`}
-                      fontSize={65}
-                      fontFamily="monospace"
-                      fill={attachedOutlets.length > 0 ? "#38bdf8" : "#64748b"}
-                      align="center"
-                      listening={false}
-                    />
                   </Group>
                 );
               })()}
@@ -496,9 +487,16 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
           );
         })}
 
-      {/* 3. Connectique & Prises Réalistes (Plastrons muraux, Boîtes de Sol, Wi-Fi, Imprimantes) */}
+      {/* 3. Connectique & Prises Réalistes (masquées en vue RH sauf copieur/mobilier) */}
       {nodes
-        .filter((n) => n.type === "WALL_OUTLET")
+        .filter((n) => {
+          if (n.type !== "WALL_OUTLET") return false;
+          // En vue RH, on ne voit QUE les équipements de bureau (ex: copieurs/imprimantes), les prises et APs sont masquées
+          if (activeViewMode === "HR") {
+            return n.subType === "PRINTER_STATION" || n.outletRole === "PRINTER";
+          }
+          return true;
+        })
         .map((outlet) => {
           const isSelected = activeSelectedId === outlet.id;
           const isFloorBox = outlet.subType === "FLOOR_BOX";

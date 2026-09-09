@@ -16,12 +16,18 @@ export interface CableData {
 interface CableLayerProps {
   cables: CableData[];
   activeCircuitCableIds?: Set<string>;
+  activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK";
 }
 
 export const CableLayer: FC<CableLayerProps> = ({
   cables,
   activeCircuitCableIds = new Set(),
+  activeViewMode = "ALL",
 }) => {
+  if (activeViewMode === "HR") {
+    return null;
+  }
+
   return (
     <Group listening={false}>
       {cables.map((cable) => {

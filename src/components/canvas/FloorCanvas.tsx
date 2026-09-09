@@ -17,7 +17,7 @@ interface FloorCanvasProps {
   cables: CableData[];
   selectedOutletId?: string | null | undefined;
   selectedNodeId?: string | null | undefined;
-  activeViewMode?: "ALL" | "HR" | "MAINTENANCE" | "NETWORK" | undefined;
+  activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK" | undefined;
   onSelectOutlet: (node: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onNodePositionChange?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
@@ -109,9 +109,9 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
           />
         </Layer>
 
-        {/* Calque 2 : Câblage physique dynamique (listening={false} pour 0 overhead hit-canvas) */}
+        {/* Calque 2 : Câblage physique dynamique (masqué en vue RH, listening={false}) */}
         <Layer listening={false}>
-          <CableLayer cables={cables} />
+          <CableLayer cables={cables} activeViewMode={activeViewMode} />
         </Layer>
 
         {/* Calque 3 : Équipements interactifs (Baies, Prises, Bureaux) */}
