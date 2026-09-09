@@ -17,6 +17,7 @@ interface FloorCanvasProps {
   cables: CableData[];
   selectedOutletId?: string | null | undefined;
   selectedNodeId?: string | null | undefined;
+  activeViewMode?: "ALL" | "HR" | "MAINTENANCE" | "NETWORK" | undefined;
   onSelectOutlet: (node: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onNodePositionChange?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
@@ -32,6 +33,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   cables,
   selectedOutletId,
   selectedNodeId,
+  activeViewMode = "ALL",
   onSelectOutlet,
   onSelectNode,
   onNodePositionChange,
@@ -119,6 +121,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             nodes={nodes}
             selectedOutletId={selectedOutletId}
             selectedNodeId={selectedNodeId}
+            activeViewMode={activeViewMode}
             onSelectOutlet={onSelectOutlet}
             onSelectNode={onSelectNode}
             onNodeMoveEnd={handleNodeMoveEnd}
