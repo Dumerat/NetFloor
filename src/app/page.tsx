@@ -23,6 +23,7 @@ import {
   Sparkles,
   Download,
   Palette,
+  Tag,
   X,
 } from "lucide-react";
 import {
@@ -55,6 +56,9 @@ export default function NetFloorApp() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
+
+  // Mode d'affichage des libellés (false = au survol par défaut, true = tous affichés en permanence)
+  const [showAllLabels, setShowAllLabels] = useState(false);
 
   // Vue Métier active
   const [activeViewMode, setActiveViewMode] = useState<
@@ -1415,6 +1419,20 @@ export default function NetFloorApp() {
                 <Palette className="w-3.5 h-3.5 text-sky-400" />
                 Styles & Tracés
               </button>
+
+              {/* Bouton de bascule de visibilité des libellés (Au survol / Tous affichés) */}
+              <button
+                onClick={() => setShowAllLabels((prev) => !prev)}
+                className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 border shadow-sm ml-1 ${
+                  showAllLabels
+                    ? "bg-cyan-600 text-white border-cyan-400 font-bold"
+                    : "bg-slate-900 text-slate-400 hover:text-white border-slate-800 hover:bg-slate-850"
+                }`}
+                title="Basculer l'affichage des noms d'équipements : au survol (par défaut) ou tous visibles"
+              >
+                <Tag className="w-3.5 h-3.5 text-cyan-400" />
+                <span>{showAllLabels ? "Libellés : Tous" : "Libellés : Au survol"}</span>
+              </button>
             </div>
           )}
 
@@ -1428,6 +1446,7 @@ export default function NetFloorApp() {
             activeViewMode={activeViewMode}
             cableFilterMode={cableFilterMode}
             vlanStyles={vlanStyles}
+            showAllLabels={showAllLabels}
             onSelectOutlet={handleSelectOutlet}
             onSelectNode={handleSelectNode}
             onNodePositionChange={handleNodeMoveEnd}

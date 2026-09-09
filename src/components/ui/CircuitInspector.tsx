@@ -44,6 +44,7 @@ import {
   Globe,
   Layers,
   Trash2,
+  Tag,
   ArrowLeftRight,
   ArrowUpDown,
 } from "lucide-react";
@@ -638,6 +639,47 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
               </span>
             </div>
 
+            {/* Position du libellé de la colonnette */}
+            <div className="mt-2.5 pt-2 border-t border-slate-800">
+              <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-cyan-400" />
+                  Position du libellé :
+                </span>
+                <span className="text-cyan-400 font-mono text-[10px]">
+                  {(selectedNode.labelPosition || "RIGHT") === "TOP"
+                    ? "Haut"
+                    : (selectedNode.labelPosition || "RIGHT") === "BOTTOM"
+                    ? "Bas"
+                    : (selectedNode.labelPosition || "RIGHT") === "LEFT"
+                    ? "Gauche"
+                    : "Droite"}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                {[
+                  { id: "TOP" as const, label: "↑ Haut" },
+                  { id: "BOTTOM" as const, label: "↓ Bas" },
+                  { id: "LEFT" as const, label: "← Gauche" },
+                  { id: "RIGHT" as const, label: "→ Droite" },
+                ].map((pos) => (
+                  <button
+                    key={pos.id}
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, { labelPosition: pos.id })
+                    }
+                    className={`py-1 rounded border transition text-center ${
+                      (selectedNode.labelPosition || "RIGHT") === pos.id
+                        ? "bg-cyan-600/30 text-cyan-300 border-cyan-500 font-bold shadow-sm"
+                        : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    {pos.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Sélecteur d'onglets de Ports du slot (Port 1 à 8) */}
             <div className="mt-2.5 pt-2 border-t border-slate-800">
               <div className="flex items-center justify-between mb-1.5">
@@ -1115,6 +1157,47 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                     }`}
                   >
                     {poe.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Position du libellé de la prise */}
+            <div className="pt-2 border-t border-slate-800">
+              <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-cyan-400" />
+                  Position du libellé :
+                </span>
+                <span className="text-cyan-400 font-mono text-[10px]">
+                  {(selectedNode.labelPosition || "RIGHT") === "TOP"
+                    ? "Haut"
+                    : (selectedNode.labelPosition || "RIGHT") === "BOTTOM"
+                    ? "Bas"
+                    : (selectedNode.labelPosition || "RIGHT") === "LEFT"
+                    ? "Gauche"
+                    : "Droite"}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                {[
+                  { id: "TOP" as const, label: "↑ Haut" },
+                  { id: "BOTTOM" as const, label: "↓ Bas" },
+                  { id: "LEFT" as const, label: "← Gauche" },
+                  { id: "RIGHT" as const, label: "→ Droite" },
+                ].map((pos) => (
+                  <button
+                    key={pos.id}
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, { labelPosition: pos.id })
+                    }
+                    className={`py-1 rounded border transition text-center ${
+                      (selectedNode.labelPosition || "RIGHT") === pos.id
+                        ? "bg-cyan-600/30 text-cyan-300 border-cyan-500 font-bold shadow-sm"
+                        : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    {pos.label}
                   </button>
                 ))}
               </div>
@@ -2516,6 +2599,49 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
               }
               className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[11px] focus:outline-none focus:border-blue-500 resize-none font-sans"
             />
+          </div>
+
+          {/* Position du libellé du bureau */}
+          <div className="pt-2 border-t border-slate-800/80">
+            <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Tag className="w-3 h-3 text-cyan-400" />
+                Position du libellé :
+              </span>
+              <span className="text-cyan-400 font-mono text-[10px]">
+                {selectedNode.labelPosition === "TOP"
+                  ? "Haut"
+                  : selectedNode.labelPosition === "BOTTOM"
+                  ? "Bas"
+                  : selectedNode.labelPosition === "LEFT"
+                  ? "Gauche"
+                  : selectedNode.labelPosition === "RIGHT"
+                  ? "Droite"
+                  : "Centre"}
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+              {[
+                { id: "TOP" as const, label: "↑ Haut" },
+                { id: "BOTTOM" as const, label: "↓ Bas" },
+                { id: "LEFT" as const, label: "← Gauche" },
+                { id: "RIGHT" as const, label: "→ Droite" },
+              ].map((pos) => (
+                <button
+                  key={pos.id}
+                  onClick={() =>
+                    onUpdateNodeProperties?.(selectedNode.id, { labelPosition: pos.id })
+                  }
+                  className={`py-1 rounded border transition text-center ${
+                    selectedNode.labelPosition === pos.id
+                      ? "bg-cyan-600/30 text-cyan-300 border-cyan-500 font-bold shadow-sm"
+                      : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                  }`}
+                >
+                  {pos.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

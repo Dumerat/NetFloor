@@ -25,6 +25,7 @@ interface FloorCanvasProps {
   activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK" | undefined;
   cableFilterMode?: CableFilterMode | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
+  showAllLabels?: boolean | undefined;
   onSelectOutlet: (node: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onNodePositionChange?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
@@ -46,6 +47,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   activeViewMode = "ALL",
   cableFilterMode = "ALL",
   vlanStyles,
+  showAllLabels = false,
   onSelectOutlet,
   onSelectNode,
   onNodePositionChange,
@@ -218,6 +220,8 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             selectedOutletId={selectedOutletId}
             selectedNodeId={selectedNodeId}
             activeViewMode={activeViewMode}
+            showAllLabels={showAllLabels}
+            vlanStyles={vlanStyles}
             onSelectOutlet={onSelectOutlet}
             onSelectNode={onSelectNode}
             onNodeMoveEnd={handleNodeMoveEnd}

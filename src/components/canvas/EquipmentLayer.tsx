@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, type FC } from "react";
+import { useRef, useState, type FC } from "react";
 import { Group, Rect, Text, Line, Circle } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
+import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 
 export interface RackDisplay {
   id: string;
@@ -107,6 +108,28 @@ export interface NodeDisplay {
   poeMode?: PoeMode | undefined;
   customEmote?: string | undefined;
   portCount?: number | undefined;
+  labelPosition?: "TOP" | "BOTTOM" | "LEFT" | "RIGHT" | undefined;
+}
+
+export function getLabelCoordinates(
+  position: "TOP" | "BOTTOM" | "LEFT" | "RIGHT" | undefined,
+  boxWidth: number,
+  boxHeight: number,
+  badgeWidth: number,
+  badgeHeight: number,
+  gap: number = 20
+): { x: number; y: number } {
+  switch (position) {
+    case "TOP":
+      return { x: -badgeWidth / 2, y: -boxHeight / 2 - badgeHeight - gap };
+    case "BOTTOM":
+      return { x: -badgeWidth / 2, y: boxHeight / 2 + gap };
+    case "LEFT":
+      return { x: -boxWidth / 2 - badgeWidth - gap, y: -badgeHeight / 2 };
+    case "RIGHT":
+    default:
+      return { x: boxWidth / 2 + gap, y: -badgeHeight / 2 };
+  }
 }
 
 interface EquipmentLayerProps {
@@ -115,6 +138,8 @@ interface EquipmentLayerProps {
   selectedOutletId?: string | null | undefined;
   selectedNodeId?: string | null | undefined;
   activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK";
+  showAllLabels?: boolean | undefined;
+  vlanStyles?: Record<number, VlanStyle> | undefined;
   onSelectOutlet: (outletNode: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onNodeMoveEnd: (id: string, newPos: { x: number; y: number }) => void;
@@ -128,6 +153,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
   selectedOutletId,
   selectedNodeId,
   activeViewMode = "ALL",
+  showAllLabels = false,
+  vlanStyles,
   onSelectOutlet,
   onSelectNode,
   onNodeMoveEnd,
@@ -135,6 +162,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
   onRackDragMove,
 }) => {
   const activeSelectedId = selectedNodeId ?? selectedOutletId;
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   const handleMouseEnter = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
@@ -148,6 +176,16 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
     if (stage) {
       stage.container().style.cursor = "grab";
     }
+  };
+
+  const handleNodeMouseEnter = (nodeId: string, e: KonvaEventObject<MouseEvent>) => {
+    handleMouseEnter(e);
+    setHoveredNodeId(nodeId);
+  };
+
+  const handleNodeMouseLeave = (nodeId: string, e: KonvaEventObject<MouseEvent>) => {
+    handleMouseLeave(e);
+    setHoveredNodeId((prev) => (prev === nodeId ? null : prev));
   };
 
   const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
@@ -638,8 +676,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               y={desk.yMm}
               rotation={rotDeg}
               draggable
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
+              onMouseEnter={(e) => handleNodeMouseEnter(desk.id, e)}
+              onMouseLeave={(e) => handleNodeMouseLeave(desk.id, e)}
               onDragStart={(e) => handleDeskDragStart(desk, e)}
               onDragMove={(e) => handleDeskDragMove(desk, e)}
               onDragEnd={(e) => handleDeskDragEnd(desk, e)}
@@ -812,180 +850,204 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               )}
 
               {/* Cartouches d'identification épurés et TOUJOURS horizontaux (rotation={-rotDeg}) */}
-              {isBenchQuad ? (
-                // ÎLOT 4 POSTES : 4 Grands Badges Distincts + Pill Centrale
-                <Group listening={false}>
-                  {/* Badge Central Îlot */}
-                  <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
-                    <Rect x={-270} y={-50} width={540} height={100} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={18} />
-                    <Text x={-260} y={-28} width={520} text={`${shortTitle} • Îlot 4P`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" wrap="none" ellipsis={true} />
-                  </Group>
+              {(() => {
+                const shouldShowDeskLabel = showAllLabels || isSelected || hoveredNodeId === desk.id;
+                if (!shouldShowDeskLabel) return null;
 
-                  {/* 4 Grands Badges d'occupants dans les 4 quadrants (police adaptative + auto-ellipsis) */}
-                  {[
-                    { idx: 0, cx: width / 4, cy: 380 },
-                    { idx: 1, cx: (3 * width) / 4, cy: 380 },
-                    { idx: 2, cx: width / 4, cy: height - 380 },
-                    { idx: 3, cx: (3 * width) / 4, cy: height - 380 },
-                  ].map(({ idx, cx, cy }) => {
-                    const seat = getSeat(idx);
-                    const isOccupied = Boolean(seat?.fullName);
-                    const nameLen = seat?.fullName?.length ?? 12;
-                    const bW = Math.max(740, Math.min(840, nameLen * 36));
-                    const bH = 180;
-                    const nameFontSize = nameLen > 16 ? 68 : 78;
-
-                    return (
-                      <Group key={`quad-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
-                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.95)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
-                        <Text
-                          x={-bW / 2 + 15}
-                          y={-bH / 2 + 20}
-                          width={bW - 30}
-                          text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"}
-                          fontSize={nameFontSize}
-                          fontFamily="sans-serif"
-                          fontStyle="bold"
-                          fill={isOccupied ? "#f8fafc" : "#94a3b8"}
-                          align="center"
-                          wrap="none"
-                          ellipsis={true}
-                        />
-                        <Text
-                          x={-bW / 2 + 15}
-                          y={-bH / 2 + 105}
-                          width={bW - 30}
-                          text={seat?.department ?? "Disponible / Flex"}
-                          fontSize={54}
-                          fontFamily="sans-serif"
-                          fill={isOccupied ? "#38bdf8" : "#64748b"}
-                          align="center"
-                          wrap="none"
-                          ellipsis={true}
-                        />
-                      </Group>
-                    );
-                  })}
-                </Group>
-              ) : isBenchDouble ? (
-                // BENCH DOUBLE 2 POSTES : 2 Grands Badges Distincts + Pill Centrale
-                <Group listening={false}>
-                  {/* Badge Central Bench */}
-                  <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
-                    <Rect x={-250} y={-45} width={500} height={90} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={16} />
-                    <Text x={-240} y={-26} width={480} text={`${shortTitle} • Bench 2P`} fontSize={56} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" wrap="none" ellipsis={true} />
-                  </Group>
-
-                  {/* 2 Grands Badges d'occupants (Face Nord, Face Sud) */}
-                  {[
-                    { idx: 0, cx: width / 2, cy: 380 },
-                    { idx: 1, cx: width / 2, cy: height - 380 },
-                  ].map(({ idx, cx, cy }) => {
-                    const seat = getSeat(idx);
-                    const isOccupied = Boolean(seat?.fullName);
-                    const nameLen = seat?.fullName?.length ?? 12;
-                    const bW = Math.max(780, Math.min(920, nameLen * 38));
-                    const bH = 180;
-                    const nameFontSize = nameLen > 16 ? 70 : 80;
-
-                    return (
-                      <Group key={`double-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
-                        <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.95)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
-                        <Text
-                          x={-bW / 2 + 15}
-                          y={-bH / 2 + 20}
-                          width={bW - 30}
-                          text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"}
-                          fontSize={nameFontSize}
-                          fontFamily="sans-serif"
-                          fontStyle="bold"
-                          fill={isOccupied ? "#f8fafc" : "#94a3b8"}
-                          align="center"
-                          wrap="none"
-                          ellipsis={true}
-                        />
-                        <Text
-                          x={-bW / 2 + 15}
-                          y={-bH / 2 + 105}
-                          width={bW - 30}
-                          text={seat?.department ?? "Disponible / Flex"}
-                          fontSize={54}
-                          fontFamily="sans-serif"
-                          fill={isOccupied ? "#38bdf8" : "#64748b"}
-                          align="center"
-                          wrap="none"
-                          ellipsis={true}
-                        />
-                      </Group>
-                    );
-                  })}
-                </Group>
-              ) : (
-                // BUREAU SOLO OU TABLE DE RÉUNION
-                (() => {
-                  const isRotatedVertical = rotDeg % 180 !== 0;
-                  const personLen = desk.assignedPerson?.length ?? 12;
-                  const baseBadgeW = isRotatedVertical
-                    ? Math.max(650, height - 60)
-                    : Math.max(760, Math.min(width - 60, personLen * 40));
-                  const badgeWidth = Math.max(baseBadgeW, 760);
-                  const badgeHeight = 200;
-                  const personFontSize = personLen > 16 ? 70 : 82;
-
+                if (isBenchQuad) {
+                  // ÎLOT 4 POSTES : 4 Grands Badges Distincts + Pill Centrale
                   return (
-                    <Group
-                      x={width / 2}
-                      y={height / 2 + 50}
-                      rotation={-rotDeg}
-                      listening={false}
-                    >
-                      <Rect
-                        x={-badgeWidth / 2}
-                        y={-badgeHeight / 2}
-                        width={badgeWidth}
-                        height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.94)"
-                        stroke={isSelected ? "#60a5fa" : "#334155"}
-                        strokeWidth={8}
-                        cornerRadius={18}
-                        listening={false}
-                      />
-                      <Text
-                        x={-badgeWidth / 2 + 15}
-                        y={-badgeHeight / 2 + 25}
-                        width={badgeWidth - 30}
-                        text={shortTitle}
-                        fontSize={95}
-                        fontFamily="sans-serif"
-                        fontStyle="bold"
-                        fill="#f8fafc"
-                        align="center"
-                        wrap="none"
-                        ellipsis={true}
-                        listening={false}
-                      />
-                      <Text
-                        x={-badgeWidth / 2 + 15}
-                        y={-badgeHeight / 2 + 115}
-                        width={badgeWidth - 30}
-                        text={
-                          desk.assignedPerson
-                            ? `👤 ${desk.assignedPerson}`
-                            : "👤 Poste Libre"
-                        }
-                        fontSize={personFontSize}
-                        fontFamily="sans-serif"
-                        fontStyle={desk.assignedPerson ? "bold" : "normal"}
-                        fill={desk.assignedPerson ? "#34d399" : "#94a3b8"}
-                        align="center"
-                        wrap="none"
-                        ellipsis={true}
-                        listening={false}
-                      />
+                    <Group listening={false}>
+                      {/* Badge Central Îlot */}
+                      <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
+                        <Rect x={-270} y={-50} width={540} height={100} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={18} />
+                        <Text x={-260} y={-28} width={520} text={`${shortTitle} • Îlot 4P`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" wrap="none" ellipsis={true} />
+                      </Group>
+
+                      {/* 4 Grands Badges d'occupants dans les 4 quadrants (police adaptative + auto-ellipsis) */}
+                      {[
+                        { idx: 0, cx: width / 4, cy: 380 },
+                        { idx: 1, cx: (3 * width) / 4, cy: 380 },
+                        { idx: 2, cx: width / 4, cy: height - 380 },
+                        { idx: 3, cx: (3 * width) / 4, cy: height - 380 },
+                      ].map(({ idx, cx, cy }) => {
+                        const seat = getSeat(idx);
+                        const isOccupied = Boolean(seat?.fullName);
+                        const nameLen = seat?.fullName?.length ?? 12;
+                        const bW = Math.max(740, Math.min(840, nameLen * 36));
+                        const bH = 180;
+                        const nameFontSize = nameLen > 16 ? 68 : 78;
+
+                        return (
+                          <Group key={`quad-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
+                            <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.95)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
+                            <Text
+                              x={-bW / 2 + 15}
+                              y={-bH / 2 + 20}
+                              width={bW - 30}
+                              text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"}
+                              fontSize={nameFontSize}
+                              fontFamily="sans-serif"
+                              fontStyle="bold"
+                              fill={isOccupied ? "#f8fafc" : "#94a3b8"}
+                              align="center"
+                              wrap="none"
+                              ellipsis={true}
+                            />
+                            <Text
+                              x={-bW / 2 + 15}
+                              y={-bH / 2 + 105}
+                              width={bW - 30}
+                              text={seat?.department ?? "Disponible / Flex"}
+                              fontSize={54}
+                              fontFamily="sans-serif"
+                              fill={isOccupied ? "#38bdf8" : "#64748b"}
+                              align="center"
+                              wrap="none"
+                              ellipsis={true}
+                            />
+                          </Group>
+                        );
+                      })}
                     </Group>
                   );
-                })()
-              )}
+                }
+
+                if (isBenchDouble) {
+                  // BENCH DOUBLE 2 POSTES : 2 Grands Badges Distincts + Pill Centrale
+                  return (
+                    <Group listening={false}>
+                      {/* Badge Central Bench */}
+                      <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
+                        <Rect x={-250} y={-45} width={500} height={90} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={16} />
+                        <Text x={-240} y={-26} width={480} text={`${shortTitle} • Bench 2P`} fontSize={56} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" wrap="none" ellipsis={true} />
+                      </Group>
+
+                      {/* 2 Grands Badges d'occupants (Face Nord, Face Sud) */}
+                      {[
+                        { idx: 0, cx: width / 2, cy: 380 },
+                        { idx: 1, cx: width / 2, cy: height - 380 },
+                      ].map(({ idx, cx, cy }) => {
+                        const seat = getSeat(idx);
+                        const isOccupied = Boolean(seat?.fullName);
+                        const nameLen = seat?.fullName?.length ?? 12;
+                        const bW = Math.max(780, Math.min(920, nameLen * 38));
+                        const bH = 180;
+                        const nameFontSize = nameLen > 16 ? 70 : 80;
+
+                        return (
+                          <Group key={`double-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
+                            <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.95)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
+                            <Text
+                              x={-bW / 2 + 15}
+                              y={-bH / 2 + 20}
+                              width={bW - 30}
+                              text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"}
+                              fontSize={nameFontSize}
+                              fontFamily="sans-serif"
+                              fontStyle="bold"
+                              fill={isOccupied ? "#f8fafc" : "#94a3b8"}
+                              align="center"
+                              wrap="none"
+                              ellipsis={true}
+                            />
+                            <Text
+                              x={-bW / 2 + 15}
+                              y={-bH / 2 + 105}
+                              width={bW - 30}
+                              text={seat?.department ?? "Disponible / Flex"}
+                              fontSize={54}
+                              fontFamily="sans-serif"
+                              fill={isOccupied ? "#38bdf8" : "#64748b"}
+                              align="center"
+                              wrap="none"
+                              ellipsis={true}
+                            />
+                          </Group>
+                        );
+                      })}
+                    </Group>
+                  );
+                }
+
+                // BUREAU SOLO OU TABLE DE RÉUNION
+                const isRotatedVertical = rotDeg % 180 !== 0;
+                const personLen = desk.assignedPerson?.length ?? 12;
+                const baseBadgeW = isRotatedVertical
+                  ? Math.max(650, height - 60)
+                  : Math.max(760, Math.min(width - 60, personLen * 40));
+                const badgeWidth = Math.max(baseBadgeW, 760);
+                const badgeHeight = 200;
+                const personFontSize = personLen > 16 ? 70 : 82;
+                const labelPos = desk.labelPosition;
+
+                let groupX = width / 2;
+                let groupY = height / 2 + 50;
+                if (labelPos === "TOP") {
+                  groupY = -badgeHeight / 2 - 30;
+                } else if (labelPos === "BOTTOM") {
+                  groupY = height + badgeHeight / 2 + 30;
+                } else if (labelPos === "LEFT") {
+                  groupX = -badgeWidth / 2 - 30;
+                  groupY = height / 2;
+                } else if (labelPos === "RIGHT") {
+                  groupX = width + badgeWidth / 2 + 30;
+                  groupY = height / 2;
+                }
+
+                return (
+                  <Group
+                    x={groupX}
+                    y={groupY}
+                    rotation={-rotDeg}
+                    listening={false}
+                  >
+                    <Rect
+                      x={-badgeWidth / 2}
+                      y={-badgeHeight / 2}
+                      width={badgeWidth}
+                      height={badgeHeight}
+                      fill="rgba(15, 23, 42, 0.94)"
+                      stroke={isSelected ? "#60a5fa" : "#334155"}
+                      strokeWidth={8}
+                      cornerRadius={18}
+                      listening={false}
+                    />
+                    <Text
+                      x={-badgeWidth / 2 + 15}
+                      y={-badgeHeight / 2 + 25}
+                      width={badgeWidth - 30}
+                      text={shortTitle}
+                      fontSize={95}
+                      fontFamily="sans-serif"
+                      fontStyle="bold"
+                      fill="#f8fafc"
+                      align="center"
+                      wrap="none"
+                      ellipsis={true}
+                      listening={false}
+                    />
+                    <Text
+                      x={-badgeWidth / 2 + 15}
+                      y={-badgeHeight / 2 + 115}
+                      width={badgeWidth - 30}
+                      text={
+                        desk.assignedPerson
+                          ? `👤 ${desk.assignedPerson}`
+                          : "👤 Poste Libre"
+                      }
+                      fontSize={personFontSize}
+                      fontFamily="sans-serif"
+                      fontStyle={desk.assignedPerson ? "bold" : "normal"}
+                      fill={desk.assignedPerson ? "#34d399" : "#94a3b8"}
+                      align="center"
+                      wrap="none"
+                      ellipsis={true}
+                      listening={false}
+                    />
+                  </Group>
+                );
+              })()}
             </Group>
           );
         })}
@@ -1002,10 +1064,10 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
         })
         .map((outlet) => {
           const isSelected = activeSelectedId === outlet.id;
+          const shouldShowOutletLabel = showAllLabels || isSelected || hoveredNodeId === outlet.id;
           const isFloorBox = outlet.subType === "FLOOR_BOX";
           const isWifiAp = outlet.subType === "WIFI_AP";
           const isPrinter = outlet.subType === "PRINTER_STATION" || outlet.outletRole === "PRINTER";
-          const isVoip = outlet.outletRole === "VOIP";
 
           const linkedDesk = outlet.attachedToDeskId
             ? nodes.find((n) => n.id === outlet.attachedToDeskId)
@@ -1014,6 +1076,9 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 
           // Rendu Boîte de Sol encastrée (Nourrice inox 4x RJ45)
           if (isFloorBox) {
+            const vlan20Color = vlanStyles?.[20]?.color ?? DEFAULT_VLAN_STYLES[20]?.color ?? "#38bdf8";
+            const vlan30Color = vlanStyles?.[30]?.color ?? DEFAULT_VLAN_STYLES[30]?.color ?? "#a855f7";
+
             return (
               <Group
                 key={outlet.id}
@@ -1021,8 +1086,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
+                onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
+                onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
                 onDragStart={handleDragStart}
                 onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
                 onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -1058,44 +1123,74 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   cornerRadius={10}
                   listening={false}
                 />
-                {/* 4 Connecteurs RJ45 en grille 2x2 */}
-                <Rect x={-80} y={-80} width={65} height={65} fill="#0284c7" cornerRadius={6} listening={false} />
-                <Rect x={15} y={-80} width={65} height={65} fill="#0284c7" cornerRadius={6} listening={false} />
-                <Rect x={-80} y={15} width={65} height={65} fill="#c084fc" cornerRadius={6} listening={false} />
-                <Rect x={15} y={15} width={65} height={65} fill="#c084fc" cornerRadius={6} listening={false} />
+                {/* 4 Connecteurs RJ45 avec contour couleur VLAN et statut vert/rouge */}
+                <Rect x={-80} y={-80} width={65} height={65} fill="#0f172a" stroke={vlan20Color} strokeWidth={6} cornerRadius={8} listening={false} />
+                <Circle x={-47} y={-47} radius={8} fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"} listening={false} />
+
+                <Rect x={15} y={-80} width={65} height={65} fill="#0f172a" stroke={vlan20Color} strokeWidth={6} cornerRadius={8} listening={false} />
+                <Circle x={47} y={-47} radius={8} fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"} listening={false} />
+
+                <Rect x={-80} y={15} width={65} height={65} fill="#0f172a" stroke={vlan30Color} strokeWidth={6} cornerRadius={8} listening={false} />
+                <Circle x={-47} y={47} radius={8} fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"} listening={false} />
+
+                <Rect x={15} y={15} width={65} height={65} fill="#0f172a" stroke={vlan30Color} strokeWidth={6} cornerRadius={8} listening={false} />
+                <Circle x={47} y={47} radius={8} fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"} listening={false} />
 
                 {/* Passe-câbles brosse */}
                 <Rect x={-80} y={-100} width={160} height={12} fill="#000" cornerRadius={4} listening={false} />
 
-                {/* Libellé Boîte de Sol épuré mono-ligne */}
-                <Group x={180} y={0} listening={false}>
-                  <Rect
-                    x={0}
-                    y={-45}
-                    width={480}
-                    height={90}
-                    fill="rgba(15, 23, 42, 0.94)"
-                    stroke={isSelected ? "#ffffff" : isLinked ? "#38bdf8" : "#475569"}
-                    strokeWidth={6}
-                    cornerRadius={16}
-                  />
-                  <Text
-                    x={20}
-                    y={-24}
-                    width={440}
-                    text="📦 Boîte de Sol (4x RJ45)"
-                    fontSize={68}
-                    fontFamily="sans-serif"
-                    fontStyle="bold"
-                    fill={isSelected ? "#ffffff" : "#38bdf8"}
-                  />
-                </Group>
+                {/* Libellé Boîte de Sol (au survol / sélection / global) */}
+                {shouldShowOutletLabel && (() => {
+                  const badgeHeight = 60;
+                  const textFontSize = 32;
+                  const badgeWidth = 420;
+                  const labelPos = outlet.labelPosition || "RIGHT";
+                  const { x: groupX, y: groupY } = getLabelCoordinates(
+                    labelPos,
+                    300,
+                    300,
+                    badgeWidth,
+                    badgeHeight,
+                    20
+                  );
+
+                  return (
+                    <Group x={groupX} y={groupY} listening={false}>
+                      <Rect
+                        x={0}
+                        y={0}
+                        width={badgeWidth}
+                        height={badgeHeight}
+                        fill="rgba(15, 23, 42, 0.95)"
+                        stroke={isSelected ? "#ffffff" : isLinked ? "#38bdf8" : "#475569"}
+                        strokeWidth={4}
+                        cornerRadius={12}
+                      />
+                      <Text
+                        x={15}
+                        y={(badgeHeight - textFontSize) / 2}
+                        width={badgeWidth - 30}
+                        text="📦 Boîte de Sol (4x RJ45)"
+                        fontSize={textFontSize}
+                        fontFamily="sans-serif"
+                        fontStyle="bold"
+                        fill={isSelected ? "#ffffff" : "#38bdf8"}
+                        wrap="none"
+                        ellipsis={true}
+                      />
+                    </Group>
+                  );
+                })()}
               </Group>
             );
           }
 
           // Rendu Borne Wi-Fi Ceiling AP
           if (isWifiAp) {
+            const vlan50Color = vlanStyles?.[50]?.color ?? DEFAULT_VLAN_STYLES[50]?.color ?? "#6366f1";
+            const isConnected = outlet.pingStatus === "ONLINE";
+            const statusColor = isConnected ? "#22c55e" : "#ef4444";
+
             return (
               <Group
                 key={outlet.id}
@@ -1103,8 +1198,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
+                onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
+                onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
                 onDragStart={handleDragStart}
                 onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
                 onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -1118,46 +1213,69 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 }}
               >
                 {/* Onde radio Wi-Fi externe */}
-                <Circle radius={180} stroke="#818cf8" strokeWidth={10} dash={[30, 20]} opacity={0.6} listening={false} />
-                {/* Dôme plafonnier */}
+                <Circle radius={180} stroke={vlan50Color} strokeWidth={10} dash={[30, 20]} opacity={0.6} listening={false} />
+                {/* Dôme plafonnier avec contour VLAN */}
                 <Circle
                   radius={120}
                   fill={isSelected ? "#312e81" : "#1e1b4b"}
-                  stroke={isSelected ? "#c7d2fe" : "#818cf8"}
-                  strokeWidth={25}
+                  stroke={isSelected ? "#c7d2fe" : vlan50Color}
+                  strokeWidth={20}
                 />
-                {/* LED d'état centrale verte */}
-                <Circle radius={25} fill="#34d399" listening={false} />
+                {/* LED d'état centrale verte ou rouge */}
+                <Circle radius={25} fill={statusColor} listening={false} />
 
-                {/* Libellé Wi-Fi épuré mono-ligne */}
-                <Group x={160} y={0} listening={false}>
-                  <Rect
-                    x={0}
-                    y={-45}
-                    width={450}
-                    height={90}
-                    fill="rgba(15, 23, 42, 0.94)"
-                    stroke={isSelected ? "#ffffff" : "#818cf8"}
-                    strokeWidth={6}
-                    cornerRadius={16}
-                  />
-                  <Text
-                    x={20}
-                    y={-24}
-                    width={410}
-                    text="📡 Wi-Fi 6 • Plafonnier"
-                    fontSize={68}
-                    fontFamily="sans-serif"
-                    fontStyle="bold"
-                    fill={isSelected ? "#ffffff" : "#c7d2fe"}
-                  />
-                </Group>
+                {/* Libellé Wi-Fi (au survol / sélection / global) */}
+                {shouldShowOutletLabel && (() => {
+                  const badgeHeight = 60;
+                  const textFontSize = 32;
+                  const badgeWidth = 380;
+                  const labelPos = outlet.labelPosition || "RIGHT";
+                  const { x: groupX, y: groupY } = getLabelCoordinates(
+                    labelPos,
+                    260,
+                    260,
+                    badgeWidth,
+                    badgeHeight,
+                    20
+                  );
+
+                  return (
+                    <Group x={groupX} y={groupY} listening={false}>
+                      <Rect
+                        x={0}
+                        y={0}
+                        width={badgeWidth}
+                        height={badgeHeight}
+                        fill="rgba(15, 23, 42, 0.95)"
+                        stroke={isSelected ? "#ffffff" : vlan50Color}
+                        strokeWidth={4}
+                        cornerRadius={12}
+                      />
+                      <Text
+                        x={15}
+                        y={(badgeHeight - textFontSize) / 2}
+                        width={badgeWidth - 30}
+                        text="📡 Wi-Fi 6 • Plafonnier"
+                        fontSize={textFontSize}
+                        fontFamily="sans-serif"
+                        fontStyle="bold"
+                        fill={isSelected ? "#ffffff" : "#c7d2fe"}
+                        wrap="none"
+                        ellipsis={true}
+                      />
+                    </Group>
+                  );
+                })()}
               </Group>
             );
           }
 
           // Rendu Copieur / Imprimante Réseau
           if (isPrinter) {
+            const vlan40Color = vlanStyles?.[40]?.color ?? DEFAULT_VLAN_STYLES[40]?.color ?? "#f59e0b";
+            const isConnected = outlet.pingStatus === "ONLINE";
+            const statusColor = isConnected ? "#22c55e" : "#ef4444";
+
             return (
               <Group
                 key={outlet.id}
@@ -1165,8 +1283,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
+                onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
+                onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
                 onDragStart={handleDragStart}
                 onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
                 onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -1186,37 +1304,58 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   width={400}
                   height={350}
                   fill={isSelected ? "#78350f" : "#1e293b"}
-                  stroke={isSelected ? "#fde68a" : "#d97706"}
-                  strokeWidth={isSelected ? 30 : 20}
+                  stroke={isSelected ? "#fde68a" : vlan40Color}
+                  strokeWidth={isSelected ? 26 : 18}
                   cornerRadius={25}
                 />
                 {/* Vitre scanner & bac papier */}
                 <Rect x={-160} y={-140} width={320} height={180} fill="#0f172a" stroke="#b45309" strokeWidth={10} cornerRadius={10} listening={false} />
                 <Rect x={-160} y={70} width={320} height={70} fill="#334155" cornerRadius={6} listening={false} />
+                {/* Voyant LED de statut vert ou rouge */}
+                <Circle x={140} y={-115} radius={12} fill={statusColor} listening={false} />
 
-                {/* Libellé Copieur épuré mono-ligne */}
-                <Group x={230} y={0} listening={false}>
-                  <Rect
-                    x={0}
-                    y={-45}
-                    width={400}
-                    height={90}
-                    fill="rgba(15, 23, 42, 0.94)"
-                    stroke={isSelected ? "#ffffff" : "#d97706"}
-                    strokeWidth={6}
-                    cornerRadius={16}
-                  />
-                  <Text
-                    x={20}
-                    y={-24}
-                    width={360}
-                    text="🖨️ Copieur RH"
-                    fontSize={68}
-                    fontFamily="sans-serif"
-                    fontStyle="bold"
-                    fill={isSelected ? "#ffffff" : "#fbbf24"}
-                  />
-                </Group>
+                {/* Libellé Copieur (au survol / sélection / global) */}
+                {shouldShowOutletLabel && (() => {
+                  const badgeHeight = 60;
+                  const textFontSize = 32;
+                  const badgeWidth = 340;
+                  const labelPos = outlet.labelPosition || "RIGHT";
+                  const { x: groupX, y: groupY } = getLabelCoordinates(
+                    labelPos,
+                    400,
+                    350,
+                    badgeWidth,
+                    badgeHeight,
+                    20
+                  );
+
+                  return (
+                    <Group x={groupX} y={groupY} listening={false}>
+                      <Rect
+                        x={0}
+                        y={0}
+                        width={badgeWidth}
+                        height={badgeHeight}
+                        fill="rgba(15, 23, 42, 0.95)"
+                        stroke={isSelected ? "#ffffff" : "#d97706"}
+                        strokeWidth={4}
+                        cornerRadius={12}
+                      />
+                      <Text
+                        x={15}
+                        y={(badgeHeight - textFontSize) / 2}
+                        width={badgeWidth - 30}
+                        text="🖨️ Copieur RH"
+                        fontSize={textFontSize}
+                        fontFamily="sans-serif"
+                        fontStyle="bold"
+                        fill={isSelected ? "#ffffff" : "#fbbf24"}
+                        wrap="none"
+                        ellipsis={true}
+                      />
+                    </Group>
+                  );
+                })()}
               </Group>
             );
           }
@@ -1227,7 +1366,7 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             const isTwoColumns = portsCount >= 5;
             const blockWidth = isTwoColumns ? 520 : 340;
             const rows = isTwoColumns ? Math.ceil(portsCount / 2) : portsCount;
-            const blockHeight = 100 + rows * 95;
+            const blockHeight = 85 + rows * 85;
 
             return (
               <Group
@@ -1236,8 +1375,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 x={outlet.xMm}
                 y={outlet.yMm}
                 draggable
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
+                onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
+                onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
                 onDragStart={handleDragStart}
                 onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
                 onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -1258,101 +1397,94 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   height={blockHeight}
                   fill={isSelected ? "#0f172a" : "#1e293b"}
                   stroke={isSelected ? "#38bdf8" : isLinked ? "#0284c7" : "#475569"}
-                  strokeWidth={isSelected ? 30 : 18}
-                  cornerRadius={24}
+                  strokeWidth={isSelected ? 24 : 14}
+                  cornerRadius={20}
                 />
-                {/* En-tête bandeau colonnette */}
+                {/* En-tête bandeau colonnette épuré */}
                 <Rect
                   x={-blockWidth / 2 + 10}
                   y={-blockHeight / 2 + 10}
                   width={blockWidth - 20}
-                  height={45}
+                  height={36}
                   fill="#0f172a"
-                  cornerRadius={12}
+                  cornerRadius={8}
                   listening={false}
                 />
                 <Text
                   x={-blockWidth / 2 + 20}
-                  y={-blockHeight / 2 + 20}
+                  y={-blockHeight / 2 + 18}
                   text={`COLONNETTE ${portsCount}x RJ45`}
-                  fontSize={26}
+                  fontSize={22}
                   fontFamily="sans-serif"
                   fontStyle="bold"
                   fill="#94a3b8"
                   listening={false}
                 />
 
-                {/* Ports RJ45 individuels dans le châssis */}
+                {/* Ports RJ45 individuels : contour couleur du VLAN, vert (connecté) ou rouge (déconnecté) */}
                 {outlet.stackedPorts.map((sp, idx) => {
                   const col = isTwoColumns ? (idx % 2 === 0 ? 0 : 1) : 0;
                   const row = isTwoColumns ? Math.floor(idx / 2) : idx;
                   const portX = isTwoColumns
                     ? (col === 0 ? -blockWidth / 4 : blockWidth / 4)
                     : 0;
-                  const portY = -blockHeight / 2 + 80 + row * 90;
+                  const portY = -blockHeight / 2 + 70 + row * 82;
 
-                  const spColor =
-                    sp.outletRole === "VOIP"
-                      ? "#c084fc"
-                      : sp.outletRole === "PRINTER"
-                      ? "#fbbf24"
-                      : "#38bdf8";
+                  const portVlan = sp.vlanId ?? outlet.vlanId ?? 20;
+                  const vlanColor =
+                    vlanStyles?.[portVlan]?.color ?? DEFAULT_VLAN_STYLES[portVlan]?.color ?? "#38bdf8";
+                  const isConnected = sp.pingStatus === "ONLINE";
+                  const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
                   return (
                     <Group key={`sp-${sp.portIndex}`} x={portX} y={portY} listening={false}>
-                      {/* Embase RJ45 */}
+                      {/* Embase RJ45 avec contour à la couleur du VLAN */}
                       <Rect
-                        x={-90}
-                        y={-35}
-                        width={180}
-                        height={70}
+                        x={-80}
+                        y={-30}
+                        width={160}
+                        height={60}
                         fill="#0f172a"
-                        stroke={spColor}
-                        strokeWidth={5}
-                        cornerRadius={8}
+                        stroke={vlanColor}
+                        strokeWidth={6}
+                        cornerRadius={10}
                       />
-                      {/* Prise RJ45 */}
+                      {/* Prise RJ45 centrale colorée avec statut vert/rouge */}
                       <Rect
-                        x={-75}
-                        y={-22}
-                        width={45}
-                        height={45}
+                        x={-65}
+                        y={-20}
+                        width={42}
+                        height={40}
                         fill="#1e293b"
-                        stroke="#64748b"
+                        stroke={statusColor}
                         strokeWidth={4}
                         cornerRadius={6}
                       />
-                      {/* LED d'activité */}
+                      {/* Voyant / LED de statut vert/rouge */}
                       <Circle
                         x={-15}
                         y={0}
-                        radius={6}
-                        fill={sp.pingStatus === "ONLINE" ? "#22c55e" : "#64748b"}
+                        radius={8}
+                        fill={statusColor}
+                        shadowColor={statusColor}
+                        shadowBlur={8}
                       />
-                      {/* Label port & rôle */}
+                      {/* Numéro de port sobre et lisible sans texte surchargé */}
                       <Text
-                        x={0}
-                        y={-18}
-                        text={`P${idx + 1} ${sp.outletRole}`}
+                        x={10}
+                        y={-12}
+                        text={`P${idx + 1}`}
                         fontSize={26}
                         fontFamily="sans-serif"
                         fontStyle="bold"
-                        fill={spColor}
-                      />
-                      <Text
-                        x={0}
-                        y={6}
-                        text={sp.assignedPerson ? sp.assignedPerson.slice(0, 12) : "Libre"}
-                        fontSize={20}
-                        fontFamily="sans-serif"
-                        fill="#94a3b8"
+                        fill="#f8fafc"
                       />
                     </Group>
                   );
                 })}
 
-                {/* Cartouche latéral d'identification */}
-                {(() => {
+                {/* Cartouche d'identification (visible au survol, si sélectionné, ou si global) */}
+                {shouldShowOutletLabel && (() => {
                   const icon = outlet.customEmote || "🔲";
                   const poeText =
                     outlet.poeMode === "POE_PLUS_PLUS"
@@ -1364,28 +1496,42 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                       : "";
                   const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
                   const title = `${icon} Colonnette (${portsCount}P)${poeText}${vlanText} • ${outlet.name}`;
-                  const badgeWidth = Math.max(380, title.length * 25 + 60);
+                  const badgeHeight = 60;
+                  const textFontSize = 32;
+                  const badgeWidth = Math.min(680, Math.max(260, title.length * 20 + 40));
+                  const labelPos = outlet.labelPosition || "RIGHT";
+                  const { x: groupX, y: groupY } = getLabelCoordinates(
+                    labelPos,
+                    blockWidth,
+                    blockHeight,
+                    badgeWidth,
+                    badgeHeight,
+                    25
+                  );
+
                   return (
-                    <Group x={blockWidth / 2 + 30} y={0} listening={false}>
+                    <Group x={groupX} y={groupY} listening={false}>
                       <Rect
                         x={0}
-                        y={-45}
+                        y={0}
                         width={badgeWidth}
-                        height={90}
-                        fill="rgba(15, 23, 42, 0.94)"
+                        height={badgeHeight}
+                        fill="rgba(15, 23, 42, 0.95)"
                         stroke={isSelected ? "#38bdf8" : "#475569"}
-                        strokeWidth={6}
-                        cornerRadius={16}
+                        strokeWidth={4}
+                        cornerRadius={12}
                       />
                       <Text
-                        x={20}
-                        y={-24}
-                        width={badgeWidth - 40}
+                        x={15}
+                        y={(badgeHeight - textFontSize) / 2}
+                        width={badgeWidth - 30}
                         text={title}
-                        fontSize={64}
+                        fontSize={textFontSize}
                         fontFamily="sans-serif"
                         fontStyle="bold"
                         fill={isSelected ? "#ffffff" : "#38bdf8"}
+                        wrap="none"
+                        ellipsis={true}
                       />
                     </Group>
                   );
@@ -1397,23 +1543,11 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
           // Rendu Plastron Mural Standard RJ45 (Data ou VoIP ou Générique avec Émote & PoE)
           const isVoipRole = outlet.outletRole === "VOIP";
           const roleIcon = outlet.customEmote || (isVoipRole ? "📞" : "🔌");
-          const roleColor = isVoip ? "#c084fc" : "#38bdf8";
-          const roleFill = isSelected
-            ? isVoip
-              ? "#9333ea"
-              : "#2563eb"
-            : isLinked
-            ? isVoip
-              ? "#6b21a8"
-              : "#0369a1"
-            : "#334155";
-          const roleStroke = isSelected
-            ? isVoip
-              ? "#f3e8ff"
-              : "#93c5fd"
-            : isLinked
-            ? roleColor
-            : "#64748b";
+          const vlanId = outlet.vlanId ?? (isVoipRole ? 30 : 20);
+          const vlanColor =
+            vlanStyles?.[vlanId]?.color ?? DEFAULT_VLAN_STYLES[vlanId]?.color ?? (isVoipRole ? "#c084fc" : "#38bdf8");
+          const isConnected = outlet.pingStatus === "ONLINE";
+          const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
           return (
             <Group
@@ -1422,8 +1556,8 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
               x={outlet.xMm}
               y={outlet.yMm}
               draggable
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
+              onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
+              onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
               onDragStart={handleDragStart}
               onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
               onDragEnd={(e) => handleDragEnd(outlet.id, e)}
@@ -1436,36 +1570,71 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 onSelectNode?.(outlet);
               }}
             >
-              {/* Plastron mural compact */}
+              {/* Plastron mural épuré avec contour couleur VLAN */}
               <Rect
-                x={-125}
-                y={-125}
-                width={250}
-                height={250}
-                fill={roleFill}
-                stroke={roleStroke}
-                strokeWidth={isSelected ? 35 : 20}
-                cornerRadius={35}
+                x={-110}
+                y={-110}
+                width={220}
+                height={220}
+                fill={isSelected ? "#0f172a" : "#1e293b"}
+                stroke={isSelected ? "#ffffff" : vlanColor}
+                strokeWidth={isSelected ? 20 : 12}
+                cornerRadius={28}
               />
+
               {/* Connecteur RJ45 frontal ou Émote personnalisée */}
               {outlet.customEmote ? (
                 <Text
-                  x={-60}
-                  y={-60}
-                  width={120}
-                  height={120}
+                  x={-55}
+                  y={-55}
+                  width={110}
+                  height={110}
                   text={outlet.customEmote}
-                  fontSize={85}
+                  fontSize={75}
                   align="center"
                   verticalAlign="middle"
                   listening={false}
                 />
               ) : (
-                <Rect x={-45} y={-45} width={90} height={90} fill="#0f172a" stroke="#475569" strokeWidth={8} cornerRadius={10} listening={false} />
+                <Group listening={false}>
+                  <Rect
+                    x={-42}
+                    y={-42}
+                    width={84}
+                    height={84}
+                    fill="#0f172a"
+                    stroke={statusColor}
+                    strokeWidth={6}
+                    cornerRadius={12}
+                  />
+                  <Rect
+                    x={-24}
+                    y={-24}
+                    width={48}
+                    height={48}
+                    fill="#1e293b"
+                    stroke="#475569"
+                    strokeWidth={4}
+                    cornerRadius={8}
+                  />
+                </Group>
               )}
 
-              {/* Cartouche épuré mono-ligne avec nom court ou personne assignée */}
-              {(() => {
+              {/* Pastille de statut connecté (vert) ou déconnecté (rouge) */}
+              <Circle
+                x={70}
+                y={-70}
+                radius={14}
+                fill={statusColor}
+                stroke="#0f172a"
+                strokeWidth={4}
+                shadowColor={statusColor}
+                shadowBlur={8}
+                listening={false}
+              />
+
+              {/* Cartouche d'identification (visible au survol, si sélectionné ou global) */}
+              {shouldShowOutletLabel && (() => {
                 const poeText =
                   outlet.poeMode === "POE_PLUS_PLUS"
                     ? " ⚡PoE++"
@@ -1487,29 +1656,42 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                   shortOutletText = `${roleIcon} ${cleanName}${poeText}${vlanText}`;
                 }
 
-                const badgeWidth = Math.max(380, shortOutletText.length * 28 + 60);
+                const badgeHeight = 60;
+                const textFontSize = 32;
+                const badgeWidth = Math.min(650, Math.max(220, shortOutletText.length * 20 + 40));
+                const labelPos = outlet.labelPosition || "RIGHT";
+                const { x: groupX, y: groupY } = getLabelCoordinates(
+                  labelPos,
+                  220,
+                  220,
+                  badgeWidth,
+                  badgeHeight,
+                  20
+                );
 
                 return (
-                  <Group x={150} y={0} listening={false}>
+                  <Group x={groupX} y={groupY} listening={false}>
                     <Rect
                       x={0}
-                      y={-45}
+                      y={0}
                       width={badgeWidth}
-                      height={90}
-                      fill="rgba(15, 23, 42, 0.94)"
-                      stroke={isSelected ? "#ffffff" : isLinked ? roleColor : "#475569"}
-                      strokeWidth={6}
-                      cornerRadius={16}
+                      height={badgeHeight}
+                      fill="rgba(15, 23, 42, 0.95)"
+                      stroke={isSelected ? "#ffffff" : isLinked ? vlanColor : "#475569"}
+                      strokeWidth={4}
+                      cornerRadius={12}
                     />
                     <Text
-                      x={20}
-                      y={-24}
-                      width={badgeWidth - 40}
+                      x={15}
+                      y={(badgeHeight - textFontSize) / 2}
+                      width={badgeWidth - 30}
                       text={shortOutletText}
-                      fontSize={68}
+                      fontSize={textFontSize}
                       fontFamily="sans-serif"
                       fontStyle="bold"
-                      fill={isSelected ? "#ffffff" : roleColor}
+                      fill={isSelected ? "#ffffff" : vlanColor}
+                      wrap="none"
+                      ellipsis={true}
                     />
                   </Group>
                 );
