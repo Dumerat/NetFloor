@@ -102,6 +102,18 @@ export const SettingsModal: FC<SettingsModalProps> = ({
   const [ipSearch, setIpSearch] = useState("");
   const [ipFilterType, setIpFilterType] = useState<string>("ALL");
 
+  // Sélection du VLAN actif pour édition directe et style dans l'IPAM
+  const [selectedIpamVlanId, setSelectedIpamVlanId] = useState<number>(20);
+
+  const handleUpdateSubnet = (vlanId: number, updates: Partial<SubnetDefinition>) => {
+    setSettings((prev) => ({
+      ...prev,
+      subnets: prev.subnets.map((sub) =>
+        sub.vlanId === vlanId ? { ...sub, ...updates } : sub
+      ),
+    }));
+  };
+
   // Modal d'ajout de sous-réseau VLAN
   const [isAddSubnetOpen, setIsAddSubnetOpen] = useState(false);
   const [newSubnet, setNewSubnet] = useState<SubnetDefinition>({
@@ -1317,37 +1329,154 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Résumé des sous-réseaux */}
-              <div className="grid grid-cols-4 gap-3">
-                {settings.subnets.map((sub) => (
-                  <div key={sub.vlanId} className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className="text-slate-100">VLAN {sub.vlanId}</span>
-                      <span className="text-[10px] font-mono text-cyan-400">{sub.cidr}</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400">{sub.vlanName}</div>
-                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
+              {/* Résumé des sous-réseaux (Cliquables pour sélection & personnalisation directe) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <span>Sous-réseaux & VLANs configurés</span>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      (Cliquez sur un VLAN pour l'éditer et personnaliser son tracé)
+                    </span>
+                  </span>
+                  <span className="text-[10px] text-cyan-400 font-mono">
+                    VLAN actif : VID {selectedIpamVlanId}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2.5">
+                  {settings.subnets.map((sub) => {
+                    const isSelected = selectedIpamVlanId === sub.vlanId;
+                    const vStyle = vlanStyles?.[sub.vlanId] ?? DEFAULT_VLAN_STYLES[sub.vlanId];
+                    const vColor = vStyle?.color ?? "#38bdf8";
+
+                    return (
                       <div
-                        className="bg-cyan-500 h-full rounded-full"
-                        style={{ width: `${Math.min(100, (sub.usedIps / sub.totalIps) * 100)}%` }}
-                      />
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-500 flex justify-between pt-1">
-                      <span>GW: {sub.gateway}</span>
-                      <span>{sub.usedIps}/{sub.totalIps} IP</span>
-                    </div>
-                  </div>
-                ))}
+                        key={sub.vlanId}
+                        onClick={() => setSelectedIpamVlanId(sub.vlanId)}
+                        className={`p-3 rounded-lg cursor-pointer transition-all border text-left ${
+                          isSelected
+                            ? "bg-slate-900 border-cyan-500 shadow-md ring-1 ring-cyan-500/50"
+                            : "bg-slate-950/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs font-semibold mb-1">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
+                              style={{ backgroundColor: vColor }}
+                            />
+                            <span className={isSelected ? "text-cyan-300 font-bold" : "text-slate-100"}>
+                              VLAN {sub.vlanId}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-cyan-400">{sub.cidr}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">{sub.vlanName}</div>
+                        <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
+                          <div
+                            className="bg-cyan-500 h-full rounded-full transition-all"
+                            style={{ width: `${Math.min(100, (sub.usedIps / sub.totalIps) * 100)}%` }}
+                          />
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500 flex justify-between pt-1">
+                          <span>GW: {sub.gateway}</span>
+                          <span>{sub.usedIps}/{sub.totalIps} IP</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Personnalisation des Styles de Câbles par VLAN */}
-              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-lg">
-                <VlanStyleCustomizer
-                  vlanStyles={vlanStyles ?? DEFAULT_VLAN_STYLES}
-                  onUpdateVlanStyle={onUpdateVlanStyle ?? (() => {})}
-                  onResetVlanStyles={onResetVlanStyles}
-                />
-              </div>
+              {/* Panneau Unifié : Édition du Sous-Réseau & Personnalisation du Style de Câble pour le VLAN sélectionné */}
+              {(() => {
+                const activeSubnet =
+                  settings.subnets.find((s) => s.vlanId === selectedIpamVlanId) ??
+                  settings.subnets[0];
+                if (!activeSubnet) return null;
+
+                return (
+                  <div className="p-3.5 bg-slate-950 border border-cyan-500/40 rounded-lg space-y-3.5 shadow-md">
+                    {/* En-tête du VLAN sélectionné */}
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-850">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3.5 h-3.5 rounded-full shadow"
+                          style={{
+                            backgroundColor:
+                              (vlanStyles?.[activeSubnet.vlanId] ?? DEFAULT_VLAN_STYLES[activeSubnet.vlanId])?.color ??
+                              "#38bdf8",
+                          }}
+                        />
+                        <h4 className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                          Paramétrage & Style : VLAN {activeSubnet.vlanId} ({activeSubnet.vlanName})
+                          <span className="text-[10px] font-normal font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                            Sélectionné
+                          </span>
+                        </h4>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {activeSubnet.usedIps} / {activeSubnet.totalIps} adresses allouées
+                      </span>
+                    </div>
+
+                    {/* 1. Champs d'édition directe du sous-réseau IPAM */}
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-mono block mb-1">
+                          Nom du VLAN :
+                        </label>
+                        <input
+                          type="text"
+                          value={activeSubnet.vlanName}
+                          onChange={(e) =>
+                            handleUpdateSubnet(activeSubnet.vlanId, { vlanName: e.target.value })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded font-mono text-slate-200 focus:border-cyan-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-mono block mb-1">
+                          Plage CIDR :
+                        </label>
+                        <input
+                          type="text"
+                          value={activeSubnet.cidr}
+                          onChange={(e) =>
+                            handleUpdateSubnet(activeSubnet.vlanId, { cidr: e.target.value })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded font-mono text-slate-200 focus:border-cyan-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-mono block mb-1">
+                          Passerelle (Default Gateway) :
+                        </label>
+                        <input
+                          type="text"
+                          value={activeSubnet.gateway}
+                          onChange={(e) =>
+                            handleUpdateSubnet(activeSubnet.vlanId, { gateway: e.target.value })
+                          }
+                          className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded font-mono text-slate-200 focus:border-cyan-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 2. Personnalisation du Style & Tracé du Câble pour ce VLAN (SANS 2nd menu dupliqué) */}
+                    <div className="pt-2 border-t border-slate-900">
+                      <VlanStyleCustomizer
+                        vlanStyles={vlanStyles ?? DEFAULT_VLAN_STYLES}
+                        onUpdateVlanStyle={onUpdateVlanStyle ?? (() => {})}
+                        onResetVlanStyles={onResetVlanStyles}
+                        controlledVlanId={activeSubnet.vlanId}
+                        hideVlanSelector={true}
+                        hideHeader={false}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Barre de recherche et filtres */}
               <div className="flex items-center justify-between gap-3 pt-2">

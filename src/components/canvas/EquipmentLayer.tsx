@@ -16,6 +16,8 @@ export interface RackDisplay {
 
 export type OutletRole = "DATA" | "VOIP" | "WIFI" | "PRINTER" | "GENERIC";
 
+export type PoeMode = "NONE" | "POE" | "POE_PLUS" | "POE_PLUS_PLUS";
+
 export type NodeSubType =
   | "DESK_SOLO"
   | "DESK_COMPACT"
@@ -24,6 +26,7 @@ export type NodeSubType =
   | "BENCH_QUAD"
   | "MEETING_TABLE"
   | "WALL_OUTLET"
+  | "GENERIC_PORT"
   | "FLOOR_BOX"
   | "WIFI_AP"
   | "PRINTER_STATION"
@@ -72,6 +75,7 @@ export interface StackedPortItem {
   pingLatencyMs?: number | undefined;
   portId?: string | undefined;
   vlanId?: number | undefined;
+  poeMode?: PoeMode | undefined;
 }
 
 export interface NodeDisplay {
@@ -99,6 +103,10 @@ export interface NodeDisplay {
   pingStatus?: "ONLINE" | "OFFLINE" | "DEGRADED" | undefined;
   pingLatencyMs?: number | undefined;
   stackedPorts?: StackedPortItem[] | undefined;
+  vlanId?: number | undefined;
+  poeMode?: PoeMode | undefined;
+  customEmote?: string | undefined;
+  portCount?: number | undefined;
 }
 
 interface EquipmentLayerProps {
@@ -1345,7 +1353,17 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
 
                 {/* Cartouche latéral d'identification */}
                 {(() => {
-                  const title = `🔲 Colonnette (${portsCount}P) • ${outlet.name}`;
+                  const icon = outlet.customEmote || "🔲";
+                  const poeText =
+                    outlet.poeMode === "POE_PLUS_PLUS"
+                      ? " • ⚡PoE++"
+                      : outlet.poeMode === "POE_PLUS"
+                      ? " • ⚡PoE+"
+                      : outlet.poeMode === "POE"
+                      ? " • ⚡PoE"
+                      : "";
+                  const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
+                  const title = `${icon} Colonnette (${portsCount}P)${poeText}${vlanText} • ${outlet.name}`;
                   const badgeWidth = Math.max(380, title.length * 25 + 60);
                   return (
                     <Group x={blockWidth / 2 + 30} y={0} listening={false}>
@@ -1376,7 +1394,9 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
             );
           }
 
-          // Rendu Plastron Mural Standard RJ45 (Data ou VoIP)
+          // Rendu Plastron Mural Standard RJ45 (Data ou VoIP ou Générique avec Émote & PoE)
+          const isVoipRole = outlet.outletRole === "VOIP";
+          const roleIcon = outlet.customEmote || (isVoipRole ? "📞" : "🔌");
           const roleColor = isVoip ? "#c084fc" : "#38bdf8";
           const roleFill = isSelected
             ? isVoip
@@ -1427,24 +1447,44 @@ export const EquipmentLayer: FC<EquipmentLayerProps> = ({
                 strokeWidth={isSelected ? 35 : 20}
                 cornerRadius={35}
               />
-              {/* Connecteur RJ45 frontal */}
-              <Rect x={-45} y={-45} width={90} height={90} fill="#0f172a" stroke="#475569" strokeWidth={8} cornerRadius={10} listening={false} />
+              {/* Connecteur RJ45 frontal ou Émote personnalisée */}
+              {outlet.customEmote ? (
+                <Text
+                  x={-60}
+                  y={-60}
+                  width={120}
+                  height={120}
+                  text={outlet.customEmote}
+                  fontSize={85}
+                  align="center"
+                  verticalAlign="middle"
+                  listening={false}
+                />
+              ) : (
+                <Rect x={-45} y={-45} width={90} height={90} fill="#0f172a" stroke="#475569" strokeWidth={8} cornerRadius={10} listening={false} />
+              )}
 
               {/* Cartouche épuré mono-ligne avec nom court ou personne assignée */}
               {(() => {
-                const isVoipRole = outlet.outletRole === "VOIP";
-                const roleIcon = isVoipRole ? "📞" : "💻";
-                const rolePrefix = isVoipRole ? "VoIP" : "Data";
+                const poeText =
+                  outlet.poeMode === "POE_PLUS_PLUS"
+                    ? " ⚡PoE++"
+                    : outlet.poeMode === "POE_PLUS"
+                    ? " ⚡PoE+"
+                    : outlet.poeMode === "POE"
+                    ? " ⚡PoE"
+                    : "";
+                const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
 
                 let shortOutletText = "";
                 if (outlet.assignedPerson) {
-                  shortOutletText = `${roleIcon} ${rolePrefix} • ${outlet.assignedPerson}`;
+                  shortOutletText = `${roleIcon} ${outlet.assignedPerson}${poeText}${vlanText}`;
                 } else {
                   const cleanName = outlet.name
                     .replace(/^PRISE-DESK-/i, "Prise ")
                     .replace(/^PRISE-BENCH-/i, "Prise ")
                     .replace(/^PRISE-/i, "Prise ");
-                  shortOutletText = `${roleIcon} ${cleanName}`;
+                  shortOutletText = `${roleIcon} ${cleanName}${poeText}${vlanText}`;
                 }
 
                 const badgeWidth = Math.max(380, shortOutletText.length * 28 + 60);

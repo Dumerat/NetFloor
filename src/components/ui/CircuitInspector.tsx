@@ -5,6 +5,7 @@ import { CircuitTraceResult } from "@/db/queries/trace-link";
 import {
   NodeDisplay,
   OutletRole,
+  PoeMode,
   DeskSeatOccupant,
   StackedPortItem,
   getDeskSeatCount,
@@ -240,7 +241,7 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
   onAlignWithDesk,
   onTriggerTrace,
   onSelectNode,
-  onChangeRole,
+  onChangeRole: _onChangeRole,
   onAddOutletToDesk,
   onAddColonnetteToDesk,
   onUpdateNodeProperties,
@@ -731,49 +732,82 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                 />
               </div>
 
-              {/* Service & VLAN */}
+              {/* Attribution du VLAN pour ce port individuel */}
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Service affecté :</label>
-                <div className="grid grid-cols-3 gap-1">
-                  <button
-                    onClick={() =>
-                      handleUpdateStackedPort(safeStackedPortIdx, { outletRole: "DATA", vlanId: 20 })
-                    }
-                    className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
-                      curPortRole === "DATA"
-                        ? "bg-blue-600 text-white border-blue-500 font-bold"
-                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
-                    }`}
-                  >
-                    <Laptop className="w-3 h-3" />
-                    PC Data
-                  </button>
-                  <button
-                    onClick={() =>
-                      handleUpdateStackedPort(safeStackedPortIdx, { outletRole: "VOIP", vlanId: 30 })
-                    }
-                    className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
-                      curPortRole === "VOIP"
-                        ? "bg-purple-600 text-white border-purple-500 font-bold"
-                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
-                    }`}
-                  >
-                    <Phone className="w-3 h-3" />
-                    IP Phone
-                  </button>
-                  <button
-                    onClick={() =>
-                      handleUpdateStackedPort(safeStackedPortIdx, { outletRole: "PRINTER", vlanId: 40 })
-                    }
-                    className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
-                      curPortRole === "PRINTER"
-                        ? "bg-amber-600 text-white border-amber-500 font-bold"
-                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
-                    }`}
-                  >
-                    <Printer className="w-3 h-3" />
-                    Copieur
-                  </button>
+                <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                  <span>Attribution du VLAN :</span>
+                  <span className="text-cyan-400 font-mono font-bold">
+                    VLAN {curPort.vlanId ?? (curPortRole === "VOIP" ? 30 : 20)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 text-[10px] font-mono">
+                  {Object.values(vlanStyles ?? DEFAULT_VLAN_STYLES)
+                    .sort((a, b) => a.vlanId - b.vlanId)
+                    .map((v) => {
+                      const isVlanSelected =
+                        curPort.vlanId !== undefined
+                          ? curPort.vlanId === v.vlanId
+                          : curPortRole === "VOIP"
+                          ? v.vlanId === 30
+                          : v.vlanId === 20;
+
+                      return (
+                        <button
+                          key={v.vlanId}
+                          onClick={() =>
+                            handleUpdateStackedPort(safeStackedPortIdx, {
+                              vlanId: v.vlanId,
+                              outletRole:
+                                v.vlanId === 30
+                                  ? "VOIP"
+                                  : v.vlanId === 40
+                                  ? "PRINTER"
+                                  : v.vlanId === 50
+                                  ? "WIFI"
+                                  : "DATA",
+                            })
+                          }
+                          className={`py-1 px-1 rounded border transition flex items-center justify-center gap-1.5 ${
+                            isVlanSelected
+                              ? "bg-slate-800 text-white border-cyan-500 font-bold ring-1 ring-cyan-500/50 shadow-sm"
+                              : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                          }`}
+                        >
+                          <span
+                            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: v.color }}
+                          />
+                          <span>V{v.vlanId}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Alimentation PoE du port individuel */}
+              <div className="pt-1.5 border-t border-slate-800/80">
+                <div className="text-[10px] text-slate-400 mb-1 font-medium">Alimentation PoE :</div>
+                <div className="grid grid-cols-4 gap-1 text-[9px] font-mono">
+                  {[
+                    { id: "NONE" as PoeMode, label: "Non-PoE" },
+                    { id: "POE" as PoeMode, label: "PoE" },
+                    { id: "POE_PLUS" as PoeMode, label: "PoE+" },
+                    { id: "POE_PLUS_PLUS" as PoeMode, label: "PoE++" },
+                  ].map((poe) => (
+                    <button
+                      key={poe.id}
+                      onClick={() =>
+                        handleUpdateStackedPort(safeStackedPortIdx, { poeMode: poe.id })
+                      }
+                      className={`py-1 rounded border transition text-center ${
+                        (curPort.poeMode ?? "NONE") === poe.id
+                          ? "bg-amber-600/30 text-amber-300 border-amber-500 font-bold"
+                          : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                      }`}
+                    >
+                      {poe.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -981,47 +1015,111 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
             </span>
           </div>
 
-          {/* Rôle de service RJ45 */}
-          {onChangeRole && (
-            <div className="mt-2 pt-2 border-t border-slate-800/80">
-              <div className="text-[10px] text-slate-400 mb-1 font-medium">Affectation du service :</div>
-              <div className="grid grid-cols-3 gap-1">
-                <button
-                  onClick={() => onChangeRole(selectedNode.id, "DATA")}
-                  className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
-                    !selectedNode.outletRole || selectedNode.outletRole === "DATA"
-                      ? "bg-blue-600 text-white border-blue-500 font-bold"
-                      : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                  }`}
-                >
-                  <Laptop className="w-3 h-3" />
-                  PC Data
-                </button>
-                <button
-                  onClick={() => onChangeRole(selectedNode.id, "VOIP")}
-                  className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
-                    selectedNode.outletRole === "VOIP"
-                      ? "bg-purple-600 text-white border-purple-500 font-bold"
-                      : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                  }`}
-                >
-                  <Phone className="w-3 h-3" />
-                  IP Phone
-                </button>
-                <button
-                  onClick={() => onChangeRole(selectedNode.id, "PRINTER")}
-                  className={`py-1 px-1 rounded text-[10px] font-mono flex items-center justify-center gap-1 border transition ${
-                    selectedNode.outletRole === "PRINTER"
-                      ? "bg-amber-600 text-white border-amber-500 font-bold"
-                      : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                  }`}
-                >
-                  <Printer className="w-3 h-3" />
-                  Copieur
-                </button>
+          {/* Attribution directe du VLAN au lieu du service abstrait */}
+          <div className="mt-2.5 pt-2 border-t border-slate-800/80 space-y-2">
+            <div>
+              <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                <span>Attribution du VLAN :</span>
+                <span className="text-cyan-400 font-mono font-bold">
+                  VLAN {selectedNode.vlanId ?? (selectedNode.outletRole === "VOIP" ? 30 : 20)}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-[10px] font-mono">
+                {Object.values(vlanStyles ?? DEFAULT_VLAN_STYLES)
+                  .sort((a, b) => a.vlanId - b.vlanId)
+                  .map((v) => {
+                    const isVlanSelected =
+                      selectedNode.vlanId !== undefined
+                        ? selectedNode.vlanId === v.vlanId
+                        : selectedNode.outletRole === "VOIP"
+                        ? v.vlanId === 30
+                        : v.vlanId === 20;
+
+                    return (
+                      <button
+                        key={v.vlanId}
+                        onClick={() => {
+                          onUpdateNodeProperties?.(selectedNode.id, {
+                            vlanId: v.vlanId,
+                            outletRole:
+                              v.vlanId === 30
+                                ? "VOIP"
+                                : v.vlanId === 40
+                                ? "PRINTER"
+                                : v.vlanId === 50
+                                ? "WIFI"
+                                : "DATA",
+                          });
+                        }}
+                        className={`py-1 px-1.5 rounded border transition flex items-center justify-center gap-1.5 ${
+                          isVlanSelected
+                            ? "bg-slate-800 text-white border-cyan-500 font-bold ring-1 ring-cyan-500/50 shadow-sm"
+                            : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-850"
+                        }`}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: v.color }}
+                        />
+                        <span>V{v.vlanId}</span>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
-          )}
+
+            {/* Émote personnalisée */}
+            <div>
+              <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                <span>Émote de la prise :</span>
+                <span className="text-base">{selectedNode.customEmote || "🔌"}</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {["🔌", "💻", "📞", "🖨️", "📶", "🖥️", "🎥", "⚡", "🌐", "🔒", "🚪"].map((em) => (
+                  <button
+                    key={em}
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, { customEmote: em })
+                    }
+                    className={`w-6 h-6 rounded flex items-center justify-center text-xs transition ${
+                      selectedNode.customEmote === em
+                        ? "bg-cyan-600 scale-110 shadow ring-1 ring-white/30"
+                        : "bg-slate-900 hover:bg-slate-800"
+                    }`}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Alimentation PoE */}
+            <div>
+              <div className="text-[10px] text-slate-400 mb-1 font-medium">Alimentation PoE :</div>
+              <div className="grid grid-cols-4 gap-1 text-[9px] font-mono">
+                {[
+                  { id: "NONE" as PoeMode, label: "Non-PoE" },
+                  { id: "POE" as PoeMode, label: "PoE" },
+                  { id: "POE_PLUS" as PoeMode, label: "PoE+" },
+                  { id: "POE_PLUS_PLUS" as PoeMode, label: "PoE++" },
+                ].map((poe) => (
+                  <button
+                    key={poe.id}
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, { poeMode: poe.id })
+                    }
+                    className={`py-1 rounded border transition text-center ${
+                      (selectedNode.poeMode ?? "NONE") === poe.id
+                        ? "bg-amber-600/30 text-amber-300 border-amber-500 font-bold shadow-sm"
+                        : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    {poe.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 1b. Carte : Adressage Réseau & Télémétrie IPAM */}

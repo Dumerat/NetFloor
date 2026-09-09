@@ -14,78 +14,89 @@ interface VlanStyleCustomizerProps {
   onUpdateVlanStyle: (vlanId: number, updates: Partial<VlanStyle>) => void;
   onResetVlanStyles?: (() => void) | undefined;
   compact?: boolean | undefined;
+  controlledVlanId?: number | undefined;
+  hideVlanSelector?: boolean | undefined;
+  hideHeader?: boolean | undefined;
 }
 
 export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
   vlanStyles,
   onUpdateVlanStyle,
   onResetVlanStyles,
+  controlledVlanId,
+  hideVlanSelector = false,
+  hideHeader = false,
 }) => {
   const vlanList = Object.values(vlanStyles).sort((a, b) => a.vlanId - b.vlanId);
-  const [selectedVlanId, setSelectedVlanId] = useState<number>(() => {
+  const [internalSelectedVlanId, setInternalSelectedVlanId] = useState<number>(() => {
     return vlanStyles[20] ? 20 : (vlanList[0]?.vlanId ?? 20);
   });
 
-  const currentStyle = vlanStyles[selectedVlanId] ?? vlanList[0];
+  const activeVlanId = controlledVlanId ?? internalSelectedVlanId;
+  const currentStyle = vlanStyles[activeVlanId] ?? vlanList[0];
   if (!currentStyle) return null;
 
   const strokeWidthPx =
-    currentStyle.thickness === "FINE" ? 2 : currentStyle.thickness === "THICK" ? 5 : 3.5;
+    currentStyle.thickness === "FINE" ? 2.2 : currentStyle.thickness === "THICK" ? 5.2 : 3.6;
   const dashArray =
     currentStyle.strokePattern === "DASHED"
-      ? "8,4"
+      ? `${(strokeWidthPx * 2.6).toFixed(1)},${(strokeWidthPx * 2.8).toFixed(1)}`
       : currentStyle.strokePattern === "DOTTED"
-      ? "2,4"
+      ? `0.1,${(strokeWidthPx * 2.4).toFixed(1)}`
       : undefined;
 
   return (
     <div className="space-y-3">
       {/* En-tête avec bouton de réinitialisation */}
-      <div className="flex items-center justify-between pb-0.5">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
-          <Palette className="w-3.5 h-3.5 text-sky-400" />
-          <span>Styles & Tracés des Câbles</span>
+      {!hideHeader && (
+        <div className="flex items-center justify-between pb-0.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
+            <Palette className="w-3.5 h-3.5 text-sky-400" />
+            <span>Styles & Tracés des Câbles</span>
+          </div>
+          {onResetVlanStyles && (
+            <button
+              onClick={onResetVlanStyles}
+              className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 font-mono transition"
+              title="Rétablir les couleurs et tracés d'origine de tous les VLANs"
+            >
+              <RotateCcw className="w-2.5 h-2.5" />
+              Réinitialiser
+            </button>
+          )}
         </div>
-        {onResetVlanStyles && (
-          <button
-            onClick={onResetVlanStyles}
-            className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 font-mono transition"
-            title="Rétablir les couleurs et tracés d'origine de tous les VLANs"
-          >
-            <RotateCcw className="w-2.5 h-2.5" />
-            Réinitialiser
-          </button>
-        )}
-      </div>
+      )}
 
-      {/* Barre de sélection du VLAN (un seul VLAN affiché à la fois) */}
-      <div className="space-y-1">
-        <span className="text-[10px] text-slate-400 font-mono block">
-          Sélectionner le VLAN à personnaliser :
-        </span>
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 font-mono text-[10px]">
-          {vlanList.map((vlan) => {
-            const isSelected = selectedVlanId === vlan.vlanId;
-            return (
-              <button
-                key={vlan.vlanId}
-                onClick={() => setSelectedVlanId(vlan.vlanId)}
-                className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 flex-shrink-0 ${
-                  isSelected
-                    ? "bg-slate-800 text-white border-sky-500 shadow-sm font-bold ring-1 ring-sky-500/50"
-                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-900"
-                }`}
-              >
-                <span
-                  className="w-2 h-2 rounded-full flex-shrink-0 shadow-sm"
-                  style={{ backgroundColor: vlan.color }}
-                />
-                <span>VID {vlan.vlanId}</span>
-              </button>
-            );
-          })}
+      {/* Barre de sélection du VLAN (masquée si contrôlée depuis la liste IPAM principale) */}
+      {!hideVlanSelector && (
+        <div className="space-y-1">
+          <span className="text-[10px] text-slate-400 font-mono block">
+            Sélectionner le VLAN à personnaliser :
+          </span>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 font-mono text-[10px]">
+            {vlanList.map((vlan) => {
+              const isSelected = activeVlanId === vlan.vlanId;
+              return (
+                <button
+                  key={vlan.vlanId}
+                  onClick={() => setInternalSelectedVlanId(vlan.vlanId)}
+                  className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 flex-shrink-0 ${
+                    isSelected
+                      ? "bg-slate-800 text-white border-sky-500 shadow-sm font-bold ring-1 ring-sky-500/50"
+                      : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0 shadow-sm"
+                    style={{ backgroundColor: vlan.color }}
+                  />
+                  <span>VID {vlan.vlanId}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Fiche détaillée UNIQUE du VLAN sélectionné */}
       <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-3">

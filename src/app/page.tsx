@@ -466,7 +466,7 @@ export default function NetFloorApp() {
       const isPrinter = outlet.outletRole === "PRINTER";
       const isWifi = outlet.outletRole === "WIFI";
 
-      const vlanId = isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20;
+      const vlanId = outlet.vlanId ?? (isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20);
 
       const customColor = vlanStyles[vlanId]?.color;
       const baseAlpha = "0.85";
@@ -933,7 +933,7 @@ export default function NetFloorApp() {
     });
   };
 
-  // Ajout depuis la Palette d'équipements multi-métiers
+  // Ajout depuis la Palette d'équipements multi-métiers (Générique, Profils Personnalisés, Mobilier, Baies)
   const handleAddItemFromPalette = (item: PaletteItem) => {
     const offset = nodes.length % 6;
     const newX = 32000 + offset * 1800;
@@ -954,7 +954,20 @@ export default function NetFloorApp() {
       item.subType === "RACK_18U" ||
       item.targetType === "PATCH_PANEL";
 
+    const isCustom = Boolean(item.isCustomProfile);
+    const isGenericPort = item.subType === "GENERIC_PORT";
+    const portCount = item.portCount ?? (item.subType === "GENERIC_PORT" ? 1 : 1);
+    const assignedVlan = item.vlanId ?? (item.outletRole === "VOIP" ? 30 : 20);
+
     const computeName = () => {
+      if (isCustom) {
+        const count = nodes.filter((n) => n.name.startsWith(item.name)).length;
+        return count > 0 ? `${item.name} (${count + 1})` : item.name;
+      }
+      if (isGenericPort) {
+        const count = nodes.filter((n) => n.subType === "GENERIC_PORT" || n.name.startsWith("Port-")).length + 1;
+        return `Port-${count.toString().padStart(2, "0")}`;
+      }
       if (isRack) {
         const rackCount = racks.length;
         return `BAIE-DSI-0${rackCount + 1}`;
@@ -962,10 +975,6 @@ export default function NetFloorApp() {
       if (item.targetType === "DESK") {
         const deskCount = nodes.filter((n) => n.type === "DESK").length;
         return `Bureau ${403 + deskCount}`;
-      }
-      if (item.subType === "FLOOR_BOX") {
-        const boxCount = nodes.filter((n) => n.subType === "FLOOR_BOX").length;
-        return `Boîte Sol ${boxCount + 1}`;
       }
       if (item.subType === "WIFI_AP") {
         const wifiCount = nodes.filter((n) => n.subType === "WIFI_AP").length;
@@ -994,6 +1003,21 @@ export default function NetFloorApp() {
       setRacks((prev) => [...prev, newRack]);
     }
 
+    let stackedPorts: StackedPortItem[] | undefined = undefined;
+    if (portCount > 1) {
+      stackedPorts = Array.from({ length: portCount }).map((_, idx) => ({
+        portIndex: idx,
+        portLabel: `RJ45-${idx + 1}`,
+        outletRole: item.outletRole ?? "GENERIC",
+        vlanId: assignedVlan,
+        poeMode: item.poeMode ?? "NONE",
+        ipAddress: `10.42.${assignedVlan}.${110 + idx}`,
+        macAddress: `00:1A:2B:3C:4D:${String(idx + 20).padStart(2, "0")}`,
+        pingStatus: "ONLINE",
+        pingLatencyMs: 2,
+      }));
+    }
+
     const newNode: NodeDisplay = {
       id: newId,
       type: item.targetType,
@@ -1008,6 +1032,11 @@ export default function NetFloorApp() {
       department: item.category === "FURNITURE" ? "Espace Collaboratif" : undefined,
       chairPosition: item.category === "FURNITURE" ? "BOTTOM" : "NONE",
       seats: initialSeats,
+      vlanId: assignedVlan,
+      poeMode: item.poeMode,
+      customEmote: item.customEmote,
+      portCount: portCount,
+      stackedPorts,
       portId:
         item.targetType === "WALL_OUTLET"
           ? item.outletRole === "VOIP"
@@ -1290,6 +1319,7 @@ export default function NetFloorApp() {
           onToggle={() => setIsPaletteOpen((prev) => !prev)}
           onAddItem={handleAddItemFromPalette}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
+          vlanStyles={vlanStyles}
         />
 
         {/* Main Canvas Area */}

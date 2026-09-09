@@ -110,9 +110,12 @@ export function getKonvaStrokeConfig(style?: VlanStyle, isHighlighted?: boolean)
 
   let dash: number[] | undefined = undefined;
   if (style?.strokePattern === "DASHED") {
-    dash = [140, 70];
+    // Tirets espacés nets proportionnels : longueur = 2.6x épaisseur, intervalle = 2.8x épaisseur
+    dash = [Math.round(strokeWidth * 2.6), Math.round(strokeWidth * 2.8)];
   } else if (style?.strokePattern === "DOTTED") {
-    dash = [36, 46];
+    // VRAIS POINTS CIRCULAIRES : avec lineCap="round", un trait de longueur 1 forme un cercle parfait
+    // Espacement proportionnel pour éviter la fusion des points même en forte épaisseur
+    dash = [1, Math.round(strokeWidth * 2.4)];
   }
 
   return { strokeColor: color, strokeWidth, dash };
