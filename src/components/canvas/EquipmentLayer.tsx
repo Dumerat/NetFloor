@@ -79,6 +79,10 @@ export interface NodeDisplay {
   chairPosition?: "BOTTOM" | "TOP" | "LEFT" | "RIGHT" | "NONE" | undefined;
   seats?: DeskSeatOccupant[] | undefined;
   attachedSeatIndex?: number | undefined;
+  ipAddress?: string | undefined;
+  macAddress?: string | undefined;
+  pingStatus?: "ONLINE" | "OFFLINE" | "DEGRADED" | undefined;
+  pingLatencyMs?: number | undefined;
 }
 
 interface EquipmentLayerProps {

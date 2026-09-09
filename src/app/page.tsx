@@ -6,6 +6,7 @@ import { useCameraStore } from "@/engine/spatial/useCameraStore";
 import { CircuitInspector } from "@/components/ui/CircuitInspector";
 import { EquipmentPalette, PaletteItem } from "@/components/ui/EquipmentPalette";
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
+import { SettingsModal } from "@/components/ui/SettingsModal";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import { NodeDisplay, RackDisplay, OutletRole, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
 import { CableData } from "@/components/canvas/CableLayer";
@@ -20,6 +21,7 @@ import {
   Layers,
   Sparkles,
   Download,
+  Sliders,
 } from "lucide-react";
 
 // Chargement dynamique du canvas Konva sans SSR
@@ -42,6 +44,7 @@ export default function NetFloorApp() {
   const [traceResult, setTraceResult] = useState<CircuitTraceResult | null>(null);
   const [isTracing, setIsTracing] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
 
   // Vue Métier active
@@ -81,6 +84,10 @@ export default function NetFloorApp() {
       heightMm: 1000,
       subType: "RACK_42U",
       description: "Baie principale de brassage & serveurs 42U avec commutateur Cisco Catalyst 9300 et bandeau Cat6A.",
+      ipAddress: "10.42.0.10",
+      macAddress: "00:0A:41:88:99:A1",
+      pingStatus: "ONLINE",
+      pingLatencyMs: 1,
     },
     // 1. Îlot Bench 4 Postes (4 collaborateurs distincts assignés)
     {
@@ -194,6 +201,10 @@ export default function NetFloorApp() {
       attachedToDeskId: "desk-408",
       outletRole: "DATA",
       assignedPerson: "Alexandre Martin",
+      ipAddress: "10.42.20.108",
+      macAddress: "B4:2E:99:41:0A:12",
+      pingStatus: "ONLINE",
+      pingLatencyMs: 4,
     },
     {
       id: "outlet-408-b",
@@ -205,6 +216,10 @@ export default function NetFloorApp() {
       attachedToDeskId: "desk-408",
       outletRole: "VOIP",
       assignedPerson: "Alexandre Martin",
+      ipAddress: "10.42.30.108",
+      macAddress: "00:08:5D:8A:22:9C",
+      pingStatus: "ONLINE",
+      pingLatencyMs: 3,
     },
     // 5. Prises réseau pour l'îlot 402 (affectées aux collaborateurs des places 1 et 2)
     {
@@ -218,6 +233,10 @@ export default function NetFloorApp() {
       attachedSeatIndex: 0,
       assignedPerson: "Thomas Roux",
       outletRole: "DATA",
+      ipAddress: "10.42.20.102",
+      macAddress: "7C:10:C9:22:54:F1",
+      pingStatus: "ONLINE",
+      pingLatencyMs: 5,
     },
     {
       id: "outlet-402-b",
@@ -230,6 +249,10 @@ export default function NetFloorApp() {
       attachedSeatIndex: 1,
       assignedPerson: "Sarah Benali",
       outletRole: "VOIP",
+      ipAddress: "10.42.30.102",
+      macAddress: "00:08:5D:9B:31:0D",
+      pingStatus: "ONLINE",
+      pingLatencyMs: 2,
     },
     // 6. Boîte de Sol Centrale
     {
@@ -243,6 +266,10 @@ export default function NetFloorApp() {
       subType: "FLOOR_BOX",
       portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
       outletRole: "DATA",
+      ipAddress: "10.42.20.50",
+      macAddress: "00:1B:44:11:22:33",
+      pingStatus: "ONLINE",
+      pingLatencyMs: 4,
     },
     // 7. Borne Wi-Fi Plafond
     {
@@ -256,6 +283,10 @@ export default function NetFloorApp() {
       subType: "WIFI_AP",
       outletRole: "WIFI",
       portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
+      ipAddress: "10.42.50.4",
+      macAddress: "70:69:79:AA:BB:CC",
+      pingStatus: "ONLINE",
+      pingLatencyMs: 6,
     },
     // 8. Copieur Multifonction Départemental
     {
@@ -269,6 +300,10 @@ export default function NetFloorApp() {
       subType: "PRINTER_STATION",
       outletRole: "PRINTER",
       portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
+      ipAddress: "10.42.40.2",
+      macAddress: "00:1E:8F:77:88:99",
+      pingStatus: "ONLINE",
+      pingLatencyMs: 8,
     },
   ]);
 
@@ -923,6 +958,14 @@ export default function NetFloorApp() {
             <Download className="w-3.5 h-3.5" />
             Exporter CSV
           </button>
+          <button
+            onClick={() => setIsSettingsModalOpen(true)}
+            className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white font-sans font-medium rounded-lg border border-slate-700 shadow-sm flex items-center gap-1.5 transition text-xs"
+            title="Ouvrir le Centre d'Administration : SSO, SNMP, IPAM et Intégrations"
+          >
+            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+            Paramètres DSI
+          </button>
         </div>
       </header>
 
@@ -987,6 +1030,14 @@ export default function NetFloorApp() {
         onSuccess={() => {
           // Callback après import réussi
         }}
+      />
+
+      {/* 4. Centre d'Administration & Paramètres DSI Modal */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        nodes={nodes}
+        onUpdateNodeProperties={handleUpdateNodeProperties}
       />
     </div>
   );

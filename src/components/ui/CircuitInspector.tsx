@@ -38,6 +38,8 @@ import {
   UserCheck,
   Users,
   Server,
+  Network,
+  Globe,
 } from "lucide-react";
 
 export interface CircuitInspectorProps {
@@ -333,6 +335,76 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
               </div>
             </div>
           )}
+        </div>
+
+        {/* 1b. Carte : Adressage Réseau & Télémétrie IPAM */}
+        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+              <Network className="w-3.5 h-3.5 text-cyan-400" />
+              Adressage Réseau (IPAM)
+            </span>
+            {selectedNode.pingStatus ? (
+              <span
+                className={`text-[9px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                  selectedNode.pingStatus === "ONLINE"
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                    : selectedNode.pingStatus === "DEGRADED"
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                    : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    selectedNode.pingStatus === "ONLINE" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+                  }`}
+                />
+                {selectedNode.pingStatus}
+                {selectedNode.pingLatencyMs !== undefined ? ` (${selectedNode.pingLatencyMs}ms)` : ""}
+              </span>
+            ) : (
+              <span className="text-[9px] font-mono text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                Non supervisé
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                <Globe className="w-3 h-3 text-slate-500" />
+                IP Fixe / DHCP :
+              </span>
+              <input
+                type="text"
+                value={selectedNode.ipAddress ?? ""}
+                placeholder="Ex: 10.42.20.108"
+                onChange={(e) =>
+                  onUpdateNodeProperties?.(selectedNode.id, {
+                    ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                  })
+                }
+                className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                <Activity className="w-3 h-3 text-slate-500" />
+                Adresse MAC :
+              </span>
+              <input
+                type="text"
+                value={selectedNode.macAddress ?? ""}
+                placeholder="Ex: 00:1A:2B:3C:4D:5E"
+                onChange={(e) =>
+                  onUpdateNodeProperties?.(selectedNode.id, {
+                    macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                  })
+                }
+                className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+              />
+            </div>
+          </div>
         </div>
 
         {/* 2. Carte : Liaison Mobilier & Postes */}
@@ -659,6 +731,76 @@ export const CircuitInspector: FC<CircuitInspectorProps> = ({
                 <div className="text-[10px] text-slate-400">
                   Alimentation secourue sur onduleur centralisé
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 1b : Carte Adressage Réseau & IPAM Baie */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                <Network className="w-3.5 h-3.5 text-cyan-400" />
+                Management IP & SNMP Baie
+              </span>
+              {selectedNode.pingStatus ? (
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                    selectedNode.pingStatus === "ONLINE"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : selectedNode.pingStatus === "DEGRADED"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                      : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      selectedNode.pingStatus === "ONLINE" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+                    }`}
+                  />
+                  {selectedNode.pingStatus}
+                  {selectedNode.pingLatencyMs !== undefined ? ` (${selectedNode.pingLatencyMs}ms)` : ""}
+                </span>
+              ) : (
+                <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.5 rounded">
+                  SNMP v3 Active
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                  <Globe className="w-3 h-3 text-slate-500" />
+                  IP Switch Mgmt :
+                </span>
+                <input
+                  type="text"
+                  value={selectedNode.ipAddress ?? ""}
+                  placeholder="Ex: 10.42.0.10"
+                  onChange={(e) =>
+                    onUpdateNodeProperties?.(selectedNode.id, {
+                      ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                    })
+                  }
+                  className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                  <Activity className="w-3 h-3 text-slate-500" />
+                  MAC Châssis :
+                </span>
+                <input
+                  type="text"
+                  value={selectedNode.macAddress ?? ""}
+                  placeholder="Ex: 00:0A:41:88:99:A1"
+                  onChange={(e) =>
+                    onUpdateNodeProperties?.(selectedNode.id, {
+                      macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                    })
+                  }
+                  className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+                />
               </div>
             </div>
           </div>
