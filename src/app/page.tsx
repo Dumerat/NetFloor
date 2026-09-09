@@ -7,6 +7,7 @@ import { CircuitInspector } from "@/components/ui/CircuitInspector";
 import { EquipmentPalette, PaletteItem } from "@/components/ui/EquipmentPalette";
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { SettingsModal } from "@/components/ui/SettingsModal";
+import { DeviceTelemetry } from "@/data/settingsStore";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import { NodeDisplay, RackDisplay, OutletRole, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
 import { CableData } from "@/components/canvas/CableLayer";
@@ -21,7 +22,6 @@ import {
   Layers,
   Sparkles,
   Download,
-  Sliders,
 } from "lucide-react";
 
 // Chargement dynamique du canvas Konva sans SSR
@@ -772,6 +772,79 @@ export default function NetFloorApp() {
     setSelectedNodeId(newId);
   };
 
+  // Synchronisation ou ajout d'un équipement découvert par SNMP sur le plateau 2D
+  const handleImportDiscoveredDevice = (dev: DeviceTelemetry) => {
+    const mappedStatus: "ONLINE" | "OFFLINE" | "DEGRADED" =
+      dev.status === "WARNING" ? "DEGRADED" : dev.status;
+
+    setNodes((prev) => {
+      const existing = prev.find(
+        (n) =>
+          n.id === dev.id ||
+          n.name.toLowerCase() === dev.name.toLowerCase() ||
+          (n.ipAddress && n.ipAddress === dev.ip)
+      );
+
+      if (existing) {
+        // Mettre à jour l'équipement existant
+        return prev.map((n) => {
+          if (n.id === existing.id) {
+            return {
+              ...n,
+              ipAddress: dev.ip,
+              macAddress: dev.mac,
+              pingStatus: mappedStatus,
+              pingLatencyMs: 2,
+              description: `Modèle: ${dev.model} • Uptime: ${dev.uptimeDays}j • CPU: ${dev.cpuLoadPercent}% • T°: ${dev.temperatureC}°C`,
+            };
+          }
+          return n;
+        });
+      }
+
+      // Créer un nouvel équipement sur le plateau
+      const targetType =
+        dev.deviceType === "SWITCH" || dev.deviceType === "SERVER_RACK"
+          ? "PATCH_PANEL"
+          : "WALL_OUTLET";
+      const subType =
+        dev.deviceType === "SERVER_RACK"
+          ? "RACK_42U"
+          : dev.deviceType === "WIFI_AP"
+          ? "WIFI_AP"
+          : dev.deviceType === "PRINTER"
+          ? "PRINTER_STATION"
+          : undefined;
+      const outletRole =
+        dev.deviceType === "WIFI_AP"
+          ? "WIFI"
+          : dev.deviceType === "PRINTER"
+          ? "PRINTER"
+          : "DATA";
+
+      const newNode: NodeDisplay = {
+        id: dev.id,
+        name: dev.name,
+        type: targetType,
+        xMm: 24000 + Math.floor(Math.random() * 8000),
+        yMm: 12000 + Math.floor(Math.random() * 8000),
+        widthMm: dev.deviceType === "SERVER_RACK" ? 800 : dev.deviceType === "PRINTER" ? 800 : 350,
+        heightMm: dev.deviceType === "SERVER_RACK" ? 1000 : dev.deviceType === "PRINTER" ? 700 : 350,
+        subType,
+        outletRole,
+        ipAddress: dev.ip,
+        macAddress: dev.mac,
+        pingStatus: mappedStatus,
+        pingLatencyMs: 3,
+        description: `Découvert par SNMP: ${dev.model} (Uptime ${dev.uptimeDays} jours)`,
+      };
+
+      return [...prev, newNode];
+    });
+
+    setSelectedNodeId(dev.id);
+  };
+
   // Export du carnet de câblage au format CSV conforme au schéma CablingRowSchema
   const handleExportCsv = () => {
     const headers = [
@@ -958,24 +1031,17 @@ export default function NetFloorApp() {
             <Download className="w-3.5 h-3.5" />
             Exporter CSV
           </button>
-          <button
-            onClick={() => setIsSettingsModalOpen(true)}
-            className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white font-sans font-medium rounded-lg border border-slate-700 shadow-sm flex items-center gap-1.5 transition text-xs"
-            title="Ouvrir le Centre d'Administration : SSO, SNMP, IPAM et Intégrations"
-          >
-            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-            Paramètres DSI
-          </button>
         </div>
       </header>
 
       {/* 2. Workspace Body */}
       <div className="flex-1 flex relative overflow-hidden">
-        {/* Palette d'Équipements Escamotable */}
+        {/* Palette d'Équipements Escamotable avec bouton Paramètres DSI en bas à gauche */}
         <EquipmentPalette
           isOpen={isPaletteOpen}
           onToggle={() => setIsPaletteOpen((prev) => !prev)}
           onAddItem={handleAddItemFromPalette}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
         />
 
         {/* Main Canvas Area */}
@@ -1038,6 +1104,7 @@ export default function NetFloorApp() {
         onClose={() => setIsSettingsModalOpen(false)}
         nodes={nodes}
         onUpdateNodeProperties={handleUpdateNodeProperties}
+        onImportDiscoveredDevice={handleImportDiscoveredDevice}
       />
     </div>
   );

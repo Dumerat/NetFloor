@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Plus,
   Sparkles,
+  Sliders,
 } from "lucide-react";
 import { OutletRole } from "@/components/canvas/EquipmentLayer";
 
@@ -222,12 +223,14 @@ interface EquipmentPaletteProps {
   onToggle: () => void;
   onAddItem: (item: PaletteItem) => void;
   activeCategory?: PaletteCategory;
+  onOpenSettings?: (() => void) | undefined;
 }
 
 export const EquipmentPalette: FC<EquipmentPaletteProps> = ({
   isOpen,
   onToggle,
   onAddItem,
+  onOpenSettings,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<PaletteCategory>("FURNITURE");
 
@@ -315,14 +318,26 @@ export const EquipmentPalette: FC<EquipmentPaletteProps> = ({
           </button>
         </div>
 
-        {/* Bouton pour ouvrir / fermer le tiroir */}
-        <button
-          onClick={onToggle}
-          title={isOpen ? "Replier la palette" : "Déplier la palette"}
-          className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-        >
-          {isOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-        </button>
+        {/* Paramètres DSI compact (Toujours accessible) & Bouton replier */}
+        <div className="flex flex-col items-center gap-2">
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              title="Paramètres DSI (Active Directory, SSO, SNMP, IPAM)"
+              className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition"
+            >
+              <Sliders className="w-5 h-5" />
+            </button>
+          )}
+
+          <button
+            onClick={onToggle}
+            title={isOpen ? "Replier la palette" : "Déplier la palette"}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+          >
+            {isOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Contenu déployable de la palette */}
@@ -421,9 +436,33 @@ export const EquipmentPalette: FC<EquipmentPaletteProps> = ({
           </div>
 
           {/* Guide d'aide bas de palette */}
-          <div className="pt-3 border-t border-slate-800 text-[10px] text-slate-500 flex-shrink-0 leading-relaxed">
-            💡 <strong>Astuce :</strong> Chaque équipement ajouté se place aux dimensions métriques réelles avec magnétisme sur la grille. Vous pourrez ajuster ses dimensions au millimètre dans l&apos;inspecteur.
+          <div className="pt-2.5 border-t border-slate-800 text-[10px] text-slate-500 flex-shrink-0 leading-relaxed">
+            💡 <strong>Astuce :</strong> Équipements aux dimensions réelles. Cliquez dessus pour modifier leur IP ou affectation.
           </div>
+
+          {/* Bouton Paramètres DSI en bas à gauche de la barre latérale */}
+          {onOpenSettings && (
+            <div className="pt-2 border-t border-slate-800 flex-shrink-0">
+              <button
+                onClick={onOpenSettings}
+                className="w-full p-2.5 rounded-lg bg-slate-900/90 hover:bg-slate-850 border border-slate-800 hover:border-cyan-500/50 flex items-center justify-between text-left transition group shadow-sm"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-md bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition">
+                    <Sliders className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-200 group-hover:text-white flex items-center gap-1.5">
+                      Paramètres DSI
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">Active Directory, SNMP, IPAM</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition" />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </aside>

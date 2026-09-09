@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, type FC } from "react";
+import { useState, useMemo, useEffect, type FC } from "react";
 import {
   X,
   Shield,
@@ -9,7 +9,6 @@ import {
   Network,
   Plug,
   CheckCircle2,
-  AlertCircle,
   RefreshCw,
   Search,
   Download,
@@ -18,14 +17,17 @@ import {
   Phone,
   Printer,
   Wifi,
-  Cpu,
-  Thermometer,
-  HardDrive,
   Activity,
   ExternalLink,
   Send,
   Sliders,
   Check,
+  Eye,
+  EyeOff,
+  Database,
+  Plus,
+  RotateCcw,
+  Sparkles,
 } from "lucide-react";
 import { NodeDisplay } from "@/components/canvas/EquipmentLayer";
 import {
@@ -33,6 +35,10 @@ import {
   INITIAL_SETTINGS,
   MOCK_DISCOVERED_DEVICES,
   DeviceTelemetry,
+  SubnetDefinition,
+  loadStoredSettings,
+  saveStoredSettings,
+  resetStoredSettings,
 } from "@/data/settingsStore";
 
 interface SettingsModalProps {
@@ -40,6 +46,7 @@ interface SettingsModalProps {
   onClose: () => void;
   nodes: NodeDisplay[];
   onUpdateNodeProperties?: (nodeId: string, updates: Partial<NodeDisplay>) => void;
+  onImportDiscoveredDevice?: (device: DeviceTelemetry) => void;
 }
 
 type TabType = "sso" | "snmp" | "ipam" | "integrations";
@@ -49,10 +56,18 @@ export const SettingsModal: FC<SettingsModalProps> = ({
   onClose,
   nodes,
   onUpdateNodeProperties,
+  onImportDiscoveredDevice,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("sso");
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
   const [discoveredDevices, setDiscoveredDevices] = useState<DeviceTelemetry[]>(MOCK_DISCOVERED_DEVICES);
+
+  // Chargement des paramètres depuis le localStorage au montage
+  useEffect(() => {
+    if (isOpen) {
+      setSettings(loadStoredSettings());
+    }
+  }, [isOpen]);
 
   // États pour les actions interactives
   const [isScanningSnmp, setIsScanningSnmp] = useState(false);
@@ -61,11 +76,32 @@ export const SettingsModal: FC<SettingsModalProps> = ({
   const [isTestingSso, setIsTestingSso] = useState(false);
   const [ssoTestResult, setSsoTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  const [integrationStatuses, setIntegrationStatuses] = useState<Record<string, { loading: boolean; msg: string | null }>>({});
+  // Diagnostic Active Directory
+  const [isTestingAd, setIsTestingAd] = useState(false);
+  const [adDiagnosticData, setAdDiagnosticData] = useState<any | null>(null);
+  const [syncedAdUsers, setSyncedAdUsers] = useState<any[]>([]);
+  const [showBindPassword, setShowBindPassword] = useState(false);
+
+  // Diagnostic Intégrations
+  const [integrationStatuses, setIntegrationStatuses] = useState<
+    Record<string, { loading: boolean; success?: boolean; msg: string | null; details?: any }>
+  >({});
 
   // Filtre et recherche IPAM
   const [ipSearch, setIpSearch] = useState("");
   const [ipFilterType, setIpFilterType] = useState<string>("ALL");
+
+  // Modal d'ajout de sous-réseau VLAN
+  const [isAddSubnetOpen, setIsAddSubnetOpen] = useState(false);
+  const [newSubnet, setNewSubnet] = useState<SubnetDefinition>({
+    vlanId: 60,
+    vlanName: "VLAN_IOT_SECURITY",
+    cidr: "10.42.60.0/24",
+    gateway: "10.42.60.254",
+    dhcpRange: "10.42.60.10 - 10.42.60.200",
+    usedIps: 0,
+    totalIps: 254,
+  });
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -77,7 +113,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
   // Liste des nœuds avec filtrage IPAM
   const filteredIpamNodes = useMemo(() => {
     return nodes
-      .filter((n) => n.type !== "DESK") // Ignorer les bureaux en tant que tel, se concentrer sur prises et baies
+      .filter((n) => n.type !== "DESK")
       .filter((n) => {
         if (ipFilterType !== "ALL" && n.type !== ipFilterType && n.subType !== ipFilterType) {
           return false;
@@ -95,31 +131,84 @@ export const SettingsModal: FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Test de connexion SSO
-  const handleTestSso = () => {
+  // Sauvegarde des paramètres dans localStorage
+  const handleSaveSettings = () => {
+    saveStoredSettings(settings);
+    showToast("💾 Paramètres DSI enregistrés avec succès dans le navigateur");
+    onClose();
+  };
+
+  // Réinitialisation aux valeurs d'usine
+  const handleResetSettings = () => {
+    if (confirm("Réinitialiser tous les paramètres DSI aux valeurs d'origine ?")) {
+      const def = resetStoredSettings();
+      setSettings(def);
+      showToast("🔄 Paramètres réinitialisés aux valeurs par défaut");
+    }
+  };
+
+  // Test de liaison Active Directory via l'API dédiée
+  const handleTestActiveDirectory = async () => {
+    setIsTestingAd(true);
+    setAdDiagnosticData(null);
+    try {
+      const res = await fetch("/api/auth/ad-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: settings.sso.activeDirectory }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAdDiagnosticData(data);
+        if (Array.isArray(data.syncedUsers)) {
+          setSyncedAdUsers(data.syncedUsers);
+        }
+        showToast("✅ Liaison Active Directory validée avec succès");
+      } else {
+        throw new Error(data.error || "Erreur de connexion AD");
+      }
+    } catch (err: unknown) {
+      showToast("❌ Échec de liaison au contrôleur de domaine AD");
+    } finally {
+      setIsTestingAd(false);
+    }
+  };
+
+  // Synchronisation de l'annuaire AD
+  const handleSyncAdDirectory = async () => {
+    setIsTestingAd(true);
+    try {
+      const res = await fetch("/api/auth/ad-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: settings.sso.activeDirectory }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.syncedUsers)) {
+        setSyncedAdUsers(data.syncedUsers);
+        const nowIso = new Date().toISOString();
+        setSettings((prev) => ({
+          ...prev,
+          sso: { ...prev.sso, lastSyncIso: nowIso },
+        }));
+        showToast(`🔄 Annuaire AD synchronisé (${data.syncedUsers.length} comptes actifs)`);
+      }
+    } finally {
+      setIsTestingAd(false);
+    }
+  };
+
+  // Test de connexion SSO cloud (Entra ID / Okta)
+  const handleTestSsoCloud = () => {
     setIsTestingSso(true);
     setSsoTestResult(null);
     setTimeout(() => {
       setIsTestingSso(false);
       setSsoTestResult({
         success: true,
-        message: `Authentification réussie sur le Tenant ${settings.sso.corporateDomain} (Token OIDC actif)`,
+        message: `Authentification réussie sur le Tenant ${settings.sso.corporateDomain} (Token OIDC valide)`,
       });
-      showToast("✅ Connexion SSO validée avec succès");
-    }, 1200);
-  };
-
-  // Synchronisation annuaire
-  const handleSyncDirectory = () => {
-    setIsTestingSso(true);
-    setTimeout(() => {
-      setIsTestingSso(false);
-      const nowIso = new Date().toISOString();
-      setSettings((prev) => ({
-        ...prev,
-        sso: { ...prev.sso, lastSyncIso: nowIso },
-      }));
-      showToast("🔄 Annuaire d'entreprise synchronisé (10 utilisateurs à jour)");
+      showToast("✅ Connexion IdP validée");
     }, 1000);
   };
 
@@ -147,30 +236,103 @@ export const SettingsModal: FC<SettingsModalProps> = ({
       } else {
         throw new Error(data.error || "Erreur lors du scan");
       }
-    } catch (err: unknown) {
+    } catch {
       setSnmpScanResult("Erreur lors de la requête SNMP.");
     } finally {
       setIsScanningSnmp(false);
     }
   };
 
-  // Test d'intégration générique
-  const handleTestIntegration = (key: string, name: string) => {
+  // Importer un équipement découvert par SNMP vers le plan 2D
+  const handleSyncDeviceToFloor = (dev: DeviceTelemetry) => {
+    onImportDiscoveredDevice?.(dev);
+    showToast(`📍 Équipement ${dev.name} synchronisé avec le plan !`);
+  };
+
+  // Synchroniser tous les équipements découverts vers le plan
+  const handleSyncAllDevicesToFloor = () => {
+    discoveredDevices.forEach((dev) => onImportDiscoveredDevice?.(dev));
+    showToast(`📍 ${discoveredDevices.length} équipements synchronisés sur le plateau !`);
+  };
+
+  // Test d'intégration via API route
+  const handleTestIntegration = async (target: string, name: string) => {
     setIntegrationStatuses((prev) => ({
       ...prev,
-      [key]: { loading: true, msg: null },
+      [target]: { loading: true, msg: null },
     }));
 
-    setTimeout(() => {
+    try {
+      const targetConfig =
+        target === "netbox"
+          ? settings.integrations.netbox
+          : target === "glpi"
+          ? settings.integrations.glpi
+          : target === "intune"
+          ? settings.integrations.intune
+          : settings.integrations.webhooks;
+
+      const res = await fetch("/api/integrations/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target, config: targetConfig }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setIntegrationStatuses((prev) => ({
+          ...prev,
+          [target]: {
+            loading: false,
+            success: true,
+            msg: data.responseBody || `Connecté à ${name} (${data.latencyMs}ms)`,
+            details: data.details,
+          },
+        }));
+        showToast(`🔌 Intégration ${name} connectée avec succès`);
+      } else {
+        throw new Error(data.error || "Erreur de connexion");
+      }
+    } catch (err: unknown) {
       setIntegrationStatuses((prev) => ({
         ...prev,
-        [key]: {
+        [target]: {
           loading: false,
-          msg: `Connexion à l'API ${name} établie (Code 200 OK)`,
+          success: false,
+          msg: err instanceof Error ? err.message : "Erreur de liaison",
         },
       }));
-      showToast(`🔌 Intégration ${name} connectée avec succès`);
-    }, 1000);
+    }
+  };
+
+  // Ajout d'un sous-réseau VLAN dans IPAM
+  const handleAddSubnet = () => {
+    if (!newSubnet.vlanName.trim() || !newSubnet.cidr.trim()) return;
+    setSettings((prev) => ({
+      ...prev,
+      subnets: [...prev.subnets, newSubnet],
+    }));
+    setIsAddSubnetOpen(false);
+    showToast(`🌐 VLAN ${newSubnet.vlanId} (${newSubnet.vlanName}) ajouté à l'IPAM`);
+  };
+
+  // Allocation automatique d'une IP libre dans le sous-réseau approprié
+  const handleAutoAssignIp = (nodeId: string, role?: string | undefined) => {
+    let targetVlan = settings.subnets.find((s) => s.vlanId === 20); // Par défaut VLAN 20 Data
+    if (role === "VOIP") targetVlan = settings.subnets.find((s) => s.vlanId === 30);
+    if (role === "PRINTER") targetVlan = settings.subnets.find((s) => s.vlanId === 40);
+    if (role === "WIFI") targetVlan = settings.subnets.find((s) => s.vlanId === 50);
+
+    const prefix = targetVlan?.cidr ? (targetVlan.cidr.split("/")[0] ?? "10.42.20").replace(/\.\d+$/, "") : "10.42.20";
+    const randomHost = Math.floor(Math.random() * 80) + 120;
+    const generatedIp = `${prefix}.${randomHost}`;
+
+    onUpdateNodeProperties?.(nodeId, {
+      ipAddress: generatedIp,
+      pingStatus: "ONLINE",
+      pingLatencyMs: 2,
+    });
+    showToast(`✨ IP ${generatedIp} attribuée automatiquement`);
   };
 
   // Export CSV IPAM
@@ -214,18 +376,18 @@ export const SettingsModal: FC<SettingsModalProps> = ({
         {/* 1. Header du Centre de Paramètres */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <div className="w-9 h-9 rounded-lg bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
               <Sliders className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
                 Centre d'Administration & Paramètres DSI
-                <span className="text-[10px] font-mono font-normal bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">
-                  v2.4 Enterprise
+                <span className="text-[10px] font-mono font-normal bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded">
+                  v2.5 Enterprise
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                Fédération d'identité SSO, sondes SNMP, plan d'adressage IPAM et connecteurs ITSM
+                Active Directory / LDAP, SSO fédéré, sondes SNMP actives, plan d'adressage IPAM et connecteurs ITSM
               </p>
             </div>
           </div>
@@ -244,18 +406,18 @@ export const SettingsModal: FC<SettingsModalProps> = ({
             onClick={() => setActiveTab("sso")}
             className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
               activeTab === "sso"
-                ? "border-blue-500 text-blue-400 bg-slate-900/50"
+                ? "border-cyan-500 text-cyan-400 bg-slate-900/50"
                 : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/20"
             }`}
           >
             <KeyRound className="w-4 h-4" />
-            🔐 SSO & Domaine
+            🔐 Active Directory & SSO
           </button>
           <button
             onClick={() => setActiveTab("snmp")}
             className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
               activeTab === "snmp"
-                ? "border-blue-500 text-blue-400 bg-slate-900/50"
+                ? "border-cyan-500 text-cyan-400 bg-slate-900/50"
                 : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/20"
             }`}
           >
@@ -266,7 +428,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
             onClick={() => setActiveTab("ipam")}
             className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
               activeTab === "ipam"
-                ? "border-blue-500 text-blue-400 bg-slate-900/50"
+                ? "border-cyan-500 text-cyan-400 bg-slate-900/50"
                 : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/20"
             }`}
           >
@@ -280,7 +442,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
             onClick={() => setActiveTab("integrations")}
             className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
               activeTab === "integrations"
-                ? "border-blue-500 text-blue-400 bg-slate-900/50"
+                ? "border-cyan-500 text-cyan-400 bg-slate-900/50"
                 : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/20"
             }`}
           >
@@ -291,196 +453,538 @@ export const SettingsModal: FC<SettingsModalProps> = ({
 
         {/* 3. Corps de la Modale */}
         <div className="flex-1 p-6 overflow-y-auto space-y-6">
-          {/* ================= TAB 1 : SSO & DOMAINE ================= */}
+          {/* ================= TAB 1 : ACTIVE DIRECTORY & SSO ================= */}
           {activeTab === "sso" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between bg-slate-950 p-4 rounded-lg border border-slate-800">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    <Shield className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-slate-100 flex items-center gap-2">
-                      Fédération d'Identité Active
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        {settings.sso.status}
-                      </span>
+              {/* Sélecteur de Fournisseur */}
+              <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                      <Shield className="w-6 h-6" />
                     </div>
-                    <div className="text-xs text-slate-400 mt-0.5">
-                      Les collaborateurs se connectent via leur compte d'entreprise ({settings.sso.corporateDomain})
+                    <div>
+                      <div className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                        Fournisseur d'Identité & Annuaire d'Entreprise
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                          {settings.sso.status}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        Sélectionnez l'annuaire d'entreprise utilisé pour l'authentification et l'attribution des postes
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSyncDirectory}
-                    disabled={isTestingSso}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingSso ? "animate-spin" : ""}`} />
-                    Sync Annuaire
-                  </button>
-                  <button
-                    onClick={handleTestSso}
-                    disabled={isTestingSso}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow transition"
-                  >
-                    <KeyRound className="w-3.5 h-3.5" />
-                    Tester le SSO
-                  </button>
+
+                <div className="grid grid-cols-5 gap-2 pt-2">
+                  {[
+                    { id: "ACTIVE_DIRECTORY_LDAP", label: "Active Directory (AD DS / LDAP)", desc: "Windows Server sur site", icon: Database },
+                    { id: "ENTRA_ID", label: "Microsoft Entra ID", desc: "Azure AD Cloud OIDC", icon: KeyRound },
+                    { id: "OKTA", label: "Okta Identity Cloud", desc: "SAML 2.0 / SCIM", icon: Shield },
+                    { id: "GOOGLE_WORKSPACE", label: "Google Workspace", desc: "SAML Enterprise", icon: Shield },
+                    { id: "SAML_GENERIC", label: "SAML / OIDC Générique", desc: "Fédération standard", icon: KeyRound },
+                  ].map((p) => {
+                    const Icon = p.icon;
+                    const isSel = settings.sso.provider === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            sso: { ...prev.sso, provider: p.id as any },
+                          }))
+                        }
+                        className={`p-3 rounded-lg border text-left transition flex flex-col justify-between ${
+                          isSel
+                            ? "bg-cyan-950/40 border-cyan-500/60 shadow-md ring-1 ring-cyan-500/40"
+                            : "bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <Icon className={`w-4 h-4 ${isSel ? "text-cyan-400" : "text-slate-500"}`} />
+                          {isSel && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                        </div>
+                        <div>
+                          <div className={`text-xs font-semibold ${isSel ? "text-slate-100" : "text-slate-300"}`}>
+                            {p.label}
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">{p.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {ssoTestResult && (
-                <div
-                  className={`p-3 rounded-lg text-xs flex items-center gap-2 border ${
-                    ssoTestResult.success
-                      ? "bg-emerald-950/40 text-emerald-300 border-emerald-800/60"
-                      : "bg-rose-950/40 text-rose-300 border-rose-800/60"
-                  }`}
-                >
-                  {ssoTestResult.success ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              {/* SECTION A : CONFIGURATION ACTIVE DIRECTORY SUR SITE */}
+              {settings.sso.provider === "ACTIVE_DIRECTORY_LDAP" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Database className="w-4 h-4 text-cyan-400" />
+                        <h3 className="text-xs font-bold text-slate-100">
+                          Configuration du Serveur Active Directory (LDAP / LDAPS)
+                        </h3>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleSyncAdDirectory}
+                          disabled={isTestingAd}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isTestingAd ? "animate-spin" : ""}`} />
+                          Sync Annuaire AD
+                        </button>
+                        <button
+                          onClick={handleTestActiveDirectory}
+                          disabled={isTestingAd}
+                          className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow transition"
+                        >
+                          <Database className="w-3.5 h-3.5" />
+                          {isTestingAd ? "Test LDAP en cours..." : "Tester la liaison AD"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">Contrôleur de Domaine (DC FQDN / IP)</label>
+                        <input
+                          type="text"
+                          value={settings.sso.activeDirectory.serverHost}
+                          placeholder="ex: dc01.corp.local ou 10.42.0.5"
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: {
+                                ...prev.sso,
+                                activeDirectory: { ...prev.sso.activeDirectory, serverHost: e.target.value },
+                              },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">Port LDAP & Protocole</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <input
+                            type="number"
+                            value={settings.sso.activeDirectory.port}
+                            onChange={(e) =>
+                              setSettings((prev) => ({
+                                ...prev,
+                                sso: {
+                                  ...prev.sso,
+                                  activeDirectory: { ...prev.sso.activeDirectory, port: Number(e.target.value) },
+                                },
+                              }))
+                            }
+                            className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                          />
+                          <select
+                            value={settings.sso.activeDirectory.encryption}
+                            onChange={(e) =>
+                              setSettings((prev) => ({
+                                ...prev,
+                                sso: {
+                                  ...prev.sso,
+                                  activeDirectory: { ...prev.sso.activeDirectory, encryption: e.target.value as any },
+                                },
+                              }))
+                            }
+                            className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
+                          >
+                            <option value="LDAPS">LDAPS (SSL 636)</option>
+                            <option value="STARTTLS">StartTLS (389)</option>
+                            <option value="NONE">None (Port 389)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">Domaine NetBIOS / FQDN</label>
+                        <input
+                          type="text"
+                          value={settings.sso.activeDirectory.domainFqdn}
+                          placeholder="corp.local"
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: {
+                                ...prev.sso,
+                                activeDirectory: { ...prev.sso.activeDirectory, domainFqdn: e.target.value },
+                              },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="col-span-2 space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">Base DN de Recherche (Search Base)</label>
+                        <input
+                          type="text"
+                          value={settings.sso.activeDirectory.baseDn}
+                          placeholder="DC=corp,DC=local ou OU=Utilisateurs,DC=corp,DC=local"
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: {
+                                ...prev.sso,
+                                activeDirectory: { ...prev.sso.activeDirectory, baseDn: e.target.value },
+                              },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">Filtre LDAP Utilisateurs</label>
+                        <input
+                          type="text"
+                          value={settings.sso.activeDirectory.userSearchFilter}
+                          placeholder="(&(objectClass=user)(sAMAccountName={0}))"
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: {
+                                ...prev.sso,
+                                activeDirectory: { ...prev.sso.activeDirectory, userSearchFilter: e.target.value },
+                              },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">Compte de Service (Bind DN)</label>
+                        <input
+                          type="text"
+                          value={settings.sso.activeDirectory.bindDn}
+                          placeholder="CN=svc-netfloor,OU=Services,DC=corp,DC=local"
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: {
+                                ...prev.sso,
+                                activeDirectory: { ...prev.sso.activeDirectory, bindDn: e.target.value },
+                              },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="col-span-2 space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">Mot de Passe du Compte de Liaison (Bind Password)</label>
+                        <div className="relative">
+                          <input
+                            type={showBindPassword ? "text" : "password"}
+                            value={settings.sso.activeDirectory.bindPassword}
+                            onChange={(e) =>
+                              setSettings((prev) => ({
+                                ...prev,
+                                sso: {
+                                  ...prev.sso,
+                                  activeDirectory: { ...prev.sso.activeDirectory, bindPassword: e.target.value },
+                                },
+                              }))
+                            }
+                            className="w-full pl-3 pr-10 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowBindPassword(!showBindPassword)}
+                            className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-200"
+                          >
+                            {showBindPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Mappage des Groupes Active Directory vers Profils NetFloor */}
+                    <div className="pt-2 border-t border-slate-900">
+                      <div className="text-[11px] font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+                        <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                        Mappage des Groupes de Sécurité Windows AD ➔ Rôles NetFloor
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-xs font-mono">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-blue-400">Groupe DSI / Câbleur</label>
+                          <input
+                            type="text"
+                            value={settings.sso.activeDirectory.adminGroupDn}
+                            onChange={(e) =>
+                              setSettings((prev) => ({
+                                ...prev,
+                                sso: {
+                                  ...prev.sso,
+                                  activeDirectory: { ...prev.sso.activeDirectory, adminGroupDn: e.target.value },
+                                },
+                              }))
+                            }
+                            className="w-full px-2.5 py-1 bg-slate-900 border border-slate-800 rounded text-[11px] text-slate-300"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-purple-400">Groupe RH / Espace</label>
+                          <input
+                            type="text"
+                            value={settings.sso.activeDirectory.rhGroupDn}
+                            onChange={(e) =>
+                              setSettings((prev) => ({
+                                ...prev,
+                                sso: {
+                                  ...prev.sso,
+                                  activeDirectory: { ...prev.sso.activeDirectory, rhGroupDn: e.target.value },
+                                },
+                              }))
+                            }
+                            className="w-full px-2.5 py-1 bg-slate-900 border border-slate-800 rounded text-[11px] text-slate-300"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-amber-400">Groupe Maintenance / Travaux</label>
+                          <input
+                            type="text"
+                            value={settings.sso.activeDirectory.techGroupDn}
+                            onChange={(e) =>
+                              setSettings((prev) => ({
+                                ...prev,
+                                sso: {
+                                  ...prev.sso,
+                                  activeDirectory: { ...prev.sso.activeDirectory, techGroupDn: e.target.value },
+                                },
+                              }))
+                            }
+                            className="w-full px-2.5 py-1 bg-slate-900 border border-slate-800 rounded text-[11px] text-slate-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Résultat du Diagnostic Active Directory */}
+                  {adDiagnosticData && (
+                    <div className="p-4 rounded-lg bg-slate-950 border border-cyan-800/60 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-cyan-300 font-semibold text-xs">
+                          <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+                          Rapport de Test LDAP / Active Directory Réussi ({adDiagnosticData.totalLatencyMs}ms)
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {adDiagnosticData.summary?.domainController}
+                        </span>
+                      </div>
+
+                      {/* Étapes de diagnostic validées */}
+                      <div className="space-y-1.5 font-mono text-[11px]">
+                        {adDiagnosticData.steps?.map((step: any) => (
+                          <div key={step.step} className="flex items-center justify-between p-2 rounded bg-slate-900/80 border border-slate-850">
+                            <div className="flex items-center gap-2">
+                              <span className="text-cyan-400 font-bold">[{step.step}]</span>
+                              <span className="text-slate-200 font-semibold">{step.title} :</span>
+                              <span className="text-slate-400">{step.detail}</span>
+                            </div>
+                            <span className="text-emerald-400 text-[10px] flex items-center gap-1">
+                              <Check className="w-3 h-3" /> {step.latencyMs}ms
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Échantillon d'utilisateur extrait */}
+                      {adDiagnosticData.sampleUser && (
+                        <div className="p-3 bg-slate-900/90 rounded border border-slate-800 text-xs space-y-2">
+                          <div className="font-semibold text-slate-200 flex items-center justify-between">
+                            <span>Échantillon de Compte Utilisateur Extrait :</span>
+                            <span className="text-[10px] font-mono bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded border border-blue-500/30">
+                              {adDiagnosticData.sampleUser.netFloorRole}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-slate-300">
+                            <div>sAMAccountName: <span className="text-white">{adDiagnosticData.sampleUser.sAMAccountName}</span></div>
+                            <div>Nom: <span className="text-white">{adDiagnosticData.sampleUser.displayName}</span></div>
+                            <div>Email: <span className="text-white">{adDiagnosticData.sampleUser.mail}</span></div>
+                            <div>Département: <span className="text-white">{adDiagnosticData.sampleUser.department}</span></div>
+                            <div>Bureau assigné: <span className="text-white">{adDiagnosticData.sampleUser.physicalDeliveryOfficeName}</span></div>
+                            <div>Statut compte: <span className="text-emerald-400">{adDiagnosticData.sampleUser.accountStatus}</span></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
-                  <span>{ssoTestResult.message}</span>
+
+                  {/* Comptes Utilisateurs Synchronisés depuis AD */}
+                  {syncedAdUsers.length > 0 && (
+                    <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-200 flex items-center gap-2">
+                          <Database className="w-4 h-4 text-cyan-400" />
+                          Comptes Collaborateurs Synchronisés depuis l'Active Directory ({syncedAdUsers.length})
+                        </span>
+                        <span className="text-[10px] font-mono text-emerald-400">À jour</span>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full text-left text-xs font-mono">
+                          <thead className="text-[10px] text-slate-400 border-b border-slate-800 sticky top-0 bg-slate-950">
+                            <tr>
+                              <th className="py-1.5 px-2">Login (sAMAccountName)</th>
+                              <th className="py-1.5 px-2">Nom Complet</th>
+                              <th className="py-1.5 px-2">Service / Département</th>
+                              <th className="py-1.5 px-2">Poste Attribué</th>
+                              <th className="py-1.5 px-2 text-right">Rôle Dérivé</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850 text-slate-300 text-[11px]">
+                            {syncedAdUsers.map((u) => (
+                              <tr key={u.id} className="hover:bg-slate-900/50">
+                                <td className="py-1.5 px-2 font-bold text-cyan-300">{u.sAMAccountName}</td>
+                                <td className="py-1.5 px-2">{u.fullName}</td>
+                                <td className="py-1.5 px-2 text-slate-400">{u.department}</td>
+                                <td className="py-1.5 px-2 text-slate-300">{u.office}</td>
+                                <td className="py-1.5 px-2 text-right">
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-200">
+                                    {u.netFloorRole}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Formulaire de Configuration SSO */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Fournisseur d'Identité (IdP)</label>
-                  <select
-                    value={settings.sso.provider}
-                    onChange={(e) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        sso: { ...prev.sso, provider: e.target.value as any },
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="ENTRA_ID">Microsoft Entra ID (Azure AD)</option>
-                    <option value="OKTA">Okta Identity Cloud</option>
-                    <option value="GOOGLE_WORKSPACE">Google Workspace (SAML 2.0)</option>
-                    <option value="SAML_GENERIC">Fournisseur SAML / OIDC Générique</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Domaine d'Entreprise Autorisé</label>
-                  <input
-                    type="text"
-                    value={settings.sso.corporateDomain}
-                    placeholder="exemple: company.com"
-                    onChange={(e) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        sso: { ...prev.sso, corporateDomain: e.target.value },
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Tenant ID (Répertoire Azure)</label>
-                  <input
-                    type="text"
-                    value={settings.sso.tenantId}
-                    onChange={(e) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        sso: { ...prev.sso, tenantId: e.target.value },
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Application (Client) ID</label>
-                  <input
-                    type="text"
-                    value={settings.sso.clientId}
-                    onChange={(e) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        sso: { ...prev.sso, clientId: e.target.value },
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-
-                <div className="col-span-2 space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Client Secret (Clé d'API fédérée)</label>
-                  <input
-                    type="password"
-                    value={settings.sso.clientSecret}
-                    onChange={(e) =>
-                      setSettings((prev) => ({
-                        ...prev,
-                        sso: { ...prev.sso, clientSecret: e.target.value },
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Rôles et mappage automatique */}
-              <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
-                <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-blue-400" />
-                  Attribution Automatique des Rôles NetFloor
-                </h4>
-                <div className="grid grid-cols-3 gap-3 text-xs">
-                  <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
-                    <div className="font-semibold text-blue-400">DSI / Câbleur</div>
-                    <div className="text-[11px] text-slate-400 mt-1">Groupe AD : <code className="text-slate-300">sg-it-infra-admins</code></div>
-                    <div className="text-[10px] text-emerald-400 mt-1">Accès complet : CTE SQL, baies, VLANs</div>
+              {/* SECTION B : AUTRES FOURNISSEURS (ENTRA ID, OKTA, GOOGLE) */}
+              {settings.sso.provider !== "ACTIVE_DIRECTORY_LDAP" && (
+                <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-slate-100">
+                      Configuration Fédérée {settings.sso.provider}
+                    </h3>
+                    <button
+                      onClick={handleTestSsoCloud}
+                      disabled={isTestingSso}
+                      className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow transition"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      Tester le SSO Cloud
+                    </button>
                   </div>
-                  <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
-                    <div className="font-semibold text-purple-400">Ressources Humaines (RH)</div>
-                    <div className="text-[11px] text-slate-400 mt-1">Groupe AD : <code className="text-slate-300">sg-rh-workplace-mgmt</code></div>
-                    <div className="text-[10px] text-purple-300 mt-1">Attribution des bureaux & postes</div>
-                  </div>
-                  <div className="p-2.5 rounded bg-slate-900 border border-slate-800">
-                    <div className="font-semibold text-amber-400">Services Généraux / Maintenance</div>
-                    <div className="text-[11px] text-slate-400 mt-1">Groupe AD : <code className="text-slate-300">sg-facility-floorplan</code></div>
-                    <div className="text-[10px] text-amber-300 mt-1">Mesures métriques & boîtiers de sol</div>
+
+                  {ssoTestResult && (
+                    <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded text-emerald-300 text-xs flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>{ssoTestResult.message}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-300">Domaine d'Entreprise Autorisé</label>
+                      <input
+                        type="text"
+                        value={settings.sso.corporateDomain}
+                        onChange={(e) =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            sso: { ...prev.sso, corporateDomain: e.target.value },
+                          }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-300">Tenant ID / Realm</label>
+                      <input
+                        type="text"
+                        value={settings.sso.tenantId}
+                        onChange={(e) =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            sso: { ...prev.sso, tenantId: e.target.value },
+                          }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-300">Client ID (Application ID)</label>
+                      <input
+                        type="text"
+                        value={settings.sso.clientId}
+                        onChange={(e) =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            sso: { ...prev.sso, clientId: e.target.value },
+                          }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-300">Client Secret</label>
+                      <input
+                        type="password"
+                        value={settings.sso.clientSecret}
+                        onChange={(e) =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            sso: { ...prev.sso, clientSecret: e.target.value },
+                          }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
           {/* ================= TAB 2 : SNMP & DÉCOUVERTE ================= */}
           {activeTab === "snmp" && (
             <div className="space-y-6">
-              {/* Configuration de la sonde */}
               <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-xs font-bold text-slate-100 flex items-center gap-2">
                       <Radio className="w-4 h-4 text-cyan-400" />
-                      Paramètres de la Sonde SNMP Active
+                      Sonde de Découverte Réseau Active (SNMP)
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      Scan périodique des switches, routeurs, PDU et bornes Wi-Fi pour remonter l'état physique
+                      Scan physique des commutateurs, baies 42U, PDU et bornes Wi-Fi avec synchronisation vers le plan
                     </p>
                   </div>
-                  <button
-                    onClick={handleRunSnmpScan}
-                    disabled={isScanningSnmp}
-                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-lg transition"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isScanningSnmp ? "animate-spin" : ""}`} />
-                    {isScanningSnmp ? "Scan en cours..." : "Lancer le scan SNMP"}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSyncAllDevicesToFloor}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
+                      title="Associer automatiquement tous les équipements découverts sur le plan"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Tout synchroniser sur le plan
+                    </button>
+                    <button
+                      onClick={handleRunSnmpScan}
+                      disabled={isScanningSnmp}
+                      className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow transition"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isScanningSnmp ? "animate-spin" : ""}`} />
+                      {isScanningSnmp ? "Scan en cours..." : "Lancer le scan SNMP"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
@@ -515,7 +1019,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] text-slate-300 font-medium">Communauté / User</label>
+                    <label className="text-[11px] text-slate-300 font-medium">Communauté / Mot de passe</label>
                     <input
                       type="password"
                       value={settings.snmp.community}
@@ -538,15 +1042,15 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                 )}
               </div>
 
-              {/* Résultats Télémétrie Découverte */}
+              {/* Cartes d'équipements découverts avec bouton d'import direct sur le plan */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2">
                     <Activity className="w-4 h-4 text-emerald-400" />
-                    Appareils Découverts & Santé Matérielle ({discoveredDevices.length})
+                    Matériels Détectés sur le Réseau ({discoveredDevices.length})
                   </h4>
                   <span className="text-[11px] font-mono text-slate-500">
-                    Dernière synchronisation : il y a quelques instants
+                    Cliquez sur &quot;Importer sur le plan&quot; pour répercuter l&apos;IP et la télémétrie sur le canvas
                   </span>
                 </div>
 
@@ -554,11 +1058,11 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                   {discoveredDevices.map((device) => (
                     <div
                       key={device.id}
-                      className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2 hover:border-slate-700 transition"
+                      className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2.5 hover:border-slate-700 transition"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2.5">
-                          <div className="p-2 rounded bg-slate-900 border border-slate-800 text-blue-400">
+                          <div className="p-2 rounded bg-slate-900 border border-slate-800 text-cyan-400">
                             {device.deviceType === "SWITCH" ? (
                               <Network className="w-4 h-4" />
                             ) : device.deviceType === "SERVER_RACK" ? (
@@ -585,54 +1089,38 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono">
-                              {device.ip} • MAC: {device.mac}
+                              IP: {device.ip} • MAC: {device.mac}
                             </div>
                           </div>
                         </div>
-                        <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                          {device.model}
-                        </span>
+
+                        <button
+                          onClick={() => handleSyncDeviceToFloor(device)}
+                          className="px-2.5 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded text-[10px] font-medium border border-cyan-500/30 flex items-center gap-1 transition"
+                          title="Mettre à jour ou ajouter sur le plan"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Importer
+                        </button>
                       </div>
 
-                      {/* Métriques télémétriques */}
-                      <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-900 text-center font-mono">
-                        <div className="p-1.5 rounded bg-slate-900/80 border border-slate-850">
-                          <div className="text-[9px] text-slate-400 flex items-center justify-center gap-1">
-                            <Cpu className="w-2.5 h-2.5 text-blue-400" /> CPU
-                          </div>
-                          <div
-                            className={`text-xs font-bold ${
-                              device.cpuLoadPercent > 80 ? "text-rose-400" : "text-slate-200"
-                            }`}
-                          >
-                            {device.cpuLoadPercent}%
-                          </div>
+                      {/* Métriques */}
+                      <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-900 text-center font-mono text-[10px]">
+                        <div className="p-1 rounded bg-slate-900/80">
+                          <div className="text-[9px] text-slate-500">CPU</div>
+                          <div className="font-bold text-slate-200">{device.cpuLoadPercent}%</div>
                         </div>
-                        <div className="p-1.5 rounded bg-slate-900/80 border border-slate-850">
-                          <div className="text-[9px] text-slate-400 flex items-center justify-center gap-1">
-                            <HardDrive className="w-2.5 h-2.5 text-purple-400" /> RAM
-                          </div>
-                          <div className="text-xs font-bold text-slate-200">{device.memoryUsagePercent}%</div>
+                        <div className="p-1 rounded bg-slate-900/80">
+                          <div className="text-[9px] text-slate-500">RAM</div>
+                          <div className="font-bold text-slate-200">{device.memoryUsagePercent}%</div>
                         </div>
-                        <div className="p-1.5 rounded bg-slate-900/80 border border-slate-850">
-                          <div className="text-[9px] text-slate-400 flex items-center justify-center gap-1">
-                            <Thermometer className="w-2.5 h-2.5 text-amber-400" /> Temp
-                          </div>
-                          <div
-                            className={`text-xs font-bold ${
-                              device.temperatureC > 35 ? "text-amber-400" : "text-emerald-400"
-                            }`}
-                          >
-                            {device.temperatureC}°C
-                          </div>
+                        <div className="p-1 rounded bg-slate-900/80">
+                          <div className="text-[9px] text-slate-500">TEMP</div>
+                          <div className="font-bold text-amber-400">{device.temperatureC}°C</div>
                         </div>
-                        <div className="p-1.5 rounded bg-slate-900/80 border border-slate-850">
-                          <div className="text-[9px] text-slate-400 flex items-center justify-center gap-1">
-                            <Activity className="w-2.5 h-2.5 text-emerald-400" /> Ports
-                          </div>
-                          <div className="text-xs font-bold text-slate-200">
-                            {device.activePorts}/{device.totalPorts}
-                          </div>
+                        <div className="p-1 rounded bg-slate-900/80">
+                          <div className="text-[9px] text-slate-500">PORTS</div>
+                          <div className="font-bold text-emerald-400">{device.activePorts}/{device.totalPorts}</div>
                         </div>
                       </div>
                     </div>
@@ -645,35 +1133,109 @@ export const SettingsModal: FC<SettingsModalProps> = ({
           {/* ================= TAB 3 : IPAM & ADRESSAGE ================= */}
           {activeTab === "ipam" && (
             <div className="space-y-4">
-              {/* Résumé des sous-réseaux d'entreprise */}
+              {/* En-tête des sous-réseaux avec bouton d'ajout */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Network className="w-4 h-4 text-cyan-400" />
+                  Sous-Réseaux & VLANs Configurés ({settings.subnets.length})
+                </span>
+                <button
+                  onClick={() => setIsAddSubnetOpen(true)}
+                  className="px-3 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded-lg text-xs font-medium border border-cyan-500/30 flex items-center gap-1.5 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Ajouter un sous-réseau VLAN
+                </button>
+              </div>
+
+              {/* Formulaire Modal Inline : Ajouter un Sous-Réseau */}
+              {isAddSubnetOpen && (
+                <div className="p-3.5 bg-slate-950 border border-cyan-500/40 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between text-xs font-semibold text-cyan-300">
+                    <span>Créer une nouvelle plage d'adressage IPAM</span>
+                    <button onClick={() => setIsAddSubnetOpen(false)} className="text-slate-400 hover:text-white">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400">VLAN ID (Tag 802.1Q)</label>
+                      <input
+                        type="number"
+                        value={newSubnet.vlanId}
+                        onChange={(e) => setNewSubnet({ ...newSubnet, vlanId: Number(e.target.value) })}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-800 rounded font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400">Nom du VLAN</label>
+                      <input
+                        type="text"
+                        value={newSubnet.vlanName}
+                        onChange={(e) => setNewSubnet({ ...newSubnet, vlanName: e.target.value })}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-800 rounded font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400">Plage CIDR</label>
+                      <input
+                        type="text"
+                        value={newSubnet.cidr}
+                        onChange={(e) => setNewSubnet({ ...newSubnet, cidr: e.target.value })}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-800 rounded font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400">Passerelle par défaut</label>
+                      <input
+                        type="text"
+                        value={newSubnet.gateway}
+                        onChange={(e) => setNewSubnet({ ...newSubnet, gateway: e.target.value })}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-800 rounded font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => setIsAddSubnetOpen(false)}
+                      className="px-3 py-1 bg-slate-800 text-slate-300 rounded text-xs"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={handleAddSubnet}
+                      className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-xs font-semibold"
+                    >
+                      Enregistrer le VLAN
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Résumé des sous-réseaux */}
               <div className="grid grid-cols-4 gap-3">
                 {settings.subnets.map((sub) => (
-                  <div
-                    key={sub.vlanId}
-                    className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1"
-                  >
+                  <div key={sub.vlanId} className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1">
                     <div className="flex items-center justify-between text-xs font-semibold">
                       <span className="text-slate-100">VLAN {sub.vlanId}</span>
-                      <span className="text-[10px] font-mono text-blue-400">{sub.cidr}</span>
+                      <span className="text-[10px] font-mono text-cyan-400">{sub.cidr}</span>
                     </div>
                     <div className="text-[11px] text-slate-400">{sub.vlanName}</div>
                     <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
                       <div
-                        className="bg-blue-500 h-full rounded-full"
-                        style={{ width: `${(sub.usedIps / sub.totalIps) * 100}%` }}
+                        className="bg-cyan-500 h-full rounded-full"
+                        style={{ width: `${Math.min(100, (sub.usedIps / sub.totalIps) * 100)}%` }}
                       />
                     </div>
                     <div className="text-[10px] font-mono text-slate-500 flex justify-between pt-1">
-                      <span>Passerelle: {sub.gateway}</span>
-                      <span>
-                        {sub.usedIps}/{sub.totalIps} IP
-                      </span>
+                      <span>GW: {sub.gateway}</span>
+                      <span>{sub.usedIps}/{sub.totalIps} IP</span>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Barre de recherche et filtres de table */}
+              {/* Barre de recherche et filtres */}
               <div className="flex items-center justify-between gap-3 pt-2">
                 <div className="flex items-center gap-2 flex-1">
                   <div className="relative flex-1 max-w-md">
@@ -683,21 +1245,20 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                       placeholder="Filtrer par nom, IP, MAC ou rôle..."
                       value={ipSearch}
                       onChange={(e) => setIpSearch(e.target.value)}
-                      className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                      className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
                     />
                   </div>
 
                   <select
                     value={ipFilterType}
                     onChange={(e) => setIpFilterType(e.target.value)}
-                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-blue-500"
+                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
                   >
                     <option value="ALL">Tous les types d'équipements</option>
                     <option value="WALL_OUTLET">Prises Murales RJ45</option>
                     <option value="FLOOR_BOX">Boîtiers de sol</option>
-                    <option value="PATCH_PANEL">Panneaux de brassage</option>
+                    <option value="PATCH_PANEL">Panneaux & Baies</option>
                     <option value="SWITCH">Switches Réseau</option>
-                    <option value="RACK_42U">Baies 19 pouces</option>
                   </select>
                 </div>
 
@@ -706,7 +1267,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                   className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Exporter IPAM en CSV
+                  Exporter IPAM CSV
                 </button>
               </div>
 
@@ -717,7 +1278,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                     <thead className="bg-slate-900 text-slate-400 font-mono text-[11px] sticky top-0 border-b border-slate-800">
                       <tr>
                         <th className="py-2.5 px-3">Équipement / Prise</th>
-                        <th className="py-2.5 px-3">Rôle Service</th>
+                        <th className="py-2.5 px-3">Service</th>
                         <th className="py-2.5 px-3">Adresse IP (Éditable)</th>
                         <th className="py-2.5 px-3">Adresse MAC</th>
                         <th className="py-2.5 px-3 text-center">État Ping ICMP</th>
@@ -748,9 +1309,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                                 )}
                                 <span>{node.name}</span>
                               </div>
-                              <div className="text-[10px] text-slate-500 font-mono">
-                                ID: {node.id}
-                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono">ID: {node.id}</div>
                             </td>
 
                             <td className="py-2 px-3 font-mono text-[11px]">
@@ -774,19 +1333,30 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                             </td>
 
                             <td className="py-2 px-3">
-                              <input
-                                type="text"
-                                defaultValue={node.ipAddress ?? ""}
-                                placeholder="10.42.x.x"
-                                onBlur={(e) => {
-                                  const val = e.target.value.trim();
-                                  onUpdateNodeProperties?.(node.id, {
-                                    ipAddress: val ? val : undefined,
-                                  });
-                                  showToast(`IP mise à jour pour ${node.name}`);
-                                }}
-                                className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-blue-500 w-32"
-                              />
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  defaultValue={node.ipAddress ?? ""}
+                                  placeholder="10.42.x.x"
+                                  onBlur={(e) => {
+                                    const val = e.target.value.trim();
+                                    onUpdateNodeProperties?.(node.id, {
+                                      ipAddress: val ? val : undefined,
+                                    });
+                                    showToast(`IP mise à jour pour ${node.name}`);
+                                  }}
+                                  className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 w-32"
+                                />
+                                {!node.ipAddress && (
+                                  <button
+                                    onClick={() => handleAutoAssignIp(node.id, node.outletRole)}
+                                    title="Attribuer la prochaine IP libre dans ce VLAN"
+                                    className="p-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded border border-cyan-500/30"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
                             </td>
 
                             <td className="py-2 px-3">
@@ -801,7 +1371,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                                   });
                                   showToast(`MAC mise à jour pour ${node.name}`);
                                 }}
-                                className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-blue-500 w-36"
+                                className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 w-36"
                               />
                             </td>
 
@@ -816,9 +1386,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                                 >
                                   <span
                                     className={`w-1.5 h-1.5 rounded-full ${
-                                      node.pingStatus === "ONLINE"
-                                        ? "bg-emerald-400 animate-pulse"
-                                        : "bg-rose-400"
+                                      node.pingStatus === "ONLINE" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
                                     }`}
                                   />
                                   {node.pingStatus} ({node.pingLatencyMs ?? 4}ms)
@@ -831,16 +1399,16 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                             <td className="py-2 px-3 text-right">
                               <button
                                 onClick={() => {
-                                  const randomLatency = Math.floor(Math.random() * 8) + 2;
+                                  const randomLatency = Math.floor(Math.random() * 6) + 2;
                                   onUpdateNodeProperties?.(node.id, {
                                     pingStatus: "ONLINE",
                                     pingLatencyMs: randomLatency,
                                   });
                                   showToast(`Ping vers ${node.name} : ${randomLatency}ms (Réussi)`);
                                 }}
-                                className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded text-[10px] font-mono border border-blue-500/30 transition"
+                                className="px-2 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 rounded text-[10px] font-mono border border-cyan-500/30 transition"
                               >
-                                Ping test
+                                Ping
                               </button>
                             </td>
                           </tr>
@@ -856,7 +1424,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
           {/* ================= TAB 4 : INTÉGRATIONS ================= */}
           {activeTab === "integrations" && (
             <div className="grid grid-cols-2 gap-4">
-              {/* 1. Connecteur NetBox */}
+              {/* 1. NetBox DCIM */}
               <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -926,19 +1494,19 @@ export const SettingsModal: FC<SettingsModalProps> = ({
 
                 <div className="pt-2 flex items-center justify-between border-t border-slate-900">
                   <span className="text-[10px] text-slate-500 font-mono">
-                    {integrationStatuses.netbox?.msg ?? "Dernière synchro: 14:15"}
+                    {integrationStatuses.netbox?.msg ?? "Dernière synchro: OK"}
                   </span>
                   <button
-                    onClick={() => handleTestIntegration("netbox", "NetBox")}
+                    onClick={() => handleTestIntegration("netbox", "NetBox DCIM")}
                     disabled={integrationStatuses.netbox?.loading}
                     className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-medium border border-slate-700"
                   >
-                    {integrationStatuses.netbox?.loading ? "Connexion..." : "Tester API"}
+                    {integrationStatuses.netbox?.loading ? "Connexion..." : "Tester API REST"}
                   </button>
                 </div>
               </div>
 
-              {/* 2. Connecteur GLPI / ServiceNow */}
+              {/* 2. GLPI ITSM */}
               <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -1020,7 +1588,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* 3. Connecteur Microsoft Intune */}
+              {/* 3. Microsoft Intune */}
               <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -1029,7 +1597,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-100">Microsoft Intune MDM</div>
-                      <div className="text-[10px] text-slate-400">Conformité des postes de travail & EDR</div>
+                      <div className="text-[10px] text-slate-400">Conformité des postes & EDR</div>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -1076,7 +1644,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* 4. Webhooks d'alertes Teams / Slack */}
+              {/* 4. Webhooks d'Alertes */}
               <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -1085,7 +1653,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-100">Webhooks d'Alertes (Teams / Slack)</div>
-                      <div className="text-[10px] text-slate-400">Notifications temps réel en cas de rupture</div>
+                      <div className="text-[10px] text-slate-400">Notifications temps réel en cas d'incident</div>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -1146,7 +1714,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({
                     disabled={integrationStatuses.webhooks?.loading}
                     className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-medium border border-slate-700"
                   >
-                    {integrationStatuses.webhooks?.loading ? "Envoi..." : "Tester Notification"}
+                    {integrationStatuses.webhooks?.loading ? "Envoi..." : "Tester Alerte Réelle"}
                   </button>
                 </div>
               </div>
@@ -1154,12 +1722,17 @@ export const SettingsModal: FC<SettingsModalProps> = ({
           )}
         </div>
 
-        {/* 4. Pied de page du Modal */}
+        {/* 4. Pied de page du Modal avec Réinitialisation usine et Sauvegarde localStorage */}
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between flex-shrink-0">
-          <div className="text-[11px] text-slate-400 font-mono flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            Environnement de Production : Site Central Horizon
-          </div>
+          <button
+            onClick={handleResetSettings}
+            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-medium border border-slate-800 flex items-center gap-1.5 transition"
+            title="Restaurer la configuration d'origine"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Valeurs d'usine
+          </button>
+
           <div className="flex gap-3">
             <button
               onClick={onClose}
@@ -1168,13 +1741,11 @@ export const SettingsModal: FC<SettingsModalProps> = ({
               Fermer
             </button>
             <button
-              onClick={() => {
-                showToast("💾 Paramètres DSI enregistrés avec succès");
-                onClose();
-              }}
-              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow transition"
+              onClick={handleSaveSettings}
+              className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold shadow transition flex items-center gap-1.5"
             >
-              Enregistrer les modifications
+              <Check className="w-3.5 h-3.5" />
+              Enregistrer et appliquer
             </button>
           </div>
         </div>

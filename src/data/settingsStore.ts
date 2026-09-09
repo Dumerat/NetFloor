@@ -1,5 +1,22 @@
+export interface ActiveDirectoryConfig {
+  serverHost: string; // ex: "dc01.corp.local" ou "10.42.0.5"
+  port: number; // 389 (LDAP) ou 636 (LDAPS)
+  encryption: "NONE" | "STARTTLS" | "LDAPS";
+  domainFqdn: string; // "corp.local"
+  netbiosDomain: string; // "CORP"
+  baseDn: string; // "DC=corp,DC=local"
+  bindDn: string; // "CN=svc-netfloor,OU=ServiceAccounts,DC=corp,DC=local" ou "svc-netfloor@corp.local"
+  bindPassword: string;
+  userSearchFilter: string; // "(&(objectCategory=person)(objectClass=user)(sAMAccountName={0}))"
+  adminGroupDn: string; // "CN=NetFloor_Admins,OU=Groups,DC=corp,DC=local"
+  rhGroupDn: string; // "CN=NetFloor_RH,OU=Groups,DC=corp,DC=local"
+  techGroupDn: string; // "CN=NetFloor_Technicians,OU=Groups,DC=corp,DC=local"
+  syncIntervalMinutes: number;
+}
+
 export interface SsoSettings {
-  provider: "ENTRA_ID" | "OKTA" | "GOOGLE_WORKSPACE" | "SAML_GENERIC";
+  provider: "ACTIVE_DIRECTORY_LDAP" | "ENTRA_ID" | "OKTA" | "GOOGLE_WORKSPACE" | "SAML_GENERIC";
+  activeDirectory: ActiveDirectoryConfig;
   tenantId: string;
   clientId: string;
   clientSecret: string;
@@ -87,7 +104,22 @@ export interface SystemSettings {
 
 export const INITIAL_SETTINGS: SystemSettings = {
   sso: {
-    provider: "ENTRA_ID",
+    provider: "ACTIVE_DIRECTORY_LDAP",
+    activeDirectory: {
+      serverHost: "dc01.corp.local",
+      port: 636,
+      encryption: "LDAPS",
+      domainFqdn: "corp.local",
+      netbiosDomain: "CORP",
+      baseDn: "DC=corp,DC=local",
+      bindDn: "CN=svc-netfloor,OU=ServiceAccounts,DC=corp,DC=local",
+      bindPassword: "••••••••••••••••••••",
+      userSearchFilter: "(&(objectCategory=person)(objectClass=user)(sAMAccountName={0}))",
+      adminGroupDn: "CN=NetFloor_Admins,OU=Groups,DC=corp,DC=local",
+      rhGroupDn: "CN=NetFloor_RH,OU=Groups,DC=corp,DC=local",
+      techGroupDn: "CN=NetFloor_Technicians,OU=Groups,DC=corp,DC=local",
+      syncIntervalMinutes: 30,
+    },
     tenantId: "8f7a91bc-4e2a-4389-9a71-d0b8f0418c99",
     clientId: "netfloor-enterprise-sso-app",
     clientSecret: "••••••••••••••••••••••••••••••••",
@@ -99,8 +131,8 @@ export const INITIAL_SETTINGS: SystemSettings = {
   },
   snmp: {
     version: "v2c",
-    targetSubnet: "10.42.0.0/24",
-    community: "public_ro",
+    targetSubnet: "10.42.0.0/20",
+    community: "public",
     v3User: "snmp_admin",
     v3AuthProtocol: "SHA",
     v3PrivProtocol: "AES",
@@ -184,6 +216,69 @@ export const INITIAL_SETTINGS: SystemSettings = {
     },
   },
 };
+
+const STORAGE_KEY = "netfloor_dsi_enterprise_settings";
+
+/**
+ * Charge les paramètres depuis le localStorage du navigateur ou renvoie INITIAL_SETTINGS
+ */
+export function loadStoredSettings(): SystemSettings {
+  if (typeof window === "undefined") return INITIAL_SETTINGS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return INITIAL_SETTINGS;
+    const parsed = JSON.parse(raw);
+    return {
+      ...INITIAL_SETTINGS,
+      ...parsed,
+      sso: {
+        ...INITIAL_SETTINGS.sso,
+        ...(parsed.sso || {}),
+        activeDirectory: {
+          ...INITIAL_SETTINGS.sso.activeDirectory,
+          ...((parsed.sso && parsed.sso.activeDirectory) || {}),
+        },
+      },
+      snmp: {
+        ...INITIAL_SETTINGS.snmp,
+        ...(parsed.snmp || {}),
+      },
+      subnets: Array.isArray(parsed.subnets) && parsed.subnets.length > 0 ? parsed.subnets : INITIAL_SETTINGS.subnets,
+      integrations: {
+        ...INITIAL_SETTINGS.integrations,
+        ...(parsed.integrations || {}),
+      },
+    };
+  } catch {
+    return INITIAL_SETTINGS;
+  }
+}
+
+/**
+ * Sauvegarde les paramètres dans le localStorage du navigateur
+ */
+export function saveStoredSettings(settings: SystemSettings): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch (err) {
+    console.error("Erreur de sauvegarde localStorage des paramètres NetFloor:", err);
+  }
+}
+
+/**
+ * Réinitialise les paramètres aux valeurs d'usine par défaut
+ */
+export function resetStoredSettings(): SystemSettings {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignorer
+    }
+  }
+  return INITIAL_SETTINGS;
+}
 
 export const MOCK_DISCOVERED_DEVICES: DeviceTelemetry[] = [
   {
