@@ -18,6 +18,7 @@ import {
   Cpu,
   GripVertical,
   Phone,
+  Laptop,
 } from "lucide-react";
 import {
   NodeDisplay,
@@ -99,6 +100,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
         portInfo: string;
         vlanId?: number | undefined;
         isVoip?: boolean | undefined;
+        ipAddress?: string | undefined;
       }
       const assignedOutlets: UserOutletAssignment[] = [];
 
@@ -113,6 +115,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 portInfo: `${sp.portLabel} (${sp.outletRole || "DATA"})`,
                 vlanId: sp.vlanId,
                 isVoip: sp.outletRole === "VOIP" || sp.vlanId === 30,
+                ipAddress: sp.ipAddress || outlet.ipAddress,
               });
             }
           });
@@ -124,6 +127,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
             portInfo: outlet.outletRole || "DATA",
             vlanId: outlet.vlanId,
             isVoip: outlet.outletRole === "VOIP" || outlet.vlanId === 30,
+            ipAddress: outlet.ipAddress,
           });
         }
       }
@@ -141,6 +145,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                   portInfo: `${sp.portLabel} (via ${lo.name})`,
                   vlanId: sp.vlanId,
                   isVoip: sp.outletRole === "VOIP" || sp.vlanId === 30,
+                  ipAddress: sp.ipAddress || lo.ipAddress,
                 });
               });
             } else {
@@ -149,17 +154,30 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 portInfo: `${lo.outletRole || "DATA"} (via ${lo.name})`,
                 vlanId: lo.vlanId,
                 isVoip: lo.outletRole === "VOIP" || lo.vlanId === 30,
+                ipAddress: lo.ipAddress,
               });
             }
           }
         });
       });
 
-      // 3. Détection ou attribution du Téléphone IP relié au port Téléphonie
-      // Rechercher en priorité si l'utilisateur possède un port VoIP (VLAN 30 ou rôle VOIP)
-      const voipOutlet = assignedOutlets.find((o) => o.isVoip);
+      // 3. Identification du Poste de travail Utilisateur (PC / Laptop sur VLAN DATA 20)
+      const dataOutlet = assignedOutlets.find((o) => !o.isVoip);
       const userNum = user.id.replace(/\D/g, "") || "10";
-      const calculatedVoipIp = voipOutlet?.outlet.ipAddress || `10.42.30.${100 + (Number(userNum) % 150)}`;
+      const userNumInt = Number(userNum) % 200 || 12;
+      const workstationIp = dataOutlet?.ipAddress || dataOutlet?.outlet.ipAddress || `10.42.20.${100 + userNumInt}`;
+      const firstName = user.fullName.split(" ")[0] || "USER";
+      const workstation = {
+        name: `PC-${firstName.toUpperCase()}-${userNumInt}`,
+        ipAddress: workstationIp,
+        vlanId: dataOutlet?.vlanId ?? 20,
+        connectedPort: dataOutlet ? `${dataOutlet.outlet.name} • ${dataOutlet.portInfo}` : null,
+        hasDataPort: Boolean(dataOutlet),
+      };
+
+      // 4. Détection ou attribution du Téléphone IP relié au port Téléphonie (VLAN 30)
+      const voipOutlet = assignedOutlets.find((o) => o.isVoip);
+      const calculatedVoipIp = voipOutlet?.ipAddress || voipOutlet?.outlet.ipAddress || `10.42.30.${100 + userNumInt}`;
       const ipPhone = {
         model: "Cisco IP Phone 8845 / Yealink T54W",
         phoneNumber: user.phone || `+33 1 42 68 01 ${user.id.slice(-2)}`,
@@ -175,6 +193,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
         user,
         assignedDesks,
         assignedOutlets,
+        workstation,
         ipPhone,
         isAssigned: assignedDesks.length > 0 || assignedOutlets.length > 0,
       };
@@ -635,7 +654,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 Aucun utilisateur trouvé pour cette recherche.
               </div>
             ) : (
-              filteredUsers.map(({ user, assignedDesks, assignedOutlets, ipPhone }) => {
+              filteredUsers.map(({ user, assignedDesks, assignedOutlets, workstation, ipPhone }) => {
                 const primaryDesk = assignedDesks[0];
 
                 return (
@@ -801,7 +820,48 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                         })
                       )}
 
-                      {/* Section Téléphone IP dédié à l'utilisateur */}
+                      {/* Section Poste Utilisateur / PC (IP & Réseau Data) */}
+                      <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
+                            <Laptop className="w-3 h-3 text-sky-400" />
+                            <span>Poste / PC&nbsp;:</span>
+                          </span>
+                          <span className="min-w-0 truncate text-sky-300 font-mono font-medium">
+                            {workstation.name}
+                          </span>
+                        </div>
+
+                        {/* Bloc Réseau PC : Port raccordé & Adresse IP */}
+                        <div className="flex flex-col gap-1 text-[9px] font-mono bg-slate-900/90 p-1.5 rounded border border-slate-800/90">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="shrink-0 text-slate-400">Prise Data&nbsp;:</span>
+                            <span className={`min-w-0 truncate font-sans text-right ${workstation.hasDataPort ? "text-slate-200" : "text-amber-400 italic"}`}>
+                              {workstation.connectedPort || "Port Data par défaut"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-slate-850">
+                            <span className="shrink-0 text-slate-400">IP Poste&nbsp;:</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-cyan-300 font-semibold bg-cyan-950/80 border border-cyan-800/60 px-1.5 py-0.2 rounded">
+                                {workstation.ipAddress}
+                              </span>
+                              <span
+                                className="px-1 py-0.2 rounded border text-[8px] font-mono whitespace-nowrap"
+                                style={{
+                                  color: vlanStyles[workstation.vlanId]?.color ?? "#38bdf8",
+                                  borderColor: `${vlanStyles[workstation.vlanId]?.color ?? "#38bdf8"}40`,
+                                  backgroundColor: `${vlanStyles[workstation.vlanId]?.color ?? "#38bdf8"}15`,
+                                }}
+                              >
+                                V{workstation.vlanId} DATA
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section Téléphone IP dédié à l'utilisateur (VLAN 30) */}
                       <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
                         <div className="flex items-center justify-between gap-1">
                           <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
@@ -809,32 +869,36 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             <span>Téléphone IP&nbsp;:</span>
                           </span>
                           <span className="min-w-0 truncate text-purple-300 font-mono font-medium">
-                            {ipPhone.phoneNumber} <span className="text-slate-400">(Ext: {ipPhone.extension})</span>
+                            {ipPhone.phoneNumber} <span className="text-slate-400 font-sans text-[9px]">(Ext&nbsp;: {ipPhone.extension})</span>
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between gap-1 text-[9px] font-mono bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="shrink-0 text-slate-400 whitespace-nowrap">
-                              Relais&nbsp;:{" "}
-                              <span className={ipPhone.hasVoipPort ? "text-emerald-400" : "text-amber-400"}>
-                                {ipPhone.connectedPort || "Port VoIP dédié"}
-                              </span>
-                            </span>
-                            <span className="shrink-0 text-cyan-300 bg-cyan-950/80 border border-cyan-800/50 px-1 rounded">
-                              IP: {ipPhone.ipAddress}
+                        {/* Bloc Réseau Téléphone : Prise/Relais VoIP & Adresse IP Phone */}
+                        <div className="flex flex-col gap-1 text-[9px] font-mono bg-purple-950/20 p-1.5 rounded border border-purple-900/40">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="shrink-0 text-slate-400">Relais&nbsp;:</span>
+                            <span className={`min-w-0 truncate font-sans text-right ${ipPhone.hasVoipPort ? "text-purple-200" : "text-amber-400 italic"}`}>
+                              {ipPhone.connectedPort || "Port VoIP dédié"}
                             </span>
                           </div>
-                          <span
-                            className="shrink-0 px-1 rounded border text-[8px] whitespace-nowrap"
-                            style={{
-                              color: vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc",
-                              borderColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}40`,
-                              backgroundColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}15`,
-                            }}
-                          >
-                            V{ipPhone.vlanId} VoIP
-                          </span>
+                          <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-purple-900/30">
+                            <span className="shrink-0 text-slate-400">IP Phone&nbsp;:</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-purple-200 font-semibold bg-purple-950/80 border border-purple-700/60 px-1.5 py-0.2 rounded">
+                                {ipPhone.ipAddress}
+                              </span>
+                              <span
+                                className="px-1 py-0.2 rounded border text-[8px] font-mono whitespace-nowrap"
+                                style={{
+                                  color: vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc",
+                                  borderColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}40`,
+                                  backgroundColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}15`,
+                                }}
+                              >
+                                V{ipPhone.vlanId} VoIP
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
