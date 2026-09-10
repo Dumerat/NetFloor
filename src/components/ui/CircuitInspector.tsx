@@ -3994,8 +3994,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
               <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 border-t border-slate-800">
                 <div className="bg-slate-950 p-2 rounded border border-slate-850">
-                  <div className="text-slate-400 text-[10px]">Type de mobilier :</div>
-                  <div className="text-emerald-400 font-bold mt-0.5">
+                  <div className="text-slate-400 text-[10px] shrink-0 whitespace-nowrap">Type de mobilier&nbsp;:</div>
+                  <div className="text-emerald-400 font-bold mt-0.5 truncate">
                     {selectedNode.subType === "BENCH_QUAD"
                       ? "Îlot 4 Postes (Quad)"
                       : selectedNode.subType === "BENCH_DOUBLE"
@@ -4010,13 +4010,75 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   </div>
                 </div>
                 <div className="bg-slate-950 p-2 rounded border border-slate-850">
-                  <div className="text-slate-400 text-[10px]">Dimensions :</div>
+                  <div className="text-slate-400 text-[10px] shrink-0 whitespace-nowrap">Dimensions&nbsp;:</div>
                   <div className="text-slate-200 font-bold mt-0.5">
                     {(currentWidth / 1000).toFixed(2)} × {(currentHeight / 1000).toFixed(2)} m
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Téléphone IP du poste (VoIP) */}
+            {(() => {
+              const voipOutlet = attachedOutlets.find(
+                (o) => o.outletRole === "VOIP" || o.vlanId === 30 || o.stackedPorts?.some((sp) => sp.outletRole === "VOIP" || sp.vlanId === 30)
+              );
+              const voipIp = voipOutlet?.ipAddress || (voipOutlet?.stackedPorts?.find((sp) => sp.outletRole === "VOIP" || sp.vlanId === 30)?.ipAddress);
+              const deskNumDigits = selectedNode.name.match(/\d+/) ? selectedNode.name.match(/\d+/)![0] : "10";
+              const userExt = `20${String(deskNumDigits).padStart(2, "0")}`;
+
+              return (
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                      <Phone className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Téléphone IP & VoIP</span>
+                    </span>
+                    <span
+                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                        voipOutlet
+                          ? "bg-purple-500/20 text-purple-300 border-purple-500/30 font-bold"
+                          : "bg-slate-800 text-slate-400 border-slate-700"
+                      }`}
+                    >
+                      {voipOutlet ? "ÉQUIPÉ" : "NON INSTALLÉ"}
+                    </span>
+                  </div>
+
+                  {voipOutlet ? (
+                    <div className="p-2.5 rounded bg-slate-950 border border-slate-850 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] gap-1">
+                        <span className="shrink-0 text-slate-400 whitespace-nowrap">IP Téléphone&nbsp;:</span>
+                        <span className="font-mono text-cyan-300 font-bold bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/40">
+                          {voipIp || `10.42.30.${100 + (Number(deskNumDigits) % 150)}`}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 gap-1">
+                        <span className="shrink-0 whitespace-nowrap">Ligne / Poste&nbsp;:</span>
+                        <span className="font-mono text-slate-200 font-medium">Poste {userExt} (VLAN 30)</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 gap-1">
+                        <span className="shrink-0 whitespace-nowrap">Port raccordé&nbsp;:</span>
+                        <span className="text-purple-300 font-medium truncate">{voipOutlet.name}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded border border-slate-850 text-[10px] text-slate-400">
+                      <span>Aucun terminal VoIP rattaché à ce bureau.</span>
+                      {onAddOutletToDesk && (
+                        <button
+                          onClick={() => onAddOutletToDesk(selectedNode.id, "VOIP")}
+                          className="px-2 py-1 bg-purple-600/30 hover:bg-purple-600/40 text-purple-300 border border-purple-500/40 rounded text-[10px] font-semibold transition flex items-center gap-1 shrink-0"
+                        >
+                          <Plus className="w-3 h-3" />
+                          + Ajouter IP Phone
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Places RH et Collaborateurs assignés */}
             <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
@@ -4680,7 +4742,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
           {/* Saisie manuelle libre (fausses ou vraies mesures au mm) */}
           <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
             <div>
-              <label className="text-[10px] text-slate-400 block mb-1">Largeur (mm) :</label>
+              <label className="text-[10px] text-slate-400 block mb-1 shrink-0 whitespace-nowrap">Largeur (mm)&nbsp;:</label>
               <input
                 type="number"
                 step="50"
@@ -4694,7 +4756,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400 block mb-1">Profondeur (mm) :</label>
+              <label className="text-[10px] text-slate-400 block mb-1 shrink-0 whitespace-nowrap">Profondeur (mm)&nbsp;:</label>
               <input
                 type="number"
                 step="50"
@@ -4711,9 +4773,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
           {/* Orientation & Fauteuil */}
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
+            <span className="text-[10px] text-slate-400 flex items-center gap-1 shrink-0 whitespace-nowrap">
               <Armchair className="w-3.5 h-3.5 text-slate-400" />
-              Position Fauteuil :
+              <span>Position Fauteuil&nbsp;:</span>
             </span>
             <div className="flex gap-1">
               <button

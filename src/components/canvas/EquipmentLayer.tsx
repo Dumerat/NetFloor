@@ -761,6 +761,40 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             return undefined;
           };
 
+          // Détection d'une prise ou raccordement VoIP (VLAN 30 ou rôle VOIP) lié à ce bureau
+          const deskOutlets = nodes.filter((n) => n.attachedToDeskId === desk.id);
+          const hasVoipPhone = deskOutlets.some(
+            (n) =>
+              n.outletRole === "VOIP" ||
+              n.vlanId === 30 ||
+              n.stackedPorts?.some((sp) => sp.outletRole === "VOIP" || sp.vlanId === 30)
+          );
+
+          // Rendu d'un terminal téléphonique IP réaliste (combiné, écran rétroéclairé bleu avec "IP", pavé numérique et LED verte)
+          const renderVoipPhone = (px: number, py: number, phoneRotation: number = 0) => (
+            <Group x={px} y={py} rotation={phoneRotation} listening={false}>
+              {/* Ombre / socle */}
+              <Rect x={-55} y={-45} width={110} height={90} fill="#090d16" cornerRadius={10} />
+              {/* Corps principal incliné du téléphone */}
+              <Rect x={-52} y={-42} width={104} height={84} fill="#1e293b" stroke="#334155" strokeWidth={4} cornerRadius={8} />
+              {/* Combiné téléphonique à gauche */}
+              <Rect x={-45} y={-38} width={22} height={76} fill="#0f172a" stroke="#475569" strokeWidth={3} cornerRadius={6} />
+              {/* Écran LCD rétroéclairé cyan */}
+              <Rect x={-15} y={-36} width={60} height={32} fill="#0369a1" stroke="#38bdf8" strokeWidth={2} cornerRadius={4} />
+              <Text x={-13} y={-28} width={56} text="IP TEL" fontSize={11} fontFamily="monospace" fontStyle="bold" fill="#e0f2fe" align="center" />
+              {/* Pavé numérique stylisé */}
+              <Rect x={-15} y={4} width={42} height={32} fill="#0f172a" cornerRadius={3} />
+              <Rect x={-11} y={8} width={8} height={6} fill="#475569" cornerRadius={1} />
+              <Rect x={1} y={8} width={8} height={6} fill="#475569" cornerRadius={1} />
+              <Rect x={13} y={8} width={8} height={6} fill="#475569" cornerRadius={1} />
+              <Rect x={-11} y={18} width={8} height={6} fill="#475569" cornerRadius={1} />
+              <Rect x={1} y={18} width={8} height={6} fill="#475569" cornerRadius={1} />
+              <Rect x={13} y={18} width={8} height={6} fill="#475569" cornerRadius={1} />
+              {/* Voyant LED statut réseau (vert en ligne) */}
+              <Circle x={38} y={20} radius={4} fill="#22c55e" stroke="#15803d" strokeWidth={1} />
+            </Group>
+          );
+
           return (
             <Group
               key={desk.id}
@@ -864,6 +898,16 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   <Rect x={(3 * width) / 4 - 45} y={height / 2 + 60} width={90} height={22} fill="#475569" cornerRadius={5} />
                   <Rect x={(3 * width) / 4 - 160} y={height - 175} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
 
+                  {/* Téléphones IP si le bureau est équipé VoIP */}
+                  {hasVoipPhone && (
+                    <Group listening={false}>
+                      {renderVoipPhone(width / 4 + 210, height / 2 - 120, 0)}
+                      {desk.seats?.[1]?.fullName && renderVoipPhone((3 * width) / 4 + 210, height / 2 - 120, 0)}
+                      {desk.seats?.[2]?.fullName && renderVoipPhone(width / 4 + 210, height / 2 + 120, 180)}
+                      {desk.seats?.[3]?.fullName && renderVoipPhone((3 * width) / 4 + 210, height / 2 + 120, 180)}
+                    </Group>
+                  )}
+
                   {/* 4 Chaises (2 en haut tournées vers le bas, 2 en bas tournées vers le haut) */}
                   {desk.chairPosition !== "NONE" && (
                     <Group listening={false}>
@@ -907,6 +951,14 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   <Rect x={width / 2 - 45} y={height / 2 + 60} width={90} height={22} fill="#475569" cornerRadius={5} />
                   <Rect x={width / 2 - 160} y={height - 175} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
 
+                  {/* Téléphones IP si le bureau double est équipé VoIP */}
+                  {hasVoipPhone && (
+                    <Group listening={false}>
+                      {renderVoipPhone(width / 2 + 250, height / 2 - 120, 0)}
+                      {desk.seats?.[1]?.fullName && renderVoipPhone(width / 2 + 250, height / 2 + 120, 180)}
+                    </Group>
+                  )}
+
                   {/* 2 Chaises (1 en haut tournée vers le bas, 1 en bas tournée vers le haut) */}
                   {desk.chairPosition !== "NONE" && (
                     <Group listening={false}>
@@ -933,6 +985,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   <Rect x={width / 2 - 50} y={55} width={100} height={25} fill="#475569" cornerRadius={5} />
                   {/* Clavier Solo */}
                   <Rect x={width / 2 - 180} y={170} width={360} height={110} fill="#1e293b" stroke="#334155" strokeWidth={8} cornerRadius={8} />
+
+                  {/* Téléphone IP sur bureau Solo */}
+                  {hasVoipPhone && renderVoipPhone(width / 2 + 260, 140, 15)}
 
                   {/* Fauteuil Solo Ergonomique */}
                   {desk.chairPosition !== "NONE" && (

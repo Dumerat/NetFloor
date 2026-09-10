@@ -158,11 +158,14 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       // 3. Détection ou attribution du Téléphone IP relié au port Téléphonie
       // Rechercher en priorité si l'utilisateur possède un port VoIP (VLAN 30 ou rôle VOIP)
       const voipOutlet = assignedOutlets.find((o) => o.isVoip);
+      const userNum = user.id.replace(/\D/g, "") || "10";
+      const calculatedVoipIp = voipOutlet?.outlet.ipAddress || `10.42.30.${100 + (Number(userNum) % 150)}`;
       const ipPhone = {
         model: "Cisco IP Phone 8845 / Yealink T54W",
         phoneNumber: user.phone || `+33 1 42 68 01 ${user.id.slice(-2)}`,
         macAddress: `00:08:5D:${user.id.slice(-2)}:A4:1F`,
         extension: `20${user.id.slice(-2)}`,
+        ipAddress: calculatedVoipIp,
         connectedPort: voipOutlet ? `${voipOutlet.outlet.name} • ${voipOutlet.portInfo}` : null,
         vlanId: voipOutlet?.vlanId ?? 30,
         hasVoipPort: Boolean(voipOutlet),
@@ -719,29 +722,30 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     </div>
 
                     {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
+                    {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
                     <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex flex-col gap-1.5">
                       {/* Section Bureaux */}
                       {assignedDesks.length === 0 ? (
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400 flex items-center gap-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
                             <Monitor className="w-3 h-3 text-slate-500" />
-                            Bureau :
+                            <span>Bureau&nbsp;:</span>
                           </span>
-                          <span className="text-slate-500 italic">Non assigné</span>
+                          <span className="min-w-0 truncate text-slate-500 italic">Non assigné</span>
                         </div>
                       ) : (
                         assignedDesks.map(({ desk, seatLabel }, dIdx) => (
-                          <div key={desk.id + dIdx} className="flex items-center justify-between">
-                            <span className="text-slate-400 flex items-center gap-1">
+                          <div key={desk.id + dIdx} className="flex items-center justify-between gap-1">
+                            <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
                               <Monitor className="w-3 h-3 text-slate-500" />
-                              {assignedDesks.length > 1 ? `Bureau ${dIdx + 1} :` : "Bureau :"}
+                              <span>{assignedDesks.length > 1 ? `Bureau ${dIdx + 1}\u00A0:` : "Bureau\u00A0:"}</span>
                             </span>
                             <span
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleItemClick(desk);
                               }}
-                              className="font-medium text-blue-400 hover:underline cursor-pointer"
+                              className="min-w-0 truncate font-medium text-blue-400 hover:underline cursor-pointer"
                               title="Cliquer pour centrer sur le plan"
                             >
                               {desk.name} {seatLabel ? `• ${seatLabel}` : ""}
@@ -752,36 +756,36 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
                       {/* Section Prises & Ports RJ45 */}
                       {assignedOutlets.length === 0 ? (
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-850">
-                          <span className="text-slate-400 flex items-center gap-1">
+                        <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-850">
+                          <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
                             <Plug className="w-3 h-3 text-slate-500" />
-                            Prise / Port :
+                            <span>Prise / Port&nbsp;:</span>
                           </span>
-                          <span className="text-slate-500 italic">Aucune prise raccordée</span>
+                          <span className="min-w-0 truncate text-slate-500 italic">Aucune prise raccordée</span>
                         </div>
                       ) : (
                         assignedOutlets.map((ao, oIdx) => {
                           const vStyle = ao.vlanId ? vlanStyles[ao.vlanId] : undefined;
                           return (
-                            <div key={ao.outlet.id + oIdx} className="flex items-center justify-between pt-1 border-t border-slate-850">
-                              <span className="text-slate-400 flex items-center gap-1">
+                            <div key={ao.outlet.id + oIdx} className="flex items-center justify-between gap-1 pt-1 border-t border-slate-850">
+                              <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
                                 <Plug className="w-3 h-3 text-slate-500" />
-                                {assignedOutlets.length > 1 ? `Prise ${oIdx + 1} :` : "Prise / Port :"}
+                                <span>{assignedOutlets.length > 1 ? `Prise ${oIdx + 1}\u00A0:` : "Prise / Port\u00A0:"}</span>
                               </span>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 <span
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleItemClick(ao.outlet);
                                   }}
-                                  className="font-medium text-emerald-400 hover:underline cursor-pointer"
+                                  className="min-w-0 truncate font-medium text-emerald-400 hover:underline cursor-pointer"
                                   title="Cliquer pour localiser sur le plan"
                                 >
                                   {ao.outlet.name} {ao.portInfo ? `[${ao.portInfo}]` : ""}
                                 </span>
                                 {ao.vlanId && (
                                   <span
-                                    className="px-1 py-0.2 rounded text-[9px] font-mono border"
+                                    className="shrink-0 px-1 py-0.2 rounded text-[9px] font-mono border"
                                     style={{
                                       color: vStyle?.color ?? "#38bdf8",
                                       borderColor: `${vStyle?.color ?? "#38bdf8"}40`,
@@ -799,25 +803,30 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
                       {/* Section Téléphone IP dédié à l'utilisateur */}
                       <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400 flex items-center gap-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
                             <Phone className="w-3 h-3 text-purple-400" />
-                            Téléphone IP :
+                            <span>Téléphone IP&nbsp;:</span>
                           </span>
-                          <span className="text-purple-300 font-mono font-medium">
+                          <span className="min-w-0 truncate text-purple-300 font-mono font-medium">
                             {ipPhone.phoneNumber} <span className="text-slate-400">(Ext: {ipPhone.extension})</span>
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between text-[9px] font-mono bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800">
-                          <span className="text-slate-400 flex items-center gap-1">
-                            <span>Relais :</span>
-                            <span className={ipPhone.hasVoipPort ? "text-emerald-400" : "text-amber-400"}>
-                              {ipPhone.connectedPort || "Attente port VoIP dédié"}
+                        <div className="flex items-center justify-between gap-1 text-[9px] font-mono bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="shrink-0 text-slate-400 whitespace-nowrap">
+                              Relais&nbsp;:{" "}
+                              <span className={ipPhone.hasVoipPort ? "text-emerald-400" : "text-amber-400"}>
+                                {ipPhone.connectedPort || "Port VoIP dédié"}
+                              </span>
                             </span>
-                          </span>
+                            <span className="shrink-0 text-cyan-300 bg-cyan-950/80 border border-cyan-800/50 px-1 rounded">
+                              IP: {ipPhone.ipAddress}
+                            </span>
+                          </div>
                           <span
-                            className="px-1 rounded border text-[8px]"
+                            className="shrink-0 px-1 rounded border text-[8px] whitespace-nowrap"
                             style={{
                               color: vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc",
                               borderColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}40`,
@@ -855,6 +864,12 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 const linkedOutlets = outletNodes.filter(
                   (o) => o.attachedToDeskId === desk.id
                 );
+
+                // Trouver si un téléphone IP VoIP est présent sur ce bureau
+                const voipOutlet = linkedOutlets.find(
+                  (o) => o.outletRole === "VOIP" || o.vlanId === 30 || o.stackedPorts?.some((sp) => sp.outletRole === "VOIP" || sp.vlanId === 30)
+                );
+                const deskVoipIp = voipOutlet?.ipAddress || (voipOutlet?.stackedPorts?.find((sp) => sp.outletRole === "VOIP" || sp.vlanId === 30)?.ipAddress);
 
                 const seatCount = desk.seats?.length || (desk.subType === "BENCH_QUAD" ? 4 : desk.subType === "BENCH_DOUBLE" ? 2 : 1);
                 const occupiedSeats = desk.seats
@@ -901,30 +916,48 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     {desk.seats && desk.seats.length > 0 ? (
                       <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] space-y-1">
                         {desk.seats.map((seat, sIdx) => (
-                          <div key={sIdx} className="flex items-center justify-between text-slate-300">
-                            <span className="text-slate-400 font-mono">
-                              P{sIdx + 1} ({seat.seatLabel || "Poste"}):
+                          <div key={sIdx} className="flex items-center justify-between text-slate-300 gap-1">
+                            <span className="shrink-0 whitespace-nowrap text-slate-400 font-mono">
+                              <span>{`P${sIdx + 1} (${seat.seatLabel || "Poste"})\u00A0:`}</span>
                             </span>
-                            <span className={seat.fullName ? "text-slate-200 font-medium" : "text-slate-600 italic"}>
+                            <span className={seat.fullName ? "min-w-0 truncate text-slate-200 font-medium" : "min-w-0 truncate text-slate-600 italic"}>
                               {seat.fullName || "Place libre"}
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : desk.assignedPerson ? (
-                      <div className="text-[10px] text-slate-400 flex items-center justify-between bg-slate-950/50 p-1 rounded">
-                        <span>Occupant :</span>
-                        <span className="text-slate-200 font-medium">{desk.assignedPerson}</span>
+                      <div className="text-[10px] text-slate-400 flex items-center justify-between bg-slate-950/50 p-1 rounded gap-1">
+                        <span className="shrink-0 whitespace-nowrap">Occupant&nbsp;:</span>
+                        <span className="min-w-0 truncate text-slate-200 font-medium">{desk.assignedPerson}</span>
                       </div>
                     ) : null}
 
+                    {/* Téléphone IP sur le bureau le cas échéant */}
+                    {voipOutlet && (
+                      <div className="flex items-center justify-between pt-1 text-[10px] border-t border-slate-800/60 font-mono gap-1">
+                        <span className="shrink-0 whitespace-nowrap text-purple-400 flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-purple-400" />
+                          <span>Téléphone IP&nbsp;:</span>
+                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="min-w-0 truncate text-purple-300 font-semibold">
+                            {deskVoipIp || "10.42.30.xxx"}
+                          </span>
+                          <span className="shrink-0 px-1 py-0.2 rounded text-[8px] bg-purple-950/80 border border-purple-500/40 text-purple-300">
+                            V30 VoIP
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Prises solidaires rattachées */}
-                    <div className="flex items-center justify-between pt-1 text-[10px] border-t border-slate-800/60">
-                      <span className="text-slate-400 flex items-center gap-1">
+                    <div className="flex items-center justify-between pt-1 text-[10px] border-t border-slate-800/60 gap-1">
+                      <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
                         <Plug className="w-3 h-3 text-slate-500" />
-                        Prises solidaires :
+                        <span>Prises solidaires&nbsp;:</span>
                       </span>
-                      <span className="font-mono text-slate-300">
+                      <span className="font-mono text-slate-300 shrink-0">
                         {linkedOutlets.length > 0 ? (
                           <span className="text-emerald-400">
                             {linkedOutlets.length} connectée(s)
@@ -1012,22 +1045,22 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     </div>
 
                     {/* Brassage Baie / Switch / Port */}
-                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono">
-                      <span className="text-slate-400">Raccordement :</span>
+                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono gap-1">
+                      <span className="shrink-0 whitespace-nowrap text-slate-400">Raccordement&nbsp;:</span>
                       {port.isPatched && port.connectedSwitchPort ? (
-                        <span className="text-emerald-400 font-medium">
+                        <span className="min-w-0 truncate text-emerald-400 font-medium">
                           {port.connectedRackId || "BAIE"} ➔ {port.connectedSwitchId || "SW"} / Port {port.connectedSwitchPort}
                         </span>
                       ) : (
-                        <span className="text-slate-500 italic">Non brassé au switch</span>
+                        <span className="min-w-0 truncate text-slate-500 italic">Non brassé au switch</span>
                       )}
                     </div>
 
                     {/* IP & MAC le cas échéant */}
                     {(port.ipAddress || port.macAddress) && (
-                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-400">
-                        <span>IP: {port.ipAddress || "DHCP"}</span>
-                        <span>MAC: {port.macAddress || "--:--"}</span>
+                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 gap-1">
+                        <span className="shrink-0 whitespace-nowrap">IP:&nbsp;{port.ipAddress || "DHCP"}</span>
+                        <span className="shrink-0 whitespace-nowrap">MAC:&nbsp;{port.macAddress || "--:--"}</span>
                       </div>
                     )}
                   </div>
@@ -1104,9 +1137,9 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                       <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition" />
                     </div>
 
-                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono">
-                      <span className="text-slate-400">IP / Statut :</span>
-                      <span className="text-cyan-400">
+                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono gap-1">
+                      <span className="shrink-0 whitespace-nowrap text-slate-400">IP / Statut&nbsp;:</span>
+                      <span className="min-w-0 truncate text-cyan-400">
                         {node.ipAddress || (isWifi ? "192.168.10.25" : isPrinter ? "192.168.20.150" : "DHCP")}
                       </span>
                     </div>

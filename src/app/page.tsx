@@ -1080,6 +1080,12 @@ export default function NetFloorApp() {
       const worldY = desk.yMm + localX * sin + localY * cos;
 
       const deskNum = desk.name.replace(/^Bureau\s*/i, "").trim();
+      const primaryOccupant = desk.assignedPerson || desk.seats?.find((s) => s.fullName)?.fullName;
+      const deskNumDigits = deskNum.match(/\d+/) ? deskNum.match(/\d+/)![0] : "10";
+      const ipAddress = isVoip
+        ? `10.42.30.${100 + (Number(deskNumDigits) % 150)}`
+        : `10.42.20.${100 + (Number(deskNumDigits) % 150)}`;
+
       const newOutlet: NodeDisplay = {
         id: newOutletId,
         type: "WALL_OUTLET",
@@ -1089,6 +1095,10 @@ export default function NetFloorApp() {
         portId: newPortId,
         attachedToDeskId: deskId,
         outletRole: role,
+        vlanId: isVoip ? 30 : 20,
+        ipAddress,
+        assignedPerson: primaryOccupant || undefined,
+        attachedSeatIndex: desk.seats && desk.seats.length > 0 ? 0 : undefined,
       };
 
       return [...prev, newOutlet];
