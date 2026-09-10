@@ -37,7 +37,7 @@ export interface RackDisplay {
   devices?: RackDeviceItem[] | undefined;
 }
 
-export type OutletRole = "DATA" | "VOIP" | "WIFI" | "PRINTER" | "GENERIC";
+export type OutletRole = "DATA" | "VOIP" | "WIFI" | "PRINTER" | "CAMERA" | "GENERIC";
 
 export type PoeMode = "NONE" | "POE" | "POE_PLUS" | "POE_PLUS_PLUS";
 
@@ -53,6 +53,7 @@ export type NodeSubType =
   | "FLOOR_BOX"
   | "WIFI_AP"
   | "PRINTER_STATION"
+  | "CAMERA_IP"
   | "RACK_42U"
   | "RACK_18U";
 

@@ -22,7 +22,9 @@ import {
   Check,
   GripVertical,
   Network,
-  } from "lucide-react";
+  Camera,
+  Boxes,
+} from "lucide-react";
 import {
   OutletRole,
   NodeSubType,
@@ -238,6 +240,23 @@ export const PALETTE_CATALOG: PaletteItem[] = [
     vlanId: 40,
     customEmote: "🖨️",
   },
+  {
+    id: "infra-camera-ip",
+    category: "INFRASTRUCTURE",
+    name: "Caméra IP Dôme Sécurité",
+    subType: "CAMERA_IP",
+    targetType: "WALL_OUTLET",
+    outletRole: "CAMERA",
+    widthMm: 300,
+    heightMm: 300,
+    description: "Caméra de surveillance dôme HD PoE (VLAN 50 Sécurité / Wi-Fi)",
+    personaTag: "DSI",
+    iconName: "Camera",
+    portCount: 1,
+    poeMode: "POE",
+    vlanId: 50,
+    customEmote: "🎥",
+  },
 ];
 
 const EMOTE_OPTIONS = ["🔌", "💻", "📞", "🖨️", "📶", "🖥️", "🎥", "⚡", "🌐", "🔒", "🚪", "⚙️", "📦", "🏷️"];
@@ -249,10 +268,13 @@ interface EquipmentPaletteProps {
   onOpenSettings?: (() => void) | undefined;
   onOpenTopology?: (() => void) | undefined;
   isTopologyOpen?: boolean | undefined;
+  onOpenInventory?: (() => void) | undefined;
+  isInventoryOpen?: boolean | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
   width?: number | undefined;
   onResizeStart?: ((e: React.MouseEvent) => void) | undefined;
   topologyContent?: React.ReactNode | undefined;
+  inventoryContent?: React.ReactNode | undefined;
 }
 
 const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
@@ -262,12 +284,15 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   onOpenSettings,
   onOpenTopology,
   isTopologyOpen = false,
+  onOpenInventory,
+  isInventoryOpen = false,
   vlanStyles = DEFAULT_VLAN_STYLES,
   width = 340,
   onResizeStart,
   topologyContent,
+  inventoryContent,
 }) => {
-  const isDrawerOpen = isOpen || isTopologyOpen;
+  const isDrawerOpen = isOpen || isTopologyOpen || isInventoryOpen;
   // 3 sous-menus d'équipements dans la seconde fenêtre latérale
   const [selectedCategory, setSelectedCategory] = useState<PaletteCategory>("FURNITURE");
 
@@ -362,6 +387,8 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
         return <Wifi className={className} />;
       case "Printer":
         return <Printer className={className} />;
+      case "Camera":
+        return <Camera className={className} />;
       default:
         return <Layers className={className} />;
     }
@@ -406,6 +433,22 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
               <span className="text-[8px] font-bold uppercase tracking-wider">Topo</span>
             </button>
           )}
+
+          {/* Bouton "Inventaire" pour ouvrir l'inventaire complet */}
+          {onOpenInventory && (
+            <button
+              onClick={onOpenInventory}
+              title="Inventaire Global (Utilisateurs, Bureaux, Ports, Équipements, Infra)"
+              className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 ${
+                isInventoryOpen
+                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/40"
+                  : "text-slate-400 hover:text-emerald-400 hover:bg-slate-800"
+              }`}
+            >
+              <Boxes className="w-5 h-5" />
+              <span className="text-[8px] font-bold uppercase tracking-wider">Inven</span>
+            </button>
+          )}
         </div>
 
         {/* Paramètres DSI compact (Bas de barre) & Bouton replier */}
@@ -430,10 +473,12 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
         </div>
       </div>
 
-      {/* 2. Seconde fenêtre latérale déployable (3 sous-menus d'équipements) */}
+      {/* 2. Seconde fenêtre latérale déployable (Catalogue, Topologie ou Inventaire) */}
       {isDrawerOpen && (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-          {isTopologyOpen && topologyContent ? (
+          {isInventoryOpen && inventoryContent ? (
+            inventoryContent
+          ) : isTopologyOpen && topologyContent ? (
             topologyContent
           ) : (
             <div className="flex-1 flex flex-col p-3 overflow-hidden">

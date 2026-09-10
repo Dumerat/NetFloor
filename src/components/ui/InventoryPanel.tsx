@@ -1,0 +1,1084 @@
+"use client";
+
+import React, { useState, useMemo } from "react";
+import {
+  Users,
+  Monitor,
+  Plug,
+  Printer,
+  Wifi,
+  Camera,
+  Server,
+  Search,
+  ExternalLink,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  HardDrive,
+  Cpu,
+} from "lucide-react";
+import {
+  NodeDisplay,
+  RackDisplay,
+} from "@/components/canvas/EquipmentLayer";
+import { ENTERPRISE_DIRECTORY } from "@/data/directory";
+import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
+
+export type InventoryTab = "USERS" | "DESKS" | "PORTS" | "DEVICES" | "INFRA";
+export type DeviceSubFilter = "ALL" | "PRINTER" | "WIFI" | "CAMERA" | "OTHER";
+
+interface InventoryPanelProps {
+  nodes: NodeDisplay[];
+  racks: RackDisplay[];
+  vlanStyles?: Record<number, VlanStyle>;
+  onSelectNode?: (node: NodeDisplay) => void;
+  onFocusNode?: (nodeId: string) => void;
+  onClose?: () => void;
+}
+
+export const InventoryPanel: React.FC<InventoryPanelProps> = ({
+  nodes,
+  racks,
+  vlanStyles = DEFAULT_VLAN_STYLES,
+  onSelectNode,
+  onFocusNode,
+  onClose,
+}) => {
+  const [activeTab, setActiveTab] = useState<InventoryTab>("USERS");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [deviceSubFilter, setDeviceSubFilter] = useState<DeviceSubFilter>("ALL");
+
+  // -------------------------------------------------------------
+  // 1. DATA COMPUTATION & CROSS-REFERENCING
+  // -------------------------------------------------------------
+
+  // Liste consolidée de tous les bureaux
+  const deskNodes = useMemo(() => {
+    return nodes.filter((n) => n.type === "DESK");
+  }, [nodes]);
+
+  // Liste consolidée de toutes les prises murales et colonnettes
+  const outletNodes = useMemo(() => {
+    return nodes.filter((n) => n.type === "WALL_OUTLET");
+  }, [nodes]);
+
+  // Correspondance Utilisateur -> Bureau & Port RJ45
+  const usersWithAssignments = useMemo(() => {
+    return ENTERPRISE_DIRECTORY.map((user) => {
+      // Trouver le meuble assigné
+      let assignedDesk: NodeDisplay | null = null;
+      let seatLabel = "";
+
+      for (const desk of deskNodes) {
+        if (desk.assignedPerson === user.fullName) {
+          assignedDesk = desk;
+          seatLabel = "Poste principal";
+          break;
+        }
+        if (desk.seats && desk.seats.length > 0) {
+          const seatIdx = desk.seats.findIndex((s) => s.fullName === user.fullName);
+          if (seatIdx !== -1) {
+            assignedDesk = desk;
+            const seatItem = desk.seats[seatIdx];
+            seatLabel = `Place #${seatIdx + 1} (${seatItem?.seatLabel ?? "Poste"})`;
+            break;
+          }
+        }
+      }
+
+      // Trouver une prise ou un port de colonnette assigné à cet utilisateur ou lié à ce bureau
+      let connectedOutlet: NodeDisplay | null = null;
+      let portInfo: string | null = null;
+      let vlanId: number | undefined = undefined;
+
+      for (const outlet of outletNodes) {
+        // Colonnette multi-ports
+        if (outlet.stackedPorts && outlet.stackedPorts.length > 0) {
+          const matchedPort = outlet.stackedPorts.find(
+            (p) => p.assignedPerson === user.fullName
+          );
+          if (matchedPort) {
+            connectedOutlet = outlet;
+            portInfo = `${matchedPort.portLabel} (${matchedPort.outletRole || "DATA"})`;
+            vlanId = matchedPort.vlanId;
+            break;
+          }
+        }
+        // Prise simple
+        if (outlet.assignedPerson === user.fullName) {
+          connectedOutlet = outlet;
+          portInfo = outlet.outletRole || "DATA";
+          vlanId = outlet.vlanId;
+          break;
+        }
+      }
+
+      // Si pas d'affectation directe mais bureau trouvé, chercher les prises liées à ce bureau
+      if (!connectedOutlet && assignedDesk) {
+        const linkedOutlet = outletNodes.find(
+          (o) => o.attachedToDeskId === assignedDesk?.id
+        );
+        if (linkedOutlet) {
+          connectedOutlet = linkedOutlet;
+          const firstPort = linkedOutlet.stackedPorts?.[0];
+          if (firstPort) {
+            portInfo = `${firstPort.portLabel} (via ${linkedOutlet.name})`;
+            vlanId = firstPort.vlanId;
+          } else {
+            portInfo = `${linkedOutlet.outletRole || "DATA"} (via ${linkedOutlet.name})`;
+            vlanId = linkedOutlet.vlanId;
+          }
+        }
+      }
+
+      return {
+        user,
+        assignedDesk,
+        seatLabel,
+        connectedOutlet,
+        portInfo,
+        vlanId,
+        isAssigned: !!assignedDesk || !!connectedOutlet,
+      };
+    });
+  }, [deskNodes, outletNodes]);
+
+  // Tous les ports individuels consolidés (Prises simples + chaque port de colonnette P1..P8)
+  const allConsolidatedPorts = useMemo(() => {
+    interface PortItem {
+      id: string;
+      parentOutlet: NodeDisplay;
+      portLabel: string;
+      outletRole: string;
+      vlanId: number;
+      isPatched: boolean;
+      connectedRackId?: string | undefined;
+      connectedSwitchId?: string | undefined;
+      connectedSwitchPort?: string | undefined;
+      macAddress?: string | undefined;
+      ipAddress?: string | undefined;
+      assignedPerson?: string | undefined;
+    }
+
+    const list: PortItem[] = [];
+
+    outletNodes.forEach((outlet) => {
+      if (outlet.stackedPorts && outlet.stackedPorts.length > 0) {
+        outlet.stackedPorts.forEach((sp, idx) => {
+          list.push({
+            id: `${outlet.id}-${sp.portIndex ?? idx}`,
+            parentOutlet: outlet,
+            portLabel: sp.portLabel || `P${idx + 1}`,
+            outletRole: sp.outletRole || "DATA",
+            vlanId: sp.vlanId ?? 20,
+            isPatched: !!sp.isPatched,
+            connectedRackId: sp.connectedRackId || outlet.connectedRackId,
+            connectedSwitchId: sp.connectedSwitchId,
+            connectedSwitchPort: sp.connectedSwitchPort,
+            macAddress: sp.macAddress,
+            ipAddress: sp.ipAddress,
+            assignedPerson: sp.assignedPerson,
+          });
+        });
+      } else {
+        list.push({
+          id: outlet.id,
+          parentOutlet: outlet,
+          portLabel: "P1 (Principal)",
+          outletRole: outlet.outletRole || "DATA",
+          vlanId: outlet.vlanId ?? 20,
+          isPatched: !!outlet.isPatched,
+          connectedRackId: outlet.connectedRackId,
+          connectedSwitchId: outlet.connectedSwitchId,
+          connectedSwitchPort: outlet.connectedSwitchPort,
+          macAddress: outlet.macAddress,
+          ipAddress: outlet.ipAddress,
+          assignedPerson: outlet.assignedPerson,
+        });
+      }
+    });
+
+    return list;
+  }, [outletNodes]);
+
+  // Équipements terminaux (Prises/Modules avec rôle spécifique : Wi-Fi, Imprimante, Caméra, ou sous-type spécial)
+  const deviceNodes = useMemo(() => {
+    return nodes.filter((n) => {
+      // Exclure les gros bureaux et les baies
+      if (n.type === "PATCH_PANEL") return false;
+      if (n.subType === "RACK_42U" || n.subType === "RACK_18U") return false;
+      if (
+        n.type === "DESK" &&
+        n.subType !== "DESK_SOLO" &&
+        n.subType !== "BENCH_DOUBLE" &&
+        n.subType !== "BENCH_QUAD" &&
+        n.subType !== "MEETING_TABLE"
+      ) {
+        return true;
+      }
+      // Conserver les équipements à rôle périphérique ou connectique spéciale
+      const isSpecialRole =
+        n.outletRole === "WIFI" ||
+        n.outletRole === "PRINTER" ||
+        n.outletRole === "CAMERA" ||
+        n.outletRole === "VOIP" ||
+        n.subType === "WIFI_AP" ||
+        n.subType === "PRINTER_STATION" ||
+        n.subType === "CAMERA_IP";
+      return isSpecialRole;
+    });
+  }, [nodes]);
+
+  // Infrastructure : Baies informatiques consolidées avec métriques
+  const infraMetrics = useMemo(() => {
+    return racks.map((rack) => {
+      const devices = rack.devices ?? [];
+      const totalU = rack.uHeight || 42;
+      const occupiedU = devices.reduce((sum, d) => sum + (d.uSize ?? 1), 0);
+
+      const switches = devices.filter((d) => d.deviceType === "SWITCH");
+      const patchPanels = devices.filter((d) => d.deviceType === "PATCH_PANEL");
+      const servers = devices.filter((d) => d.deviceType === "SERVER");
+      const pdus = devices.filter((d) => d.deviceType === "PDU");
+
+      // Taux d'occupation des ports switch de cette baie
+      let totalSwitchPorts = 0;
+      let usedSwitchPorts = 0;
+
+      switches.forEach((sw) => {
+        const ports = sw.portsCount || 24;
+        totalSwitchPorts += ports;
+        // Compter les ports branchés vers ce switch depuis les prises
+        const connectedCount = nodes.reduce((count, n) => {
+          let c = 0;
+          if (n.connectedSwitchId === sw.name || n.connectedSwitchId === sw.id) c++;
+          if (n.stackedPorts) {
+            n.stackedPorts.forEach((sp) => {
+              if (sp.connectedSwitchId === sw.name || sp.connectedSwitchId === sw.id) c++;
+            });
+          }
+          return count + c;
+        }, 0);
+        usedSwitchPorts += connectedCount;
+      });
+
+      return {
+        rack,
+        totalU,
+        occupiedU,
+        switchesCount: switches.length,
+        patchPanelsCount: patchPanels.length,
+        serversCount: servers.length,
+        pdusCount: pdus.length,
+        totalSwitchPorts,
+        usedSwitchPorts,
+      };
+    });
+  }, [nodes, racks]);
+
+  // -------------------------------------------------------------
+  // 2. FILTRAGE & RECHERCHE
+  // -------------------------------------------------------------
+  const query = searchTerm.trim().toLowerCase();
+
+  // Filtre Utilisateurs
+  const filteredUsers = useMemo(() => {
+    return usersWithAssignments.filter(({ user, assignedDesk, portInfo }) => {
+      if (!query) return true;
+      return (
+        user.fullName.toLowerCase().includes(query) ||
+        user.jobTitle.toLowerCase().includes(query) ||
+        user.department.toLowerCase().includes(query) ||
+        (assignedDesk && assignedDesk.name.toLowerCase().includes(query)) ||
+        (portInfo && portInfo.toLowerCase().includes(query))
+      );
+    });
+  }, [usersWithAssignments, query]);
+
+  // Filtre Bureaux
+  const filteredDesks = useMemo(() => {
+    return deskNodes.filter((desk) => {
+      if (!query) return true;
+      const matchName = desk.name.toLowerCase().includes(query);
+      const matchPerson = desk.assignedPerson?.toLowerCase().includes(query);
+      const matchSeat = desk.seats?.some((s) => s.fullName?.toLowerCase().includes(query));
+      return matchName || matchPerson || matchSeat;
+    });
+  }, [deskNodes, query]);
+
+  // Filtre Tous les Ports
+  const filteredPorts = useMemo(() => {
+    return allConsolidatedPorts.filter((p) => {
+      if (!query) return true;
+      return (
+        p.parentOutlet.name.toLowerCase().includes(query) ||
+        p.portLabel.toLowerCase().includes(query) ||
+        p.outletRole.toLowerCase().includes(query) ||
+        (p.ipAddress && p.ipAddress.toLowerCase().includes(query)) ||
+        (p.macAddress && p.macAddress.toLowerCase().includes(query)) ||
+        (p.assignedPerson && p.assignedPerson.toLowerCase().includes(query)) ||
+        (p.connectedSwitchId && p.connectedSwitchId.toLowerCase().includes(query))
+      );
+    });
+  }, [allConsolidatedPorts, query]);
+
+  // Filtre Équipements
+  const filteredDevices = useMemo(() => {
+    return deviceNodes.filter((node) => {
+      // 1. Sous-filtre de type
+      if (deviceSubFilter === "PRINTER" && node.outletRole !== "PRINTER" && node.subType !== "PRINTER_STATION") {
+        return false;
+      }
+      if (deviceSubFilter === "WIFI" && node.outletRole !== "WIFI" && node.subType !== "WIFI_AP") {
+        return false;
+      }
+      if (deviceSubFilter === "CAMERA" && node.outletRole !== "CAMERA" && node.subType !== "CAMERA_IP") {
+        return false;
+      }
+      if (
+        deviceSubFilter === "OTHER" &&
+        (node.outletRole === "PRINTER" ||
+          node.subType === "PRINTER_STATION" ||
+          node.outletRole === "WIFI" ||
+          node.subType === "WIFI_AP" ||
+          node.outletRole === "CAMERA" ||
+          node.subType === "CAMERA_IP")
+      ) {
+        return false;
+      }
+
+      // 2. Recherche textuelle
+      if (!query) return true;
+      return (
+        node.name.toLowerCase().includes(query) ||
+        (node.description && node.description.toLowerCase().includes(query)) ||
+        (node.ipAddress && node.ipAddress.toLowerCase().includes(query))
+      );
+    });
+  }, [deviceNodes, deviceSubFilter, query]);
+
+  // -------------------------------------------------------------
+  // 3. ACTIONS
+  // -------------------------------------------------------------
+  const handleItemClick = (node: NodeDisplay) => {
+    if (onSelectNode) onSelectNode(node);
+    if (onFocusNode) onFocusNode(node.id);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col h-full bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
+      {/* 1. Header du panneau d'inventaire */}
+      <div className="p-3 border-b border-slate-800 flex items-center justify-between flex-shrink-0 bg-slate-900/60">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <HardDrive className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-xs font-bold text-white tracking-wide uppercase">
+              Inventaire Global
+            </h2>
+            <span className="text-[10px] text-slate-400 font-mono">
+              Parc IT & Aménagement
+            </span>
+          </div>
+        </div>
+
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-md transition"
+            title="Fermer le panneau"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* 2. Barre des 5 Sous-Menus Principaux */}
+      <div className="p-2 border-b border-slate-800/80 bg-slate-900/40 flex-shrink-0">
+        <div className="grid grid-cols-5 gap-1 p-1 bg-slate-950 rounded-lg border border-slate-800 text-[10px]">
+          <button
+            onClick={() => setActiveTab("USERS")}
+            className={`py-1.5 px-1 rounded flex flex-col items-center gap-0.5 font-medium transition ${
+              activeTab === "USERS"
+                ? "bg-blue-600 text-white shadow-sm font-semibold"
+                : "text-slate-400 hover:text-white hover:bg-slate-850"
+            }`}
+            title="Annuaire des Utilisateurs & Affectations"
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span className="text-[9px]">Users</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("DESKS")}
+            className={`py-1.5 px-1 rounded flex flex-col items-center gap-0.5 font-medium transition ${
+              activeTab === "DESKS"
+                ? "bg-indigo-600 text-white shadow-sm font-semibold"
+                : "text-slate-400 hover:text-white hover:bg-slate-850"
+            }`}
+            title="Mobilier & Bureaux"
+          >
+            <Monitor className="w-3.5 h-3.5" />
+            <span className="text-[9px]">Bureaux</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("PORTS")}
+            className={`py-1.5 px-1 rounded flex flex-col items-center gap-0.5 font-medium transition ${
+              activeTab === "PORTS"
+                ? "bg-amber-600 text-white shadow-sm font-semibold"
+                : "text-slate-400 hover:text-white hover:bg-slate-850"
+            }`}
+            title="Recensement de tous les ports RJ45"
+          >
+            <Plug className="w-3.5 h-3.5" />
+            <span className="text-[9px]">Ports</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("DEVICES")}
+            className={`py-1.5 px-1 rounded flex flex-col items-center gap-0.5 font-medium transition ${
+              activeTab === "DEVICES"
+                ? "bg-cyan-600 text-white shadow-sm font-semibold"
+                : "text-slate-400 hover:text-white hover:bg-slate-850"
+            }`}
+            title="Périphériques & Équipements"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span className="text-[9px]">Équip.</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("INFRA")}
+            className={`py-1.5 px-1 rounded flex flex-col items-center gap-0.5 font-medium transition ${
+              activeTab === "INFRA"
+                ? "bg-purple-600 text-white shadow-sm font-semibold"
+                : "text-slate-400 hover:text-white hover:bg-slate-850"
+            }`}
+            title="Infrastructure & Baies DSI"
+          >
+            <Server className="w-3.5 h-3.5" />
+            <span className="text-[9px]">Infra</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Champ de recherche textuelle globale */}
+      <div className="p-2 border-b border-slate-800/80 bg-slate-900/30 flex-shrink-0 flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder={
+              activeTab === "USERS"
+                ? "Rechercher un utilisateur, rôle..."
+                : activeTab === "DESKS"
+                ? "Rechercher un bureau, occupant..."
+                : activeTab === "PORTS"
+                ? "Rechercher un port, IP, MAC, VLAN..."
+                : activeTab === "DEVICES"
+                ? "Rechercher un équipement, IP..."
+                : "Rechercher une baie, switch..."
+            }
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 4. Sous-filtres pour l'onglet ÉQUIPEMENTS */}
+      {activeTab === "DEVICES" && (
+        <div className="px-2 py-1.5 border-b border-slate-800/80 bg-slate-900/20 flex items-center gap-1 overflow-x-auto flex-shrink-0 scrollbar-none text-[10px]">
+          <button
+            onClick={() => setDeviceSubFilter("ALL")}
+            className={`px-2 py-1 rounded-full whitespace-nowrap transition ${
+              deviceSubFilter === "ALL"
+                ? "bg-slate-700 text-white font-semibold"
+                : "text-slate-400 hover:text-white hover:bg-slate-800"
+            }`}
+          >
+            Tous ({deviceNodes.length})
+          </button>
+          <button
+            onClick={() => setDeviceSubFilter("PRINTER")}
+            className={`px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap transition ${
+              deviceSubFilter === "PRINTER"
+                ? "bg-amber-600 text-white font-semibold"
+                : "text-slate-400 hover:text-amber-400 hover:bg-slate-850"
+            }`}
+          >
+            <Printer className="w-3 h-3" /> Imprimantes
+          </button>
+          <button
+            onClick={() => setDeviceSubFilter("WIFI")}
+            className={`px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap transition ${
+              deviceSubFilter === "WIFI"
+                ? "bg-sky-600 text-white font-semibold"
+                : "text-slate-400 hover:text-sky-400 hover:bg-slate-850"
+            }`}
+          >
+            <Wifi className="w-3 h-3" /> Wi-Fi
+          </button>
+          <button
+            onClick={() => setDeviceSubFilter("CAMERA")}
+            className={`px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap transition ${
+              deviceSubFilter === "CAMERA"
+                ? "bg-rose-600 text-white font-semibold"
+                : "text-slate-400 hover:text-rose-400 hover:bg-slate-850"
+            }`}
+          >
+            <Camera className="w-3 h-3" /> Caméras
+          </button>
+          <button
+            onClick={() => setDeviceSubFilter("OTHER")}
+            className={`px-2 py-1 rounded-full whitespace-nowrap transition ${
+              deviceSubFilter === "OTHER"
+                ? "bg-purple-600 text-white font-semibold"
+                : "text-slate-400 hover:text-purple-400 hover:bg-slate-850"
+            }`}
+          >
+            Autres
+          </button>
+        </div>
+      )}
+
+      {/* 5. Contenu dynamique selon l'onglet actif */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        {/* ========================================================= */}
+        {/* ONGLET 1 : UTILISATEURS */}
+        {/* ========================================================= */}
+        {activeTab === "USERS" && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-mono text-slate-400 px-1 flex justify-between">
+              <span>{filteredUsers.length} utilisateur(s) listé(s)</span>
+              <span>
+                {filteredUsers.filter((u) => u.isAssigned).length} poste(s) actif(s)
+              </span>
+            </div>
+
+            {filteredUsers.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">
+                Aucun utilisateur trouvé pour cette recherche.
+              </div>
+            ) : (
+              filteredUsers.map(({ user, assignedDesk, seatLabel, connectedOutlet, portInfo, vlanId }) => {
+                const vlanStyle = vlanId ? vlanStyles[vlanId] : undefined;
+
+                return (
+                  <div
+                    key={user.id}
+                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex flex-col gap-1.5"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-inner ${
+                            user.avatarColor || "bg-blue-600"
+                          }`}
+                        >
+                          {user.fullName.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-100 flex items-center gap-1.5">
+                            {user.fullName}
+                            {assignedDesk ? (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400" title="Au bureau" />
+                            ) : (
+                              <span className="w-2 h-2 rounded-full bg-slate-500" title="Télétravail / Non assigné" />
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {user.jobTitle} • <span className="text-slate-300">{user.department}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {assignedDesk && (
+                        <button
+                          onClick={() => handleItemClick(assignedDesk)}
+                          className="p-1 hover:bg-slate-800 text-slate-400 hover:text-blue-400 rounded transition"
+                          title="Localiser le bureau sur le plan"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Détails du poste & du port connecté */}
+                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <Monitor className="w-3 h-3 text-slate-500" />
+                          Bureau :
+                        </span>
+                        {assignedDesk ? (
+                          <span
+                            onClick={() => handleItemClick(assignedDesk)}
+                            className="font-medium text-blue-400 hover:underline cursor-pointer"
+                          >
+                            {assignedDesk.name} {seatLabel ? `• ${seatLabel}` : ""}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 italic">Non assigné</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <Plug className="w-3 h-3 text-slate-500" />
+                          Prise / Port :
+                        </span>
+                        {connectedOutlet ? (
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              onClick={() => handleItemClick(connectedOutlet)}
+                              className="font-medium text-emerald-400 hover:underline cursor-pointer"
+                            >
+                              {connectedOutlet.name} {portInfo ? `[${portInfo}]` : ""}
+                            </span>
+                            {vlanId && (
+                              <span
+                                className="px-1 py-0.2 rounded text-[9px] font-mono border"
+                                style={{
+                                  color: vlanStyle?.color ?? "#38bdf8",
+                                  borderColor: `${vlanStyle?.color ?? "#38bdf8"}40`,
+                                  backgroundColor: `${vlanStyle?.color ?? "#38bdf8"}15`,
+                                }}
+                              >
+                                V{vlanId}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 italic">Aucune prise raccordée</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* ONGLET 2 : BUREAUX */}
+        {/* ========================================================= */}
+        {activeTab === "DESKS" && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-mono text-slate-400 px-1 flex justify-between">
+              <span>{filteredDesks.length} meuble(s) / bureau(x)</span>
+            </div>
+
+            {filteredDesks.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">
+                Aucun bureau trouvé.
+              </div>
+            ) : (
+              filteredDesks.map((desk) => {
+                // Trouver les prises liées à ce bureau
+                const linkedOutlets = outletNodes.filter(
+                  (o) => o.attachedToDeskId === desk.id
+                );
+
+                const seatCount = desk.seats?.length || (desk.subType === "BENCH_QUAD" ? 4 : desk.subType === "BENCH_DOUBLE" ? 2 : 1);
+                const occupiedSeats = desk.seats
+                  ? desk.seats.filter((s) => s.fullName && s.fullName.trim() !== "").length
+                  : desk.assignedPerson && !desk.assignedPerson.includes("vacant")
+                  ? 1
+                  : 0;
+
+                return (
+                  <div
+                    key={desk.id}
+                    onClick={() => handleItemClick(desk)}
+                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-indigo-500/50 cursor-pointer transition flex flex-col gap-1.5 group"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition">
+                          <Monitor className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-100 group-hover:text-indigo-300 transition">
+                            {desk.name}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {desk.subType === "BENCH_QUAD"
+                              ? "Bench 4 Postes"
+                              : desk.subType === "BENCH_DOUBLE"
+                              ? "Bench 2 Postes"
+                              : desk.subType === "MEETING_TABLE"
+                              ? "Table Réunion"
+                              : "Bureau Solo"}
+                            {" • "}
+                            <span className="text-slate-300 font-mono">
+                              {occupiedSeats}/{seatCount} places
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition" />
+                    </div>
+
+                    {/* Liste des occupants par place */}
+                    {desk.seats && desk.seats.length > 0 ? (
+                      <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] space-y-1">
+                        {desk.seats.map((seat, sIdx) => (
+                          <div key={sIdx} className="flex items-center justify-between text-slate-300">
+                            <span className="text-slate-400 font-mono">
+                              P{sIdx + 1} ({seat.seatLabel || "Poste"}):
+                            </span>
+                            <span className={seat.fullName ? "text-slate-200 font-medium" : "text-slate-600 italic"}>
+                              {seat.fullName || "Place libre"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : desk.assignedPerson ? (
+                      <div className="text-[10px] text-slate-400 flex items-center justify-between bg-slate-950/50 p-1 rounded">
+                        <span>Occupant :</span>
+                        <span className="text-slate-200 font-medium">{desk.assignedPerson}</span>
+                      </div>
+                    ) : null}
+
+                    {/* Prises solidaires rattachées */}
+                    <div className="flex items-center justify-between pt-1 text-[10px] border-t border-slate-800/60">
+                      <span className="text-slate-400 flex items-center gap-1">
+                        <Plug className="w-3 h-3 text-slate-500" />
+                        Prises solidaires :
+                      </span>
+                      <span className="font-mono text-slate-300">
+                        {linkedOutlets.length > 0 ? (
+                          <span className="text-emerald-400">
+                            {linkedOutlets.length} connectée(s)
+                          </span>
+                        ) : (
+                          <span className="text-amber-500/80">0 liée</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* ONGLET 3 : TOUS LES PORTS RJ45 */}
+        {/* ========================================================= */}
+        {activeTab === "PORTS" && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-mono text-slate-400 px-1 flex justify-between">
+              <span>{filteredPorts.length} port(s) RJ45 au total</span>
+              <span>
+                {filteredPorts.filter((p) => p.isPatched).length} brassé(s)
+              </span>
+            </div>
+
+            {filteredPorts.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">
+                Aucun port ne correspond aux critères.
+              </div>
+            ) : (
+              filteredPorts.map((port) => {
+                const vlanStyle = vlanStyles[port.vlanId];
+
+                return (
+                  <div
+                    key={port.id}
+                    onClick={() => handleItemClick(port.parentOutlet)}
+                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/50 cursor-pointer transition flex flex-col gap-1.5 group"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-7 h-7 rounded-lg border flex items-center justify-center font-bold font-mono text-xs ${
+                            port.isPatched
+                              ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                              : "bg-slate-800 border-slate-700 text-slate-400"
+                          }`}
+                        >
+                          {port.portLabel}
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-100 group-hover:text-amber-300 transition flex items-center gap-1.5">
+                            {port.parentOutlet.name} • {port.portLabel}
+                            {port.isPatched ? (
+                              <span title="Port brassé">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              </span>
+                            ) : (
+                              <span title="Non raccordé">
+                                <AlertCircle className="w-3.5 h-3.5 text-slate-600" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            Type: <span className="text-slate-200 font-medium">{port.outletRole}</span>
+                            {port.assignedPerson ? ` • ${port.assignedPerson}` : ""}
+                          </div>
+                        </div>
+                      </div>
+
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[9px] font-mono border"
+                        style={{
+                          color: vlanStyle?.color ?? "#38bdf8",
+                          borderColor: `${vlanStyle?.color ?? "#38bdf8"}40`,
+                          backgroundColor: `${vlanStyle?.color ?? "#38bdf8"}15`,
+                        }}
+                      >
+                        VLAN {port.vlanId}
+                      </span>
+                    </div>
+
+                    {/* Brassage Baie / Switch / Port */}
+                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono">
+                      <span className="text-slate-400">Raccordement :</span>
+                      {port.isPatched && port.connectedSwitchPort ? (
+                        <span className="text-emerald-400 font-medium">
+                          {port.connectedRackId || "BAIE"} ➔ {port.connectedSwitchId || "SW"} / Port {port.connectedSwitchPort}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 italic">Non brassé au switch</span>
+                      )}
+                    </div>
+
+                    {/* IP & MAC le cas échéant */}
+                    {(port.ipAddress || port.macAddress) && (
+                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-400">
+                        <span>IP: {port.ipAddress || "DHCP"}</span>
+                        <span>MAC: {port.macAddress || "--:--"}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* ONGLET 4 : ÉQUIPEMENTS & PÉRIPHÉRIQUES */}
+        {/* ========================================================= */}
+        {activeTab === "DEVICES" && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-mono text-slate-400 px-1 flex justify-between">
+              <span>{filteredDevices.length} équipement(s)</span>
+            </div>
+
+            {filteredDevices.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">
+                Aucun équipement ne correspond aux filtres.
+              </div>
+            ) : (
+              filteredDevices.map((node) => {
+                const isPrinter = node.outletRole === "PRINTER" || node.subType === "PRINTER_STATION";
+                const isWifi = node.outletRole === "WIFI" || node.subType === "WIFI_AP";
+                const isCamera = node.outletRole === "CAMERA" || node.subType === "CAMERA_IP";
+
+                return (
+                  <div
+                    key={node.id}
+                    onClick={() => handleItemClick(node)}
+                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 cursor-pointer transition flex flex-col gap-1.5 group"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-7 h-7 rounded-lg border flex items-center justify-center ${
+                            isPrinter
+                              ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                              : isWifi
+                              ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
+                              : isCamera
+                              ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
+                              : "bg-purple-500/15 border-purple-500/30 text-purple-400"
+                          }`}
+                        >
+                          {isPrinter ? (
+                            <Printer className="w-4 h-4" />
+                          ) : isWifi ? (
+                            <Wifi className="w-4 h-4" />
+                          ) : isCamera ? (
+                            <Camera className="w-4 h-4" />
+                          ) : (
+                            <Cpu className="w-4 h-4" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-100 group-hover:text-cyan-300 transition">
+                            {node.name}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {isPrinter
+                              ? "Imprimante Réseau / MFP"
+                              : isWifi
+                              ? "Borne Wi-Fi Haute Densité"
+                              : isCamera
+                              ? "Caméra de Surveillance IP"
+                              : node.description || "Périphérique IT"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition" />
+                    </div>
+
+                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono">
+                      <span className="text-slate-400">IP / Statut :</span>
+                      <span className="text-cyan-400">
+                        {node.ipAddress || (isWifi ? "192.168.10.25" : isPrinter ? "192.168.20.150" : "DHCP")}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* ONGLET 5 : INFRASTRUCTURE & BAIES */}
+        {/* ========================================================= */}
+        {activeTab === "INFRA" && (
+          <div className="space-y-3">
+            <div className="text-[10px] font-mono text-slate-400 px-1">
+              {infraMetrics.length} baie(s) dans le local technique
+            </div>
+
+            {infraMetrics.map(
+              ({
+                rack,
+                totalU,
+                occupiedU,
+                totalSwitchPorts,
+                usedSwitchPorts,
+              }) => {
+                const occupancyPercent = Math.round((occupiedU / totalU) * 100);
+                const switchPortPercent =
+                  totalSwitchPorts > 0
+                    ? Math.round((usedSwitchPorts / totalSwitchPorts) * 100)
+                    : 0;
+
+                // Chercher le nœud correspondant sur le canvas
+                const rackNode = nodes.find((n) => n.id === rack.id) || {
+                  id: rack.id,
+                  name: rack.name,
+                  type: "PATCH_PANEL" as const,
+                  xMm: rack.xMm,
+                  yMm: rack.yMm,
+                  widthMm: rack.widthMm,
+                  heightMm: rack.depthMm,
+                };
+
+                return (
+                  <div
+                    key={rack.id}
+                    className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex flex-col gap-2.5"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                          <Server className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                            {rack.name}
+                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              {totalU}U
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            Local Technique • {rack.widthMm}×{rack.depthMm} mm
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleItemClick(rackNode)}
+                        className="p-1 hover:bg-slate-800 text-slate-400 hover:text-purple-400 rounded transition"
+                        title="Localiser la baie sur le plan"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Jauges d'occupation */}
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
+                        <div className="flex justify-between text-slate-400 mb-1">
+                          <span>Hauteur U</span>
+                          <span className="font-mono text-slate-200">
+                            {occupiedU}/{totalU}U ({occupancyPercent}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-purple-500 rounded-full transition-all"
+                            style={{ width: `${Math.min(100, occupancyPercent)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
+                        <div className="flex justify-between text-slate-400 mb-1">
+                          <span>Ports Switchs</span>
+                          <span className="font-mono text-slate-200">
+                            {usedSwitchPorts}/{totalSwitchPorts} ({switchPortPercent}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all"
+                            style={{ width: `${Math.min(100, switchPortPercent)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Liste des équipements raqués */}
+                    <div className="space-y-1 pt-1">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Modules & Équipements ({rack.devices?.length ?? 0})
+                      </span>
+                      <div className="bg-slate-950/60 rounded border border-slate-800 divide-y divide-slate-850 text-[10px] font-mono">
+                        {(rack.devices ?? []).map((dev) => (
+                          <div
+                            key={dev.id}
+                            className="p-1.5 flex items-center justify-between hover:bg-slate-900 transition"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-500">U{dev.slotU}</span>
+                              <span className="text-slate-200 font-sans font-medium">{dev.name}</span>
+                            </div>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
+                              {dev.deviceType} ({dev.uSize ?? 1}U)
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

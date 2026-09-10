@@ -8,6 +8,7 @@ import { EquipmentPalette, PaletteItem } from "@/components/ui/EquipmentPalette"
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { SettingsModal } from "@/components/ui/SettingsModal";
 import { NetworkTopologyPanel } from "@/components/ui/NetworkTopologyPanel";
+import { InventoryPanel } from "@/components/ui/InventoryPanel";
 import { DeviceTelemetry } from "@/data/settingsStore";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import { NodeDisplay, RackDisplay, RackDeviceItem, OutletRole, StackedPortItem, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
@@ -132,6 +133,7 @@ export default function NetFloorApp() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [isTopologyOpen, setIsTopologyOpen] = useState(false);
+  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [leftPanelWidth, setLeftPanelWidth] = useState(350);
   const [inspectorWidth, setInspectorWidth] = useState(384);
   const isResizingLeftRef = useRef(false);
@@ -1743,12 +1745,13 @@ export default function NetFloorApp() {
 
       {/* 2. Workspace Body */}
       <div className="flex-1 flex relative overflow-hidden">
-        {/* Palette d'Équipements Escamotable & Redimensionnable avec Topologie intégrée */}
+        {/* Palette d'Équipements Escamotable & Redimensionnable avec Topologie & Inventaire intégrés */}
         <EquipmentPalette
           isOpen={isPaletteOpen}
           onToggle={() => {
-            if (isTopologyOpen) {
+            if (isTopologyOpen || isInventoryOpen) {
               setIsTopologyOpen(false);
+              setIsInventoryOpen(false);
               setIsPaletteOpen(true);
             } else {
               setIsPaletteOpen((prev) => !prev);
@@ -1757,14 +1760,39 @@ export default function NetFloorApp() {
           onAddItem={handleAddItemFromPalette}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenTopology={() => {
-            if (isPaletteOpen) {
-              setIsPaletteOpen(false);
-              setIsTopologyOpen(true);
+            if (isTopologyOpen) {
+              setIsTopologyOpen(false);
             } else {
-              setIsTopologyOpen((prev) => !prev);
+              setIsPaletteOpen(false);
+              setIsInventoryOpen(false);
+              setIsTopologyOpen(true);
             }
           }}
           isTopologyOpen={isTopologyOpen}
+          onOpenInventory={() => {
+            if (isInventoryOpen) {
+              setIsInventoryOpen(false);
+            } else {
+              setIsPaletteOpen(false);
+              setIsTopologyOpen(false);
+              setIsInventoryOpen(true);
+            }
+          }}
+          isInventoryOpen={isInventoryOpen}
+          inventoryContent={
+            <InventoryPanel
+              nodes={nodes}
+              racks={racks}
+              vlanStyles={vlanStyles}
+              onClose={() => setIsInventoryOpen(false)}
+              onSelectNode={(node) => {
+                handleSelectNode(node);
+              }}
+              onFocusNode={(nodeId) => {
+                handleFocusNode(nodeId);
+              }}
+            />
+          }
           vlanStyles={vlanStyles}
           width={leftPanelWidth}
           onResizeStart={handleStartLeftResize}
@@ -1787,7 +1815,7 @@ export default function NetFloorApp() {
 
         {/* Main Canvas Area */}
         <div
-          style={{ marginLeft: (isPaletteOpen || isTopologyOpen) ? `${leftPanelWidth}px` : "48px" }}
+          style={{ marginLeft: (isPaletteOpen || isTopologyOpen || isInventoryOpen) ? `${leftPanelWidth}px` : "48px" }}
           className="flex-1 h-full relative min-w-0"
           onDragOver={(e) => {
             e.preventDefault();
