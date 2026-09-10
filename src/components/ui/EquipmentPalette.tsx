@@ -394,6 +394,81 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
     }
   };
 
+  // Génération d'une image de drag & drop représentant visuellement l'objet lui-même (et non la carte)
+  const setupDragPreview = (e: React.DragEvent, item: PaletteItem) => {
+    const isDesk = item.category === "FURNITURE";
+    const isRack = item.subType === "RACK_42U" || item.subType === "RACK_18U";
+
+    const ghost = document.createElement("div");
+    ghost.style.position = "absolute";
+    ghost.style.top = "-1000px";
+    ghost.style.left = "-1000px";
+    ghost.style.zIndex = "99999";
+    ghost.style.pointerEvents = "none";
+    ghost.style.display = "flex";
+    ghost.style.alignItems = "center";
+    ghost.style.justifyContent = "center";
+    ghost.style.boxShadow = "0 12px 28px rgba(0,0,0,0.6)";
+
+    let widthPx = 64;
+    let heightPx = 64;
+
+    if (isDesk) {
+      // Représentation meuble/bureau
+      widthPx = item.subType === "BENCH_QUAD" ? 110 : item.subType === "BENCH_DOUBLE" ? 75 : 65;
+      heightPx = item.subType === "BENCH_QUAD" ? 55 : item.subType === "BENCH_DOUBLE" ? 75 : 45;
+      ghost.style.width = `${widthPx}px`;
+      ghost.style.height = `${heightPx}px`;
+      ghost.style.backgroundColor = "#1e293b";
+      ghost.style.border = "2px solid #38bdf8";
+      ghost.style.borderRadius = "8px";
+      ghost.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+          <span style="font-size:16px;">🪑</span>
+          <span style="font-size:9px;font-weight:bold;color:#f8fafc;font-family:sans-serif;white-space:nowrap;">${item.name.slice(0, 14)}</span>
+        </div>
+      `;
+    } else if (isRack) {
+      // Représentation baie serveur
+      widthPx = 60;
+      heightPx = 75;
+      ghost.style.width = `${widthPx}px`;
+      ghost.style.height = `${heightPx}px`;
+      ghost.style.backgroundColor = "#0f172a";
+      ghost.style.border = "2px solid #a855f7";
+      ghost.style.borderRadius = "6px";
+      ghost.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+          <span style="font-size:18px;">🖥️</span>
+          <span style="font-size:9px;font-weight:bold;color:#c084fc;font-family:sans-serif;">${item.subType === "RACK_18U" ? "18U" : "42U"}</span>
+        </div>
+      `;
+    } else {
+      // Représentation prise / port / équipement terminal
+      widthPx = 54;
+      heightPx = 54;
+      ghost.style.width = `${widthPx}px`;
+      ghost.style.height = `${heightPx}px`;
+      ghost.style.backgroundColor = "#0f172a";
+      ghost.style.border = "2px solid #38bdf8";
+      ghost.style.borderRadius = "10px";
+      const emote = item.customEmote || (item.outletRole === "VOIP" ? "📞" : item.outletRole === "WIFI" ? "📶" : item.outletRole === "PRINTER" ? "🖨️" : item.outletRole === "CAMERA" ? "📷" : "🔌");
+      ghost.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <span style="font-size:22px;">${emote}</span>
+        </div>
+      `;
+    }
+
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, widthPx / 2, heightPx / 2);
+    setTimeout(() => {
+      if (document.body.contains(ghost)) {
+        document.body.removeChild(ghost);
+      }
+    }, 0);
+  };
+
   return (
     <aside
       style={{ width: isDrawerOpen ? `${width}px` : "48px" }}
@@ -709,6 +784,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                       onDragStart={(e) => {
                         e.dataTransfer.setData("application/json", JSON.stringify(customItem));
                         e.dataTransfer.effectAllowed = "copy";
+                        setupDragPreview(e, customItem);
                       }}
                       className="p-2.5 bg-slate-900 border border-blue-500/40 hover:border-blue-400 rounded-lg transition space-y-1.5 group shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md"
                     >
@@ -784,6 +860,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                     onDragStart={(e) => {
                       e.dataTransfer.setData("application/json", JSON.stringify(item));
                       e.dataTransfer.effectAllowed = "copy";
+                      setupDragPreview(e, item);
                     }}
                     className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg transition flex flex-col gap-1.5 group cursor-grab active:cursor-grabbing hover:shadow-md"
                   >

@@ -1826,7 +1826,7 @@ export default function NetFloorApp() {
             const rawData = e.dataTransfer.getData("application/json");
             if (!rawData) return;
             try {
-              const item: PaletteItem = JSON.parse(rawData);
+              const parsed = JSON.parse(rawData);
               const rect = e.currentTarget.getBoundingClientRect();
               const screenX = e.clientX - rect.left;
               const screenY = e.clientY - rect.top;
@@ -1834,9 +1834,84 @@ export default function NetFloorApp() {
               const viewport = useCameraStore.getState().viewport;
               const worldPos = screenToWorld({ x: screenX, y: screenY }, viewport);
 
+              // 1. Cas du glisser-déposer d'un utilisateur depuis l'inventaire
+              if (parsed && parsed.type === "DIRECTORY_USER" && parsed.user) {
+                const user = parsed.user as { id: string; fullName: string; department?: string };
+
+                // Détecter si on a déposé l'utilisateur sur un meuble/bureau
+                const hitDesk = nodes.find((d) => {
+                  if (d.type !== "DESK") return false;
+                  const deskW = d.widthMm ?? 1600;
+                  const deskH = d.heightMm ?? 800;
+                  return (
+                    worldPos.x >= d.xMm &&
+                    worldPos.x <= d.xMm + deskW &&
+                    worldPos.y >= d.yMm &&
+                    worldPos.y <= d.yMm + deskH
+                  );
+                });
+
+                if (hitDesk) {
+                  setNodes((prev) =>
+                    prev.map((node) => {
+                      if (node.id !== hitDesk.id) return node;
+
+                      // Si meuble multi-places (Bench 4 ou Bench 2)
+                      if (node.seats && node.seats.length > 0) {
+                        const deskW = node.widthMm ?? 1600;
+                        const deskH = node.heightMm ?? 800;
+                        const relX = worldPos.x - node.xMm;
+                        const relY = worldPos.y - node.yMm;
+
+                        let targetSeatIdx = 0;
+                        if (node.subType === "BENCH_QUAD") {
+                          const isRight = relX > deskW / 2;
+                          const isBottom = relY > deskH / 2;
+                          targetSeatIdx = !isRight && !isBottom ? 0 : isRight && !isBottom ? 1 : !isRight && isBottom ? 2 : 3;
+                        } else if (node.subType === "BENCH_DOUBLE") {
+                          targetSeatIdx = relY < deskH / 2 ? 0 : 1;
+                        }
+
+                        const updatedSeats = node.seats.map((seat, sIdx) => {
+                          if (sIdx === targetSeatIdx) {
+                            return {
+                              ...seat,
+                              fullName: user.fullName,
+                              userId: user.id,
+                              department: user.department ?? node.department,
+                            };
+                          }
+                          return seat;
+                        });
+
+                        return {
+                          ...node,
+                          seats: updatedSeats,
+                          assignedPerson: user.fullName,
+                          department: user.department ?? node.department,
+                        };
+                      }
+
+                      // Bureau simple / solo
+                      return {
+                        ...node,
+                        assignedPerson: user.fullName,
+                        assignedUserId: user.id,
+                        department: user.department ?? node.department,
+                      };
+                    })
+                  );
+
+                  setSelectedNodeId(hitDesk.id);
+                }
+                return;
+              }
+
+              // 2. Cas standard du glisser-déposer d'un équipement depuis la palette
+              const item: PaletteItem = parsed;
               handleAddItemFromPalette(item, worldPos);
             } catch (err) {
-              console.error("Erreur lors du dépôt de l'équipement sur le plan :", err);
+              console.error("Erreur lors du dépôt sur le plan :", err);
             }
           }}
         >

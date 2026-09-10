@@ -16,6 +16,7 @@ import {
   AlertCircle,
   HardDrive,
   Cpu,
+  GripVertical,
 } from "lucide-react";
 import {
   NodeDisplay,
@@ -152,6 +153,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       outletRole: string;
       vlanId: number;
       isPatched: boolean;
+      emote: string;
       connectedRackId?: string | undefined;
       connectedSwitchId?: string | undefined;
       connectedSwitchPort?: string | undefined;
@@ -161,6 +163,22 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
     }
 
     const list: PortItem[] = [];
+
+    const getEmoteForRole = (role: string, custom?: string) => {
+      if (custom) return custom;
+      switch (role) {
+        case "VOIP":
+          return "📞";
+        case "WIFI":
+          return "📶";
+        case "PRINTER":
+          return "🖨️";
+        case "CAMERA":
+          return "📷";
+        default:
+          return "🔌";
+      }
+    };
 
     outletNodes.forEach((outlet) => {
       if (outlet.stackedPorts && outlet.stackedPorts.length > 0) {
@@ -172,6 +190,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
             outletRole: sp.outletRole || "DATA",
             vlanId: sp.vlanId ?? 20,
             isPatched: !!sp.isPatched,
+            emote: getEmoteForRole(sp.outletRole || "DATA"),
             connectedRackId: sp.connectedRackId || outlet.connectedRackId,
             connectedSwitchId: sp.connectedSwitchId,
             connectedSwitchPort: sp.connectedSwitchPort,
@@ -188,6 +207,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
           outletRole: outlet.outletRole || "DATA",
           vlanId: outlet.vlanId ?? 20,
           isPatched: !!outlet.isPatched,
+          emote: getEmoteForRole(outlet.outletRole || "DATA", outlet.customEmote),
           connectedRackId: outlet.connectedRackId,
           connectedSwitchId: outlet.connectedSwitchId,
           connectedSwitchPort: outlet.connectedSwitchPort,
@@ -577,19 +597,56 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 return (
                   <div
                     key={user.id}
-                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex flex-col gap-1.5"
+                    draggable={true}
+                    onDragStart={(e) => {
+                      const userPayload = {
+                        type: "DIRECTORY_USER",
+                        user: {
+                          id: user.id,
+                          fullName: user.fullName,
+                          jobTitle: user.jobTitle,
+                          department: user.department,
+                          email: user.email,
+                        },
+                      };
+                      e.dataTransfer.setData("application/json", JSON.stringify(userPayload));
+                      e.dataTransfer.effectAllowed = "copy";
+
+                      // Badge de drag flottant personnalisé épuré
+                      const dragEl = document.createElement("div");
+                      dragEl.style.position = "absolute";
+                      dragEl.style.top = "-1000px";
+                      dragEl.style.left = "-1000px";
+                      dragEl.style.padding = "6px 12px";
+                      dragEl.style.background = "#1e293b";
+                      dragEl.style.color = "#ffffff";
+                      dragEl.style.border = "1px solid #38bdf8";
+                      dragEl.style.borderRadius = "8px";
+                      dragEl.style.fontSize = "12px";
+                      dragEl.style.fontWeight = "bold";
+                      dragEl.style.display = "flex";
+                      dragEl.style.alignItems = "center";
+                      dragEl.style.gap = "6px";
+                      dragEl.style.boxShadow = "0 8px 16px rgba(0,0,0,0.5)";
+                      dragEl.innerHTML = `<span>👤</span> <span>${user.fullName}</span>`;
+                      document.body.appendChild(dragEl);
+                      e.dataTransfer.setDragImage(dragEl, 20, 15);
+                      setTimeout(() => document.body.removeChild(dragEl), 0);
+                    }}
+                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition flex flex-col gap-1.5 cursor-grab active:cursor-grabbing group hover:shadow-md"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
+                        <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 transition flex-shrink-0" />
                         <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-inner ${
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-inner flex-shrink-0 ${
                             user.avatarColor || "bg-blue-600"
                           }`}
                         >
                           {user.fullName.charAt(0)}
                         </div>
                         <div>
-                          <div className="text-xs font-semibold text-slate-100 flex items-center gap-1.5">
+                          <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300 transition flex items-center gap-1.5">
                             {user.fullName}
                             {assignedDesk ? (
                               <span className="w-2 h-2 rounded-full bg-emerald-400" title="Au bureau" />
@@ -605,7 +662,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
                       {assignedDesk && (
                         <button
-                          onClick={() => handleItemClick(assignedDesk)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleItemClick(assignedDesk);
+                          }}
                           className="p-1 hover:bg-slate-800 text-slate-400 hover:text-blue-400 rounded transition"
                           title="Localiser le bureau sur le plan"
                         >
@@ -805,13 +865,14 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <div
-                          className={`w-7 h-7 rounded-lg border flex items-center justify-center font-bold font-mono text-xs ${
+                          className={`w-7 h-7 rounded-lg border flex items-center justify-center text-sm ${
                             port.isPatched
-                              ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                              ? "bg-amber-500/15 border-amber-500/30 shadow-sm"
                               : "bg-slate-800 border-slate-700 text-slate-400"
                           }`}
+                          title={`Port ${port.portLabel} (${port.outletRole})`}
                         >
-                          {port.portLabel}
+                          <span>{port.emote}</span>
                         </div>
                         <div>
                           <div className="text-xs font-semibold text-slate-100 group-hover:text-amber-300 transition flex items-center gap-1.5">
