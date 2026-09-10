@@ -493,7 +493,8 @@ export default function NetFloorApp() {
         yMm: fromRacks.yMm,
         widthMm: fromRacks.widthMm,
         heightMm: fromRacks.depthMm,
-        subType: "RACK_42U" as const,
+        subType: fromRacks.uHeight === 18 ? ("RACK_18U" as const) : ("RACK_42U" as const),
+        uHeight: fromRacks.uHeight,
         description: `Baie informatique 19" (${fromRacks.uHeight}U) dans le local technique.`,
         devices: fromRacks.devices,
       };
@@ -970,8 +971,8 @@ export default function NetFloorApp() {
 
   // Option : Mise à jour libre des propriétés (RH, Dimensions réelles ou fausses mesures, Rotation, Baies)
   const handleUpdateNodeProperties = (nodeId: string, updates: Partial<NodeDisplay>) => {
-    // Si mise à jour du nom ou des équipements d'une baie, synchroniser racks
-    if (updates.name || updates.devices) {
+    // Si mise à jour du nom, dimensions ou équipements d'une baie, synchroniser racks
+    if (updates.name || updates.devices || updates.widthMm || updates.heightMm || updates.uHeight) {
       setRacks((prevRacks) =>
         prevRacks.map((r) =>
           r.id === nodeId
@@ -979,6 +980,9 @@ export default function NetFloorApp() {
                 ...r,
                 ...(updates.name ? { name: updates.name } : {}),
                 ...(updates.devices ? { devices: updates.devices } : {}),
+                ...(updates.widthMm ? { widthMm: updates.widthMm } : {}),
+                ...(updates.heightMm ? { depthMm: updates.heightMm } : {}),
+                ...(updates.uHeight ? { uHeight: updates.uHeight } : {}),
               }
             : r
         )

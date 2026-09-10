@@ -15,6 +15,7 @@ import {
   RackDeviceType,
 } from "@/components/canvas/EquipmentLayer";
 import { CloudSwitchDiscoveryModal } from "./CloudSwitchDiscoveryModal";
+import { SwitchPortVisualizer } from "./SwitchPortVisualizer";
 import { ENTERPRISE_DIRECTORY } from "@/data/directory";
 import {
   Zap,
@@ -145,7 +146,7 @@ export interface InternalRackPatch {
   serviceName: string;
   cableType: "CAT6A_RJ45" | "DAC_10G" | "FIBER_LC";
   lengthM: number;
-  status: "UP" | "DOWN";
+  status: "UP" | "DOWN" | "TESTING";
   speedGbps: number;
 }
 
@@ -342,7 +343,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [activeStackedPortIdx, setActiveStackedPortIdx] = useState(0);
 
   // État interactif du Menu Baie & Branchements Internes
-  const [rackTab, setRackTab] = useState<"PATCHING" | "EQUIPMENT" | "VLANS">("EQUIPMENT");
+  const [rackTab, setRackTab] = useState<"PATCHING" | "EQUIPMENT" | "SWITCHES" | "VLANS">("EQUIPMENT");
   const [rackVlanFilter, setRackVlanFilter] = useState<string>("ALL");
   const [rackPatches, setRackPatches] = useState<InternalRackPatch[]>(DEFAULT_RACK_PATCHES);
   const [isAddingPatch, setIsAddingPatch] = useState(false);
@@ -351,11 +352,25 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [newPatchVlan, setNewPatchVlan] = useState(20);
   const [newPatchRole, setNewPatchRole] = useState("Poste Travail Flex (Data)");
 
+  // État pour l'édition en ligne d'un cordon de brassage existant
+  const [editingPatchId, setEditingPatchId] = useState<string | null>(null);
+  const [editPatchSourcePort, setEditPatchSourcePort] = useState("");
+  const [editPatchTargetPort, setEditPatchTargetPort] = useState("");
+  const [editPatchVlan, setEditPatchVlan] = useState(20);
+  const [editPatchServiceName, setEditPatchServiceName] = useState("");
+  const [editPatchStatus, setEditPatchStatus] = useState<"UP" | "DOWN" | "TESTING">("UP");
+  const [editPatchCableType, setEditPatchCableType] = useState<"CAT6A_RJ45" | "DAC_10G" | "FIBER_LC">("CAT6A_RJ45");
+  const [editPatchSpeed, setEditPatchSpeed] = useState<number>(1);
+
+  // État pour la sélection du commutateur actif dans l'onglet SWITCHES
+  const [selectedSwitchId, setSelectedSwitchId] = useState<string | null>(null);
+
   // État pour la découverte Cloud / SNMP et gestion dynamique des équipements raqués
   const [isCloudDiscoveryOpen, setIsCloudDiscoveryOpen] = useState(false);
   const [isAddingRackDevice, setIsAddingRackDevice] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState("");
   const [newDeviceSlotU, setNewDeviceSlotU] = useState(24);
+  const [newDeviceUSize, setNewDeviceUSize] = useState(1);
   const [newDeviceType, setNewDeviceType] = useState<RackDeviceType>("SWITCH");
   const [newDeviceBrand, setNewDeviceBrand] = useState<RackDeviceBrand>("ARUBA");
   const [newDeviceModel, setNewDeviceModel] = useState("");
@@ -363,8 +378,10 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [newDevicePorts, setNewDevicePorts] = useState(24);
   const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
   const [editingDeviceName, setEditingDeviceName] = useState("");
+  const [editingDeviceSlotU, setEditingDeviceSlotU] = useState(24);
+  const [editingDeviceUSize, setEditingDeviceUSize] = useState(1);
 
-  // État pour le renommage de la baie
+  // État pour le renommage et dimensions de la baie
   const [isEditingRackName, setIsEditingRackName] = useState(false);
   const [tempRackName, setTempRackName] = useState("");
 
@@ -2228,6 +2245,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     selectedNode.subType === "RACK_42U" ||
     selectedNode.subType === "RACK_18U"
   ) {
+    const totalU = selectedNode.uHeight ?? (selectedNode.subType === "RACK_18U" ? 18 : 42);
     const rackWidthMm = selectedNode.widthMm ?? 800;
     const rackDepthMm = selectedNode.heightMm ?? 1000;
     const connectedOutlets = allNodes.filter((n) => n.type === "WALL_OUTLET");
@@ -2238,6 +2256,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         : DEFAULT_RACK_DEVICES;
 
     const sortedRackDevices = [...rackDevices].sort((a, b) => b.slotU - a.slotU);
+    const switchDevices = sortedRackDevices.filter((d) => d.deviceType === "SWITCH");
 
     const handleAddRackDevice = (newDev: RackDeviceItem) => {
       const updated = [...rackDevices, newDev];
@@ -2460,53 +2479,132 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     </button>
                   </div>
                   <span className="text-[10px] font-mono bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30 flex-shrink-0">
-                    BAIE 19&quot; ({selectedNode.subType === "RACK_18U" ? 18 : 42}U)
+                    BAIE 19&quot; ({totalU}U)
                   </span>
                 </div>
               )}
-          <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between font-mono">
-            <span>
-              Châssis : {(rackWidthMm / 1000).toFixed(2)} × {(rackDepthMm / 1000).toFixed(2)} m
-            </span>
-            <span className="text-slate-500">
-              {(selectedNode.xMm / 1000).toFixed(1)}m, {(selectedNode.yMm / 1000).toFixed(1)}m
-            </span>
+
+          {/* Éditeur rapide des dimensions et hauteur U de la baie */}
+          <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 space-y-1.5 mt-1.5 font-mono text-[10px]">
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="flex items-center gap-1 text-slate-300 font-semibold">
+                <Ruler className="w-3 h-3 text-purple-400" />
+                Gabarit Châssis & Élévation :
+              </span>
+              <span className="text-slate-500">
+                {(selectedNode.xMm / 1000).toFixed(1)}m, {(selectedNode.yMm / 1000).toFixed(1)}m
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5">
+              <div>
+                <label className="text-[9px] text-slate-500 block">Larg. (mm)</label>
+                <select
+                  value={rackWidthMm}
+                  onChange={(e) =>
+                    onUpdateNodeProperties?.(selectedNode.id, {
+                      widthMm: Number(e.target.value),
+                    })
+                  }
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-slate-200 text-[10px]"
+                >
+                  <option value={600}>600 mm</option>
+                  <option value={800}>800 mm</option>
+                  <option value={1000}>1000 mm</option>
+                  <option value={1200}>1200 mm</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[9px] text-slate-500 block">Prof. (mm)</label>
+                <select
+                  value={rackDepthMm}
+                  onChange={(e) =>
+                    onUpdateNodeProperties?.(selectedNode.id, {
+                      heightMm: Number(e.target.value),
+                    })
+                  }
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-slate-200 text-[10px]"
+                >
+                  <option value={600}>600 mm</option>
+                  <option value={800}>800 mm</option>
+                  <option value={1000}>1000 mm</option>
+                  <option value={1200}>1200 mm</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[9px] text-slate-500 block">Total U</label>
+                <select
+                  value={totalU}
+                  onChange={(e) => {
+                    const u = Number(e.target.value);
+                    onUpdateNodeProperties?.(selectedNode.id, {
+                      uHeight: u,
+                      subType: u <= 18 ? "RACK_18U" : "RACK_42U",
+                    });
+                  }}
+                  className="w-full bg-slate-900 border border-purple-500/50 text-purple-300 font-bold rounded px-1.5 py-0.5 text-[10px]"
+                >
+                  <option value={12}>12 U</option>
+                  <option value={18}>18 U</option>
+                  <option value={24}>24 U</option>
+                  <option value={42}>42 U</option>
+                  <option value={48}>48 U</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          {/* Navigation par Onglets de la Baie */}
-          <div className="grid grid-cols-3 gap-1 mt-2.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          {/* Navigation par Onglets de la Baie (4 Onglets) */}
+          <div className="grid grid-cols-4 gap-1 mt-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
             <button
               onClick={() => setRackTab("PATCHING")}
-              className={`py-1 px-1.5 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
+              className={`py-1 px-1 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
                 rackTab === "PATCHING"
                   ? "bg-purple-600 text-white shadow-sm font-semibold"
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
               }`}
+              title="Brassage interne"
             >
-              <ArrowLeftRight className="w-3 h-3" />
-              Brassage ({rackPatches.length})
+              <ArrowLeftRight className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">Brassage ({rackPatches.length})</span>
             </button>
             <button
               onClick={() => setRackTab("EQUIPMENT")}
-              className={`py-1 px-1.5 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
+              className={`py-1 px-1 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
                 rackTab === "EQUIPMENT"
                   ? "bg-purple-600 text-white shadow-sm font-semibold"
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
               }`}
+              title="Équipements et Châssis"
             >
-              <Zap className="w-3 h-3" />
-              Châssis 42U
+              <Zap className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">Châssis {totalU}U</span>
+            </button>
+            <button
+              onClick={() => setRackTab("SWITCHES")}
+              className={`py-1 px-1 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
+                rackTab === "SWITCHES"
+                  ? "bg-purple-600 text-white shadow-sm font-semibold"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              }`}
+              title="Visualisation Face Avant Switch & Ports"
+            >
+              <Activity className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">Switchs ({switchDevices.length})</span>
             </button>
             <button
               onClick={() => setRackTab("VLANS")}
-              className={`py-1 px-1.5 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
+              className={`py-1 px-1 rounded text-[10px] font-medium transition flex items-center justify-center gap-1 ${
                 rackTab === "VLANS"
                   ? "bg-purple-600 text-white shadow-sm font-semibold"
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
               }`}
+              title="Supervision VLANs et IP"
             >
-              <Network className="w-3 h-3" />
-              VLANs & IP
+              <Network className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">VLANs</span>
             </button>
           </div>
         </div>
@@ -2650,6 +2748,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               {/* Liste détaillée des cordons de brassage internes */}
               <div className="space-y-1.5">
                 {filteredPatches.map((patch) => {
+                  const isEditingThisPatch = editingPatchId === patch.id;
                   const isVlan30 = patch.vlanId === 30;
                   const isVlan50 = patch.vlanId === 50;
                   const isVlan40 = patch.vlanId === 40;
@@ -2667,6 +2766,145 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     : isInfra
                     ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
                     : "text-blue-400 bg-blue-500/10 border-blue-500/30";
+
+                  if (isEditingThisPatch) {
+                    return (
+                      <div
+                        key={patch.id}
+                        className="p-2.5 bg-slate-950 rounded-lg border border-purple-500 space-y-2"
+                      >
+                        <div className="flex items-center justify-between text-[10px] text-purple-300 font-semibold">
+                          <span className="flex items-center gap-1">
+                            <Edit3 className="w-3 h-3" /> Modifier le cordon
+                          </span>
+                          <span className="font-mono text-[9px] text-slate-400">{patch.id}</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">Port Origine</label>
+                            <input
+                              type="text"
+                              value={editPatchSourcePort}
+                              onChange={(e) => setEditPatchSourcePort(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">Port Destination</label>
+                            <input
+                              type="text"
+                              value={editPatchTargetPort}
+                              onChange={(e) => setEditPatchTargetPort(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">VLAN Assigné</label>
+                            <select
+                              value={editPatchVlan}
+                              onChange={(e) => setEditPatchVlan(Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                            >
+                              <option value={20}>VLAN 20 (Corp Data)</option>
+                              <option value={30}>VLAN 30 (VoIP)</option>
+                              <option value={40}>VLAN 40 (Print)</option>
+                              <option value={50}>VLAN 50 (WiFi)</option>
+                              <option value={99}>VLAN 99 (Trunk)</option>
+                              <option value={10}>VLAN 10 (Infra)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">Statut Liaison</label>
+                            <select
+                              value={editPatchStatus}
+                              onChange={(e) => setEditPatchStatus(e.target.value as "UP" | "DOWN" | "TESTING")}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                            >
+                              <option value="UP">UP (Actif)</option>
+                              <option value="DOWN">DOWN (Inactif)</option>
+                              <option value="TESTING">TESTING (Test)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">Type de média</label>
+                            <select
+                              value={editPatchCableType}
+                              onChange={(e) =>
+                                setEditPatchCableType(e.target.value as "CAT6A_RJ45" | "DAC_10G" | "FIBER_LC")
+                              }
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
+                            >
+                              <option value="CAT6A_RJ45">Cat6A RJ45 (1G/10G)</option>
+                              <option value="DAC_10G">DAC 10G SFP+</option>
+                              <option value="FIBER_LC">Fibre Optique LC</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">Débit (Gbps)</label>
+                            <select
+                              value={editPatchSpeed}
+                              onChange={(e) => setEditPatchSpeed(Number(e.target.value))}
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                            >
+                              <option value={1}>1 Gbps</option>
+                              <option value={2.5}>2.5 Gbps (mGig)</option>
+                              <option value={10}>10 Gbps (10G)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] text-slate-400 block mb-0.5">Libellé / Service</label>
+                          <input
+                            type="text"
+                            value={editPatchServiceName}
+                            onChange={(e) => setEditPatchServiceName(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-1.5 pt-1 border-t border-slate-900">
+                          <button
+                            onClick={() => setEditingPatchId(null)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={() => {
+                              setRackPatches((prev) =>
+                                prev.map((p) =>
+                                  p.id === patch.id
+                                    ? {
+                                        ...p,
+                                        sourcePort: editPatchSourcePort || p.sourcePort,
+                                        targetPort: editPatchTargetPort || p.targetPort,
+                                        vlanId: editPatchVlan,
+                                        serviceName: editPatchServiceName || p.serviceName,
+                                        status: editPatchStatus,
+                                        cableType: editPatchCableType,
+                                        speedGbps: editPatchSpeed,
+                                      }
+                                    : p
+                                )
+                              );
+                              setEditingPatchId(null);
+                            }}
+                            className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-semibold flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Enregistrer
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
@@ -2686,6 +2924,22 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           <span className={`text-[9px] font-mono px-1 py-0.5 rounded border ${vlanColorClass}`}>
                             VID {patch.vlanId}
                           </span>
+                          <button
+                            onClick={() => {
+                              setEditingPatchId(patch.id);
+                              setEditPatchSourcePort(patch.sourcePort);
+                              setEditPatchTargetPort(patch.targetPort);
+                              setEditPatchVlan(patch.vlanId);
+                              setEditPatchServiceName(patch.serviceName);
+                              setEditPatchStatus(patch.status);
+                              setEditPatchCableType(patch.cableType as any);
+                              setEditPatchSpeed(patch.speedGbps);
+                            }}
+                            className="text-slate-500 hover:text-purple-300 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+                            title="Modifier ce cordon de brassage"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
                           <button
                             onClick={() => handleDeletePatch(patch.id)}
                             className="text-slate-600 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
@@ -2775,9 +3029,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       Nouvel Équipement Raqué
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <label className="text-[9px] text-slate-400 block mb-0.5">Nom de l'équipement</label>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Nom équipement</label>
                         <input
                           type="text"
                           value={newDeviceName}
@@ -2787,15 +3041,28 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] text-slate-400 block mb-0.5">Emplacement U (1 - 42)</label>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Position U (1-{totalU})</label>
                         <input
                           type="number"
                           min={1}
-                          max={42}
+                          max={totalU}
                           value={newDeviceSlotU}
                           onChange={(e) => setNewDeviceSlotU(Number(e.target.value))}
                           className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
                         />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Taille (U)</label>
+                        <select
+                          value={newDeviceUSize}
+                          onChange={(e) => setNewDeviceUSize(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                        >
+                          <option value={1}>1 U</option>
+                          <option value={2}>2 U</option>
+                          <option value={3}>3 U</option>
+                          <option value={4}>4 U</option>
+                        </select>
                       </div>
                     </div>
 
@@ -2882,7 +3149,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                             id: `dev-${Date.now()}`,
                             name: newDeviceName.trim() || `DEV-U${newDeviceSlotU}`,
                             slotU: newDeviceSlotU,
-                            uSize: 1,
+                            uSize: newDeviceUSize,
                             deviceType: newDeviceType,
                             brand: newDeviceBrand,
                             model: newDeviceModel.trim() || `${newDeviceBrand} Device`,
@@ -2923,35 +3190,68 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         key={dev.id}
                         className="p-2 bg-slate-950 rounded border border-slate-800 hover:border-slate-700 transition space-y-1 group"
                       >
-                        <div className="flex items-center justify-between text-[11px]">
-                          <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
-                            <span className="font-mono text-purple-300 font-bold bg-purple-950/60 px-1 py-0.5 rounded text-[10px] border border-purple-800/40">
-                              U{String(dev.slotU).padStart(2, "0")}
-                            </span>
-
-                            {editingDeviceId === dev.id ? (
-                              <div className="flex items-center gap-1 flex-1">
+                        {editingDeviceId === dev.id ? (
+                          <div className="space-y-2 p-1 bg-slate-900/60 rounded border border-purple-500/40">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editingDeviceName}
+                                onChange={(e) => setEditingDeviceName(e.target.value)}
+                                className="bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-slate-100 font-mono text-[10px] flex-1"
+                                placeholder="Nom équipement"
+                              />
+                              <div className="flex items-center gap-1">
+                                <label className="text-[9px] text-slate-400">U</label>
                                 <input
-                                  type="text"
-                                  value={editingDeviceName}
-                                  onChange={(e) => setEditingDeviceName(e.target.value)}
-                                  className="bg-slate-900 border border-purple-500 rounded px-1 py-0.5 text-slate-100 font-mono text-[10px] flex-1"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      handleUpdateRackDevice(dev.id, { name: editingDeviceName.trim() || dev.name });
-                                    }
-                                  }}
+                                  type="number"
+                                  min={1}
+                                  max={totalU}
+                                  value={editingDeviceSlotU}
+                                  onChange={(e) => setEditingDeviceSlotU(Number(e.target.value))}
+                                  className="w-12 bg-slate-950 border border-slate-700 rounded px-1 py-1 text-purple-300 font-mono text-[10px]"
                                 />
-                                <button
-                                  onClick={() => handleUpdateRackDevice(dev.id, { name: editingDeviceName.trim() || dev.name })}
-                                  className="text-emerald-400 hover:text-emerald-300 p-0.5"
-                                  title="Valider"
+                                <label className="text-[9px] text-slate-400">Taille</label>
+                                <select
+                                  value={editingDeviceUSize}
+                                  onChange={(e) => setEditingDeviceUSize(Number(e.target.value))}
+                                  className="bg-slate-950 border border-slate-700 rounded px-1 py-1 text-slate-200 text-[10px]"
                                 >
-                                  <Check className="w-3 h-3" />
-                                </button>
+                                  <option value={1}>1U</option>
+                                  <option value={2}>2U</option>
+                                  <option value={3}>3U</option>
+                                  <option value={4}>4U</option>
+                                </select>
                               </div>
-                            ) : (
+                            </div>
+                            <div className="flex justify-end gap-1">
+                              <button
+                                onClick={() => setEditingDeviceId(null)}
+                                className="px-2 py-0.5 bg-slate-800 text-slate-400 hover:text-white rounded text-[10px]"
+                              >
+                                Annuler
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleUpdateRackDevice(dev.id, {
+                                    name: editingDeviceName.trim() || dev.name,
+                                    slotU: editingDeviceSlotU,
+                                    uSize: editingDeviceUSize,
+                                  });
+                                }}
+                                className="px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-semibold flex items-center gap-1"
+                              >
+                                <Check className="w-3 h-3" /> Valider
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between text-[11px]">
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
+                              <span className="font-mono text-purple-300 font-bold bg-purple-950/60 px-1 py-0.5 rounded text-[10px] border border-purple-800/40">
+                                U{String(dev.slotU).padStart(2, "0")}
+                                {dev.uSize && dev.uSize > 1 ? ` (${dev.uSize}U)` : ""}
+                              </span>
+
                               <span className="font-mono text-slate-200 font-semibold truncate flex items-center gap-1">
                                 <span
                                   className={`w-1.5 h-1.5 rounded-full ${
@@ -2963,38 +3263,40 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                                   onClick={() => {
                                     setEditingDeviceId(dev.id);
                                     setEditingDeviceName(dev.name);
+                                    setEditingDeviceSlotU(dev.slotU);
+                                    setEditingDeviceUSize(dev.uSize ?? 1);
                                   }}
-                                  className="text-slate-600 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition p-0.5"
-                                  title="Renommer cet équipement"
+                                  className="text-slate-500 hover:text-purple-300 opacity-0 group-hover:opacity-100 transition p-0.5"
+                                  title="Modifier le nom, emplacement et taille U"
                                 >
                                   <Edit3 className="w-2.5 h-2.5" />
                                 </button>
                               </span>
-                            )}
-                          </div>
+                            </div>
 
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <span className={`text-[8px] font-mono px-1 py-0.5 rounded border uppercase ${brandBadgeColor}`}>
-                              {dev.brand ?? "GENERIC"}
-                            </span>
-                            {dev.cloudManaged && (
-                              <span
-                                className="text-[8px] font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1 py-0.5 rounded flex items-center gap-0.5"
-                                title="Géré et synchronisé dans le Cloud"
-                              >
-                                <Cloud className="w-2.5 h-2.5" />
-                                Cloud
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <span className={`text-[8px] font-mono px-1 py-0.5 rounded border uppercase ${brandBadgeColor}`}>
+                                {dev.brand ?? "GENERIC"}
                               </span>
-                            )}
-                            <button
-                              onClick={() => handleDeleteRackDevice(dev.id)}
-                              className="text-slate-600 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
-                              title="Retirer cet équipement du rack"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                              {dev.cloudManaged && (
+                                <span
+                                  className="text-[8px] font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1 py-0.5 rounded flex items-center gap-0.5"
+                                  title="Géré et synchronisé dans le Cloud"
+                                >
+                                  <Cloud className="w-2.5 h-2.5" />
+                                  Cloud
+                                </span>
+                              )}
+                              <button
+                                onClick={() => handleDeleteRackDevice(dev.id)}
+                                className="text-slate-600 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+                                title="Retirer cet équipement du rack"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         <div className="flex items-center justify-between text-[10px] text-slate-400">
                           <span className="truncate">{dev.model}</span>
@@ -3008,6 +3310,79 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   })}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Onglet 3 : Visualiseur Face Avant Switch & Ports */}
+          {rackTab === "SWITCHES" && (
+            <div className="space-y-3">
+              {switchDevices.length === 0 ? (
+                <div className="p-4 rounded-lg bg-slate-900 border border-slate-800 text-center space-y-2">
+                  <Activity className="w-6 h-6 text-slate-600 mx-auto" />
+                  <div className="text-xs text-slate-300 font-semibold">Aucun commutateur dans cette baie</div>
+                  <div className="text-[10px] text-slate-500">
+                    Ajoutez un switch dans l'onglet &quot;Châssis {totalU}U&quot; ou lancez une détection Cloud/SNMP.
+                  </div>
+                  <button
+                    onClick={() => setRackTab("EQUIPMENT")}
+                    className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-semibold transition"
+                  >
+                    Ajouter un équipement
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Sélecteur de switch actif si plusieurs switchs */}
+                  {switchDevices.length > 1 && switchDevices[0] && (
+                    <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                      <div className="text-[10px] text-slate-400 font-mono flex items-center justify-between">
+                        <span>Sélectionner le commutateur à visualiser :</span>
+                        <span className="text-purple-400 font-semibold">{switchDevices.length} switchs</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {switchDevices.map((sw) => {
+                          const isActive = (selectedSwitchId ?? switchDevices[0]?.id) === sw.id;
+                          return (
+                            <button
+                              key={sw.id}
+                              onClick={() => setSelectedSwitchId(sw.id)}
+                              className={`px-2 py-1 rounded text-[10px] font-mono transition flex items-center gap-1.5 border ${
+                                isActive
+                                  ? "bg-purple-600/30 text-purple-200 border-purple-500 font-bold"
+                                  : "bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200"
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  sw.status === "ONLINE" ? "bg-emerald-400" : "bg-slate-500"
+                                }`}
+                              />
+                              <span>{sw.name}</span>
+                              <span className="text-[9px] text-slate-500">U{sw.slotU}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Face avant réaliste et statut des ports du switch actif */}
+                  {(() => {
+                    const fallbackSwitch = switchDevices[0];
+                    if (!fallbackSwitch) return null;
+                    const activeSwitch =
+                      switchDevices.find((sw) => sw.id === (selectedSwitchId ?? fallbackSwitch.id)) ??
+                      fallbackSwitch;
+
+                    return (
+                      <SwitchPortVisualizer
+                        device={activeSwitch}
+                        rackPatches={rackPatches}
+                      />
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
 

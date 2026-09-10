@@ -138,6 +138,7 @@ export interface NodeDisplay {
   connectedRackId?: string | undefined;
   connectedSwitchPort?: string | undefined;
   devices?: RackDeviceItem[] | undefined;
+  uHeight?: number | undefined;
 }
 
 export function getLabelCoordinates(
@@ -557,116 +558,109 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 listening={false}
               />
 
-              {/* Équipement U24 : Panneau de Brassage Cat6A (24 ports) */}
-              <Rect
-                x={95}
-                y={160}
-                width={rWidth - 190}
-                height={120}
-                fill="#1e293b"
-                stroke="#64748b"
-                strokeWidth={8}
-                cornerRadius={12}
-                listening={false}
-              />
-              <Text
-                x={115}
-                y={180}
-                width={rWidth - 230}
-                text="U24: PP-24P-CAT6A (Data/VoIP)"
-                fontSize={46}
-                fontFamily="monospace"
-                fontStyle="bold"
-                fill="#f1f5f9"
-                wrap="none"
-                ellipsis={true}
-                listening={false}
-              />
-              {/* Ports RJ45 du bandeau */}
-              {Array.from({ length: 12 }).map((_, i) => (
-                <Rect
-                  key={`pp-port-${i}`}
-                  x={120 + i * ((rWidth - 250) / 12)}
-                  y={235}
-                  width={22}
-                  height={22}
-                  fill={i < 8 ? "#38bdf8" : "#334155"}
-                  cornerRadius={4}
-                  listening={false}
-                />
-              ))}
+              {/* Rendu dynamique des équipements raqués dans le châssis selon slotU */}
+              {(() => {
+                const totalU = rack.uHeight || 42;
+                const devList = rack.devices && rack.devices.length > 0 ? rack.devices : [];
+                // Espace utile vertical pour les U : de y=150 à y=(rDepth - 180)
+                const usableTop = 150;
+                const usableHeight = Math.max(200, rDepth - 330);
+                const uStep = usableHeight / totalU;
 
-              {/* Équipement U22 : Switch Cisco Catalyst 9300 */}
-              <Rect
-                x={95}
-                y={305}
-                width={rWidth - 190}
-                height={120}
-                fill="#172554"
-                stroke="#3b82f6"
-                strokeWidth={8}
-                cornerRadius={12}
-                listening={false}
-              />
-              <Text
-                x={115}
-                y={325}
-                width={rWidth - 230}
-                text="U22: CISCO C9300-24P (Gigabit)"
-                fontSize={46}
-                fontFamily="monospace"
-                fontStyle="bold"
-                fill="#93c5fd"
-                wrap="none"
-                ellipsis={true}
-                listening={false}
-              />
-              {/* LED d'activité des ports du switch */}
-              {Array.from({ length: 12 }).map((_, i) => (
-                <Circle
-                  key={`sw-led-${i}`}
-                  x={125 + i * ((rWidth - 250) / 12)}
-                  y={385}
-                  radius={7}
-                  fill={i < 7 ? "#22c55e" : "#475569"}
-                  listening={false}
-                />
-              ))}
+                return devList.map((dev) => {
+                  const uSize = dev.uSize ?? 1;
+                  // slotU est de 1 (bas) à totalU (haut)
+                  // On calcule la position Y inverse : slotU élevé = en haut
+                  const devY = usableTop + (totalU - dev.slotU) * uStep;
+                  const devH = Math.max(30, uStep * uSize - 6);
 
-              {/* Équipement U18 : Guide-câbles horizontal 1U */}
-              <Rect
-                x={95}
-                y={445}
-                width={rWidth - 190}
-                height={70}
-                fill="#0f172a"
-                stroke="#334155"
-                strokeWidth={6}
-                cornerRadius={8}
-                listening={false}
-              />
-              <Text
-                x={115}
-                y={462}
-                width={rWidth - 230}
-                text="U18: Guide-câbles horizontal 1U"
-                fontSize={38}
-                fontFamily="monospace"
-                fill="#64748b"
-                wrap="none"
-                ellipsis={true}
-                listening={false}
-              />
+                  const isSw = dev.deviceType === "SWITCH";
+                  const isPp = dev.deviceType === "PATCH_PANEL";
+                  const isFw = dev.deviceType === "FIREWALL";
+                  const isSrv = dev.deviceType === "SERVER";
+                  const isPdu = dev.deviceType === "PDU";
+
+                  const devFill = isSw
+                    ? "#172554"
+                    : isPp
+                    ? "#1e293b"
+                    : isFw
+                    ? "#450a0a"
+                    : isSrv
+                    ? "#09090b"
+                    : isPdu
+                    ? "#422006"
+                    : "#1e293b";
+
+                  const devStroke = isSw
+                    ? "#3b82f6"
+                    : isPp
+                    ? "#64748b"
+                    : isFw
+                    ? "#ef4444"
+                    : isSrv
+                    ? "#a1a1aa"
+                    : isPdu
+                    ? "#f59e0b"
+                    : "#475569";
+
+                  return (
+                    <Group key={dev.id}>
+                      <Rect
+                        x={95}
+                        y={devY}
+                        width={rWidth - 190}
+                        height={devH}
+                        fill={devFill}
+                        stroke={devStroke}
+                        strokeWidth={6}
+                        cornerRadius={8}
+                        listening={false}
+                      />
+                      <Text
+                        x={110}
+                        y={devY + 12}
+                        width={rWidth - 220}
+                        text={`U${String(dev.slotU).padStart(2, "0")}: ${dev.name}`}
+                        fontSize={Math.min(42, Math.max(24, devH * 0.4))}
+                        fontFamily="monospace"
+                        fontStyle="bold"
+                        fill="#f8fafc"
+                        wrap="none"
+                        ellipsis={true}
+                        listening={false}
+                      />
+                      {/* Représentation des ports RJ45 / LEDs si équipement avec ports */}
+                      {dev.portsCount && devH >= 50 && (
+                        <Group y={devY + devH - 25}>
+                          {Array.from({ length: Math.min(12, Math.ceil(dev.portsCount / 2)) }).map((_, pIdx) => (
+                            <Rect
+                              key={`dev-port-${dev.id}-${pIdx}`}
+                              x={115 + pIdx * ((rWidth - 240) / 12)}
+                              y={0}
+                              width={18}
+                              height={16}
+                              fill={pIdx < 7 ? (isSw ? "#22c55e" : "#38bdf8") : "#334155"}
+                              cornerRadius={3}
+                              listening={false}
+                            />
+                          ))}
+                        </Group>
+                      )}
+                    </Group>
+                  );
+                });
+              })()}
 
               {/* Grille de ventilation inférieure */}
               {Array.from({ length: 4 }).map((_, i) => (
                 <Circle
                   key={`fan-${i}`}
                   x={160 + i * ((rWidth - 320) / 3)}
-                  y={rDepth - 100}
-                  radius={50}
+                  y={rDepth - 80}
+                  radius={40}
                   stroke="#334155"
-                  strokeWidth={10}
+                  strokeWidth={8}
                   fill="rgba(15, 23, 42, 0.8)"
                   listening={false}
                 />
