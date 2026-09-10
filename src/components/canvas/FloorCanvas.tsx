@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, type FC } from "react";
+import { useRef, useEffect, useState, useCallback, type FC } from "react";
 import { Stage, Layer } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
@@ -101,7 +101,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   };
 
   // Magnétisme d'accostage à la fin du déplacement (Bureaux bord-à-bord & Prises collées)
-  const handleNodeMoveEnd = (id: string, newPos: { x: number; y: number }) => {
+  const handleNodeMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
     const node = nodes.find((n) => n.id === id);
 
     // 1. Accostage intelligent bord-à-bord (côte-à-côte ou face-à-face) pour les bureaux
@@ -160,16 +160,24 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     // 3. Magnétisme standard sur la grille métrique
     const snapResult = snapToGrid(newPos, gridConfig);
     onNodePositionChange?.(id, snapResult.point);
-  };
+  }, [nodes, gridConfig, onNodePositionChange]);
 
   // Déplacement fluide des coudes/waypoints de câbles sans frottement ni blocage forcé
-  const handleWaypointMove = (
+  const handleWaypointMove = useCallback((
     cableId: string,
     waypointIndex: number,
     newPos: { x: number; y: number }
   ) => {
     onWaypointChange?.(cableId, waypointIndex, newPos);
-  };
+  }, [onWaypointChange]);
+
+  const handleSelectNodeId = useCallback((id: string) => {
+    const node = nodes.find((n) => n.id === id);
+    if (node) {
+      if (node.type === "WALL_OUTLET") onSelectOutlet(node);
+      else onSelectNode?.(node);
+    }
+  }, [nodes, onSelectOutlet, onSelectNode]);
 
   return (
     <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-slate-950 cursor-grab active:cursor-grabbing">
@@ -201,13 +209,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             cableFilterMode={cableFilterMode}
             selectedNodeId={selectedNodeId ?? selectedOutletId}
             vlanStyles={vlanStyles}
-            onSelectNodeId={(id) => {
-              const node = nodes.find((n) => n.id === id);
-              if (node) {
-                if (node.type === "WALL_OUTLET") onSelectOutlet(node);
-                else onSelectNode?.(node);
-              }
-            }}
+            onSelectNodeId={handleSelectNodeId}
             onWaypointChange={handleWaypointMove}
             onAddWaypoint={onAddWaypoint}
             onRemoveWaypoint={onRemoveWaypoint}

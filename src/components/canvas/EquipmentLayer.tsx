@@ -5,6 +5,27 @@ import { Group, Rect, Text, Line, Circle } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 
+export type RackDeviceType = "SWITCH" | "PATCH_PANEL" | "ROUTER" | "SERVER" | "PDU" | "FIREWALL" | "FIBER_TRAY";
+
+export type RackDeviceBrand = "ARUBA" | "ZYXEL" | "ZYXEL_NEBULA" | "CISCO" | "UBIQUITI" | "FORTINET" | "GENERIC";
+
+export interface RackDeviceItem {
+  id: string;
+  name: string; // ex: "SW-ARUBA-2930F-24G", "SW-ZYXEL-GS1920-24HP"
+  slotU: number; // ex: 24 (U24)
+  uSize?: number | undefined; // défaut 1U
+  deviceType: RackDeviceType;
+  brand: RackDeviceBrand;
+  model?: string | undefined;
+  ipAddress?: string | undefined;
+  macAddress?: string | undefined;
+  portsCount?: number | undefined;
+  poeBudgetW?: number | undefined;
+  status: "ONLINE" | "OFFLINE" | "SYNCED";
+  cloudManaged?: boolean | undefined;
+  cloudManagedBy?: "ARUBA_CENTRAL" | "NEBULA_CLOUD" | "MERAKI" | "FORTICLOUD" | "SNMP_LOCAL" | "MANUAL" | undefined;
+}
+
 export interface RackDisplay {
   id: string;
   name: string;
@@ -13,6 +34,7 @@ export interface RackDisplay {
   widthMm: number;
   depthMm: number;
   uHeight: number;
+  devices?: RackDeviceItem[] | undefined;
 }
 
 export type OutletRole = "DATA" | "VOIP" | "WIFI" | "PRINTER" | "GENERIC";
@@ -77,6 +99,9 @@ export interface StackedPortItem {
   portId?: string | undefined;
   vlanId?: number | undefined;
   poeMode?: PoeMode | undefined;
+  isPatched?: boolean | undefined;
+  connectedRackId?: string | undefined;
+  connectedSwitchPort?: string | undefined;
 }
 
 export interface NodeDisplay {
@@ -109,6 +134,10 @@ export interface NodeDisplay {
   customEmote?: string | undefined;
   portCount?: number | undefined;
   labelPosition?: "TOP" | "BOTTOM" | "LEFT" | "RIGHT" | undefined;
+  isPatched?: boolean | undefined;
+  connectedRackId?: string | undefined;
+  connectedSwitchPort?: string | undefined;
+  devices?: RackDeviceItem[] | undefined;
 }
 
 export function getLabelCoordinates(
@@ -273,18 +302,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             anchorLineNode.points([anchorX, anchorY, currentOutletX, currentOutletY]);
           }
 
-          // 3. Mettre à jour l'extrémité du câble relié à cette prise
-          const cableLineNode = stage.findOne("#cable-line-cable-run-" + item.id) as any;
-          if (cableLineNode && typeof cableLineNode.points === "function") {
-            const currentPts = cableLineNode.points();
-            if (currentPts && currentPts.length >= 4) {
-              const updatedPts = [...currentPts];
-              updatedPts[0] = currentOutletX;
-              updatedPts[1] = currentOutletY;
-              updatedPts[2] = currentOutletX;
-              cableLineNode.points(updatedPts);
-            }
-          }
+
         }
 
         // Re-dessin GPU synchrone immédiat (0 latence, même frame 60 FPS)
@@ -367,9 +385,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   id={`anchor-line-${outlet.id}`}
                   points={[anchorX, anchorY, outlet.xMm, outlet.yMm]}
                   stroke={lineColor}
-                  strokeWidth={18}
-                  dash={isVoip ? [60, 40] : [70, 50]}
-                  opacity={0.8}
+                  strokeWidth={8}
+                  dash={isVoip ? [40, 30] : [50, 35]}
+                  opacity={0.75}
                   listening={false}
                 />
               </Group>
@@ -519,14 +537,14 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 listening={false}
               />
 
-              {/* Voyants LED d'état (Power vert, Uplink bleu) */}
+              {/* Voyants LED d'état (Power vert, Uplink bleu, zéro shadowBlur) */}
               <Circle
                 x={rWidth - 195}
                 y={75}
                 radius={12}
                 fill="#22c55e"
-                shadowColor="#22c55e"
-                shadowBlur={15}
+                stroke="#15803d"
+                strokeWidth={2}
                 listening={false}
               />
               <Circle
@@ -534,8 +552,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 y={75}
                 radius={12}
                 fill="#38bdf8"
-                shadowColor="#38bdf8"
-                shadowBlur={15}
+                stroke="#0284c7"
+                strokeWidth={2}
                 listening={false}
               />
 
@@ -1190,10 +1208,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         height={badgeHeight}
                         fill="rgba(15, 23, 42, 0.96)"
                         stroke={isSelected ? "#ffffff" : isLinked ? "#38bdf8" : "#475569"}
-                        strokeWidth={5}
+                        strokeWidth={isSelected ? 6 : 4}
                         cornerRadius={14}
-                        shadowColor={isSelected ? "#ffffff" : "#38bdf8"}
-                        shadowBlur={15}
                       />
                       <Text
                         x={18}
@@ -1217,7 +1233,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
           // Rendu Borne Wi-Fi Ceiling AP
           if (isWifiAp) {
             const vlan50Color = vlanStyles?.[50]?.color ?? DEFAULT_VLAN_STYLES[50]?.color ?? "#6366f1";
-            const isConnected = outlet.pingStatus === "ONLINE";
+            const isConnected = outlet.isPatched !== undefined ? outlet.isPatched : (outlet.pingStatus === "ONLINE");
             const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
             return (
@@ -1282,10 +1298,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         height={badgeHeight}
                         fill="rgba(15, 23, 42, 0.96)"
                         stroke={isSelected ? "#ffffff" : vlan50Color}
-                        strokeWidth={5}
+                        strokeWidth={isSelected ? 6 : 4}
                         cornerRadius={14}
-                        shadowColor={vlan50Color}
-                        shadowBlur={15}
                       />
                       <Text
                         x={18}
@@ -1309,7 +1323,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
           // Rendu Copieur / Imprimante Réseau
           if (isPrinter) {
             const vlan40Color = vlanStyles?.[40]?.color ?? DEFAULT_VLAN_STYLES[40]?.color ?? "#f59e0b";
-            const isConnected = outlet.pingStatus === "ONLINE";
+            const isConnected = outlet.isPatched !== undefined ? outlet.isPatched : (outlet.pingStatus === "ONLINE");
             const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
             return (
@@ -1379,10 +1393,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         height={badgeHeight}
                         fill="rgba(15, 23, 42, 0.96)"
                         stroke={isSelected ? "#ffffff" : "#d97706"}
-                        strokeWidth={5}
+                        strokeWidth={isSelected ? 6 : 4}
                         cornerRadius={14}
-                        shadowColor={vlan40Color}
-                        shadowBlur={15}
                       />
                       <Text
                         x={18}
@@ -1481,7 +1493,12 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   const portVlan = sp.vlanId ?? outlet.vlanId ?? 20;
                   const vlanColor =
                     vlanStyles?.[portVlan]?.color ?? DEFAULT_VLAN_STYLES[portVlan]?.color ?? "#38bdf8";
-                  const isConnected = sp.pingStatus === "ONLINE";
+                  const isConnected =
+                    sp.isPatched !== undefined
+                      ? sp.isPatched
+                      : outlet.isPatched !== undefined
+                      ? outlet.isPatched
+                      : sp.pingStatus === "ONLINE";
                   const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
                   return (
@@ -1514,8 +1531,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         y={0}
                         radius={8}
                         fill={statusColor}
-                        shadowColor={statusColor}
-                        shadowBlur={8}
+                        stroke={statusColor === "#22c55e" ? "#166534" : "#991b1b"}
+                        strokeWidth={2}
+                        listening={false}
                       />
                       {/* Numéro de port sobre et lisible sans texte surchargé */}
                       <Text
@@ -1569,10 +1587,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         height={badgeHeight}
                         fill="rgba(15, 23, 42, 0.96)"
                         stroke={isSelected ? "#ffffff" : badgeVlanColor}
-                        strokeWidth={5}
+                        strokeWidth={isSelected ? 6 : 4}
                         cornerRadius={14}
-                        shadowColor={badgeVlanColor}
-                        shadowBlur={15}
                       />
                       <Text
                         x={18}
@@ -1599,7 +1615,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
           const vlanId = outlet.vlanId ?? (isVoipRole ? 30 : 20);
           const vlanColor =
             vlanStyles?.[vlanId]?.color ?? DEFAULT_VLAN_STYLES[vlanId]?.color ?? (isVoipRole ? "#c084fc" : "#38bdf8");
-          const isConnected = outlet.pingStatus === "ONLINE";
+          const isConnected = outlet.isPatched !== undefined ? outlet.isPatched : (outlet.pingStatus === "ONLINE");
           const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
           return (
@@ -1686,8 +1702,6 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 fill={statusColor}
                 stroke="#0f172a"
                 strokeWidth={4}
-                shadowColor={statusColor}
-                shadowBlur={8}
                 listening={false}
               />
 
@@ -1736,10 +1750,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                       height={badgeHeight}
                       fill="rgba(15, 23, 42, 0.96)"
                       stroke={isSelected ? "#ffffff" : isLinked ? vlanColor : "#475569"}
-                      strokeWidth={5}
+                      strokeWidth={isSelected ? 6 : 4}
                       cornerRadius={14}
-                      shadowColor={isLinked ? vlanColor : "#0f172a"}
-                      shadowBlur={15}
                     />
                     <Text
                       x={18}

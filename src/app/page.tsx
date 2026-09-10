@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
-import { CircuitInspector } from "@/components/ui/CircuitInspector";
+import { CircuitInspector, DEFAULT_RACK_DEVICES } from "@/components/ui/CircuitInspector";
 import { EquipmentPalette, PaletteItem } from "@/components/ui/EquipmentPalette";
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { SettingsModal } from "@/components/ui/SettingsModal";
@@ -28,6 +28,7 @@ import {
   Trash2,
   Unlink,
   Search,
+  AlertCircle,
 } from "lucide-react";
 import { screenToWorld } from "@/engine/spatial/matrix";
 import {
@@ -55,6 +56,47 @@ const DynamicFloorCanvas = dynamic(
 function CameraScaleIndicator() {
   const scale = useCameraStore((s) => s.viewport.scale);
   return <span className="text-blue-400 font-semibold font-mono">{(1000 * scale).toFixed(1)} px/m</span>;
+}
+
+/**
+ * Calcule les coudes naturels orthogonaux (90°) pour relier une prise à une baie,
+ * garantissant que CHAQUE angle visible sur le plan correspond à un coude modifiable sans coude orphelin.
+ */
+export function getNaturalCableWaypoints(
+  sourcePos: { x: number; y: number },
+  targetPos: { x: number; y: number },
+  index: number
+): { x: number; y: number }[] {
+  const Sx = sourcePos.x;
+  const Sy = sourcePos.y;
+  const Tx = targetPos.x;
+  const Ty = targetPos.y;
+
+  // Cas 1 : Plateaux de bureaux sur la droite du bâtiment (Sx >= 18000)
+  if (Sx >= 18000) {
+    const corridorY = Sy > 10000 ? 8800 + (index % 10) * 70 : Math.max(2500, Sy - 1500);
+    const chuteX = 14800 + (index % 10) * 50;
+    return [
+      { x: Sx, y: corridorY },       // Coude 1 : Descente verticale directe au-dessus de la prise
+      { x: chuteX, y: corridorY },   // Coude 2 : Virage du couloir de faux-plafond vers la trémie
+      { x: chuteX, y: Ty },          // Coude 3 : Entrée horizontale dans la baie
+    ];
+  }
+
+  // Cas 2 : Prises situées dans ou à proximité du local technique / vers la gauche (Sx < 18000)
+  if (Sx <= Tx) {
+    // La prise est à gauche ou au même niveau que l'entrée de la baie : descente directe à hauteur baie
+    return [
+      { x: Sx, y: Ty },
+    ];
+  }
+
+  // Entre la trémie et la baie (12400 < Sx < 18000)
+  const midX = Math.round((Sx + Tx) / 2);
+  return [
+    { x: midX, y: Sy },
+    { x: midX, y: Ty },
+  ];
 }
 
 export default function NetFloorApp() {
@@ -88,6 +130,15 @@ export default function NetFloorApp() {
     node: NodeDisplay;
     x: number;
     y: number;
+  } | null>(null);
+
+  // Confirmation de transfert de rattachement d'une prise déjà liée vers un autre meuble
+  const [pendingAttachmentTransfer, setPendingAttachmentTransfer] = useState<{
+    outletId: string;
+    currentDeskId: string;
+    targetDeskId: string;
+    newPos: { x: number; y: number };
+    seatIdx?: number | undefined;
   } | null>(null);
 
   // Fermer le menu contextuel lors d'un clic ailleurs
@@ -130,17 +181,6 @@ export default function NetFloorApp() {
   // Waypoints de courbure personnalisés déplacés par l'utilisateur à la souris
   const [customWaypoints, setCustomWaypoints] = useState<Record<string, { x: number; y: number }[]>>({});
 
-  const handleWaypointChange = useCallback(
-    (cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => {
-      setCustomWaypoints((prev) => {
-        const existing = prev[cableId] ? [...prev[cableId]] : [];
-        existing[waypointIndex] = newPos;
-        return { ...prev, [cableId]: existing };
-      });
-    },
-    []
-  );
-
   // Étage
   const [floorData] = useState({
     widthMm: 60000,
@@ -157,6 +197,7 @@ export default function NetFloorApp() {
       widthMm: 800,
       depthMm: 1000,
       uHeight: 42,
+      devices: DEFAULT_RACK_DEVICES,
     },
   ]);
 
@@ -177,6 +218,7 @@ export default function NetFloorApp() {
       macAddress: "00:0A:41:88:99:A1",
       pingStatus: "ONLINE",
       pingLatencyMs: 1,
+      devices: DEFAULT_RACK_DEVICES,
     },
     // 1. Îlot Bench 4 Postes (4 collaborateurs distincts assignés)
     {
@@ -294,6 +336,9 @@ export default function NetFloorApp() {
       macAddress: "B4:2E:99:41:0A:12",
       pingStatus: "ONLINE",
       pingLatencyMs: 4,
+      isPatched: true,
+      connectedRackId: "rack-01",
+      connectedSwitchPort: "Gi1/0/1",
     },
     {
       id: "outlet-408-b",
@@ -475,12 +520,13 @@ export default function NetFloorApp() {
         heightMm: fromRacks.depthMm,
         subType: "RACK_42U" as const,
         description: `Baie informatique 19" (${fromRacks.uHeight}U) dans le local technique.`,
+        devices: fromRacks.devices,
       };
     }
     return null;
   }, [nodes, racks, selectedNodeId]);
 
-  // Calcul dynamique des câbles : ils suivent TOUTES les prises en direct
+  // Calcul dynamique des câbles : uniquement pour les prises explicitement raccordées à la baie
   const cables: CableData[] = useMemo(() => {
     if (activeViewMode === "HR") return [];
     const rack = racks.find((r) => r.id === "rack-01") ?? racks[0];
@@ -488,8 +534,10 @@ export default function NetFloorApp() {
 
     const list: CableData[] = [];
 
-    // Câbles horizontaux pour chaque prise murale présente sur le plateau
-    const wallOutlets = nodes.filter((n) => n.type === "WALL_OUTLET");
+    // Câbles horizontaux pour chaque prise murale raccordée au switch
+    const wallOutlets = nodes.filter(
+      (n) => n.type === "WALL_OUTLET" && (n.isPatched || n.stackedPorts?.some((p) => p.isPatched))
+    );
     wallOutlets.forEach((outlet, index) => {
       const isVoip = outlet.outletRole === "VOIP";
       const isPrinter = outlet.outletRole === "PRINTER";
@@ -513,10 +561,29 @@ export default function NetFloorApp() {
       const cableId = `cable-run-${outlet.id}`;
       const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + index * 35 };
 
-      // Cheminement en nappe de câbles faux-plafond (lignes parallèles régulières à angles droits 90° évitant les bureaux)
-      const defaultCorridorY = 8800 + (index % 10) * 80;
-      const defaultChuteX = 14800 + (index % 10) * 60;
-      const cableWaypoints = customWaypoints[cableId] ?? [{ x: defaultChuteX, y: defaultCorridorY }];
+      // Cheminement orthogonal dynamique adapté à l'emplacement réel de la prise (zéro coude orphelin)
+      const defaultWaypoints = getNaturalCableWaypoints(
+        { x: outlet.xMm, y: outlet.yMm },
+        targetPos,
+        index
+      );
+      const custom = customWaypoints[cableId];
+      let cableWaypoints: { x: number; y: number }[];
+
+      if (custom && custom.length > 1) {
+        cableWaypoints = custom;
+      } else if (custom && custom.length === 1) {
+        // Migration fluide d'un ancien point unique vers 3 coudes modifiables
+        const chuteX = custom[0]?.x ?? 14800;
+        const corridorY = custom[0]?.y ?? 8800;
+        cableWaypoints = [
+          { x: outlet.xMm, y: corridorY },
+          { x: chuteX, y: corridorY },
+          { x: chuteX, y: targetPos.y },
+        ];
+      } else {
+        cableWaypoints = defaultWaypoints;
+      }
 
       list.push({
         id: cableId,
@@ -535,6 +602,34 @@ export default function NetFloorApp() {
 
     return list;
   }, [nodes, racks, activeViewMode, customWaypoints, vlanStyles]);
+
+  // Déplacement interactif libre d'un coude de câble
+  const handleWaypointChange = useCallback(
+    (cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => {
+      setCustomWaypoints((prev) => {
+        const targetCable = cables.find((c) => c.id === cableId);
+        let existing = prev[cableId];
+        if (!existing || existing.length === 0) {
+          existing = targetCable?.waypoints ? targetCable.waypoints.map((p) => ({ ...p })) : [];
+        }
+        if (existing.length === 0) {
+          existing = [{ x: 14800, y: 8800 }];
+        }
+
+        const updated = existing.map((p) => ({ ...p }));
+        if (updated[waypointIndex]) {
+          // Déplacement libre et direct des coordonnées du coude sélectionné
+          updated[waypointIndex] = {
+            x: Math.max(0, Math.round(newPos.x)),
+            y: Math.max(0, Math.round(newPos.y)),
+          };
+        }
+
+        return { ...prev, [cableId]: updated };
+      });
+    },
+    [cables]
+  );
 
   // Traçage CTE récursif lors du clic sur une prise murale
   const handleSelectOutlet = useCallback(async (outletNode: NodeDisplay) => {
@@ -605,6 +700,7 @@ export default function NetFloorApp() {
         const deltaX = newPos.x - current.xMm;
         const deltaY = newPos.y - current.yMm;
 
+        // Les coudes et waypoints intermédiaires restent STRICTEMENT fixes et indépendants
         return prev.map((n) => {
           if (n.id === id) {
             return { ...n, xMm: newPos.x, yMm: newPos.y };
@@ -616,6 +712,7 @@ export default function NetFloorApp() {
         });
       }
 
+      // Pour les prises murales, les waypoints intermédiaires restent également immobiles
       return prev.map((n) => (n.id === id ? { ...n, xMm: newPos.x, yMm: newPos.y } : n));
     });
   }, []);
@@ -692,6 +789,28 @@ export default function NetFloorApp() {
             seatIdx = relY < h / 2 ? 0 : 1;
           }
 
+          // Si la prise est DÉJÀ liée à un AUTRE meuble, demander confirmation avant transfert
+          if (node.attachedToDeskId && node.attachedToDeskId !== hitDesk.id) {
+            setPendingAttachmentTransfer({
+              outletId: id,
+              currentDeskId: node.attachedToDeskId,
+              targetDeskId: hitDesk.id,
+              newPos,
+              seatIdx,
+            });
+            // Déplacer la prise mais conserver la liaison d'origine en attendant la confirmation utilisateur
+            return prev.map((n) =>
+              n.id === id
+                ? {
+                    ...n,
+                    xMm: newPos.x,
+                    yMm: newPos.y,
+                  }
+                : n
+            );
+          }
+
+          // Sinon (non liée ou déjà sur ce meuble) : liaison directe
           return prev.map((n) =>
             n.id === id
               ? {
@@ -703,30 +822,6 @@ export default function NetFloorApp() {
                 }
               : n
           );
-        } else if (node.attachedToDeskId) {
-          // 2. Si la prise était rattachée à un bureau et est tirée en dehors
-          const linkedDesk = prev.find((d) => d.id === node.attachedToDeskId);
-          if (linkedDesk) {
-            const deskW = linkedDesk.widthMm ?? 1600;
-            const deskH = linkedDesk.heightMm ?? 800;
-            const deskCenterX = linkedDesk.xMm + deskW / 2;
-            const deskCenterY = linkedDesk.yMm + deskH / 2;
-            const dist = Math.hypot(newPos.x - deskCenterX, newPos.y - deskCenterY);
-            const maxAttachDistance = Math.max(deskW, deskH) + 400;
-            if (dist > maxAttachDistance) {
-              return prev.map((n) =>
-                n.id === id
-                  ? {
-                      ...n,
-                      xMm: newPos.x,
-                      yMm: newPos.y,
-                      attachedToDeskId: undefined,
-                      attachedSeatIndex: undefined,
-                    }
-                  : n
-              );
-            }
-          }
         }
       }
       return prev;
@@ -737,17 +832,27 @@ export default function NetFloorApp() {
   }, [handleNodeUpdate, handleRackUpdate]);
 
   // Ajout d'un coude orthogonal supplémentaire sur un câble
-  const handleAddWaypoint = useCallback((cableId: string) => {
-    setCustomWaypoints((prev) => {
-      const existing = prev[cableId] ?? [{ x: 14800, y: 9000 }];
-      const lastWp = existing[existing.length - 1] ?? { x: 14800, y: 9000 };
-      const newWp = {
-        x: Math.round(lastWp.x - 1200),
-        y: Math.round(lastWp.y + 1500),
-      };
-      return { ...prev, [cableId]: [...existing, newWp] };
-    });
-  }, []);
+  const handleAddWaypoint = useCallback(
+    (cableId: string) => {
+      setCustomWaypoints((prev) => {
+        let existing = prev[cableId];
+        if (!existing || existing.length === 0) {
+          const targetCable = cables.find((c) => c.id === cableId);
+          existing = targetCable?.waypoints ? targetCable.waypoints.map((p) => ({ ...p })) : [];
+        }
+        if (existing.length === 0) {
+          existing = [{ x: 14800, y: 8800 }];
+        }
+        const lastWp = existing[existing.length - 1] ?? { x: 14800, y: 9000 };
+        const newWp = {
+          x: Math.round(lastWp.x - 1200),
+          y: Math.round(lastWp.y + 1500),
+        };
+        return { ...prev, [cableId]: [...existing, newWp] };
+      });
+    },
+    [cables]
+  );
 
   // Retrait du dernier coude d'un câble (minimum 1)
   const handleRemoveWaypoint = useCallback((cableId: string) => {
@@ -951,8 +1056,23 @@ export default function NetFloorApp() {
     });
   };
 
-  // Option : Mise à jour libre des propriétés (RH, Dimensions réelles ou fausses mesures, Rotation)
+  // Option : Mise à jour libre des propriétés (RH, Dimensions réelles ou fausses mesures, Rotation, Baies)
   const handleUpdateNodeProperties = (nodeId: string, updates: Partial<NodeDisplay>) => {
+    // Si mise à jour du nom ou des équipements d'une baie, synchroniser racks
+    if (updates.name || updates.devices) {
+      setRacks((prevRacks) =>
+        prevRacks.map((r) =>
+          r.id === nodeId
+            ? {
+                ...r,
+                ...(updates.name ? { name: updates.name } : {}),
+                ...(updates.devices ? { devices: updates.devices } : {}),
+              }
+            : r
+        )
+      );
+    }
+
     setNodes((prev) => {
       const target = prev.find((n) => n.id === nodeId);
       if (!target) return prev;
@@ -1812,6 +1932,70 @@ export default function NetFloorApp() {
           </div>
         </div>
       )}
+      {/* 7. Modal de Confirmation de Transfert de Liaison (prise déjà rattachée à un autre bureau) */}
+      {pendingAttachmentTransfer && (() => {
+        const currentDesk = nodes.find((n) => n.id === pendingAttachmentTransfer.currentDeskId);
+        const targetDesk = nodes.find((n) => n.id === pendingAttachmentTransfer.targetDeskId);
+        const outlet = nodes.find((n) => n.id === pendingAttachmentTransfer.outletId);
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-slate-950 border border-amber-700/60 rounded-xl w-[420px] max-w-[95vw] p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+                <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">Transférer la liaison ?</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Cette prise est déjà rattachée à un bureau.
+                  </p>
+                </div>
+              </div>
+
+              <div className="py-4 space-y-2 text-xs text-slate-300">
+                <p>
+                  <strong className="text-slate-100">{outlet?.name ?? "Prise"}</strong> est actuellement rattachée à{" "}
+                  <strong className="text-amber-400">{currentDesk?.name ?? "Bureau actuel"}</strong>.
+                </p>
+                <p>
+                  Souhaitez-vous la transférer sur{" "}
+                  <strong className="text-blue-400">{targetDesk?.name ?? "Nouveau bureau"}</strong> ?
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  onClick={() => setPendingAttachmentTransfer(null)}
+                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition"
+                >
+                  Conserver le rattachement actuel
+                </button>
+                <button
+                  onClick={() => {
+                    const transfer = pendingAttachmentTransfer;
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === transfer.outletId
+                          ? {
+                              ...n,
+                              attachedToDeskId: transfer.targetDeskId,
+                              attachedSeatIndex: transfer.seatIdx,
+                            }
+                          : n
+                      )
+                    );
+                    setPendingAttachmentTransfer(null);
+                  }}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow transition"
+                >
+                  Transférer la prise
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
