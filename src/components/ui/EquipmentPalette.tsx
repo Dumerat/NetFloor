@@ -250,6 +250,9 @@ interface EquipmentPaletteProps {
   onOpenTopology?: (() => void) | undefined;
   isTopologyOpen?: boolean | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
+  width?: number | undefined;
+  onResizeStart?: ((e: React.MouseEvent) => void) | undefined;
+  topologyContent?: React.ReactNode | undefined;
 }
 
 const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
@@ -260,7 +263,11 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   onOpenTopology,
   isTopologyOpen = false,
   vlanStyles = DEFAULT_VLAN_STYLES,
+  width = 340,
+  onResizeStart,
+  topologyContent,
 }) => {
+  const isDrawerOpen = isOpen || isTopologyOpen;
   // 3 sous-menus d'équipements dans la seconde fenêtre latérale
   const [selectedCategory, setSelectedCategory] = useState<PaletteCategory>("FURNITURE");
 
@@ -362,9 +369,8 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
 
   return (
     <aside
-      className={`fixed top-14 left-0 bottom-0 z-30 transition-all duration-300 ease-in-out flex ${
-        isOpen ? "w-80" : "w-12"
-      } bg-slate-950/95 backdrop-blur-md border-r border-slate-800 shadow-2xl text-slate-100 font-sans`}
+      style={{ width: isDrawerOpen ? `${width}px` : "48px" }}
+      className="fixed top-14 left-0 bottom-0 z-30 flex bg-slate-950/95 backdrop-blur-md border-r border-slate-800 shadow-2xl text-slate-100 font-sans"
     >
       {/* 1. Barre latérale étroite (UN SEUL BOUTON AJOUT + PARAMÈTRES DSI) */}
       <div className="w-12 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-3 justify-between flex-shrink-0">
@@ -419,14 +425,18 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
             title={isOpen ? "Replier la palette" : "Déplier la palette"}
             className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
           >
-            {isOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+            {isDrawerOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
       {/* 2. Seconde fenêtre latérale déployable (3 sous-menus d'équipements) */}
-      {isOpen && (
-        <div className="flex-1 flex flex-col p-3 overflow-hidden">
+      {isDrawerOpen && (
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
+          {isTopologyOpen && topologyContent ? (
+            topologyContent
+          ) : (
+            <div className="flex-1 flex flex-col p-3 overflow-hidden">
           {/* Header Palette */}
           <div className="border-b border-slate-800 pb-2 mb-2 flex-shrink-0 flex items-center justify-between">
             <span className="font-semibold text-xs text-slate-100 flex items-center gap-1.5">
@@ -778,7 +788,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
             💡 <strong>Astuce :</strong> Glissez-déposez directement un équipement sur le plan ou cliquez sur Ajouter.
           </div>
 
-          {/* Bouton Paramètres DSI en bas */}
+                    {/* Bouton Paramtres DSI en bas */}
           {onOpenSettings && (
             <div className="pt-2 border-t border-slate-800 flex-shrink-0">
               <button
@@ -791,7 +801,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-slate-200 group-hover:text-white">
-                      Paramètres DSI
+                      Paramtres DSI
                     </div>
                     <div className="text-[9px] text-slate-400 font-mono">AD, SNMP, IPAM</div>
                   </div>
@@ -800,6 +810,19 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
               </button>
             </div>
           )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Poigne de redimensionnement interactif sur la bordure droite */}
+      {isDrawerOpen && onResizeStart && (
+        <div
+          onMouseDown={onResizeStart}
+          className="absolute top-0 right-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/50 active:bg-blue-500 transition-colors z-50 group flex items-center justify-center select-none"
+          title="Glisser pour redimensionner le panneau latral"
+        >
+          <div className="w-0.5 h-8 bg-slate-700 group-hover:bg-blue-400 group-active:bg-white rounded-full transition" />
         </div>
       )}
     </aside>

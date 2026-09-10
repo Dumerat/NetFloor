@@ -10,7 +10,7 @@ import { SettingsModal } from "@/components/ui/SettingsModal";
 import { NetworkTopologyPanel } from "@/components/ui/NetworkTopologyPanel";
 import { DeviceTelemetry } from "@/data/settingsStore";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
-import { NodeDisplay, RackDisplay, OutletRole, StackedPortItem, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
+import { NodeDisplay, RackDisplay, RackDeviceItem, OutletRole, StackedPortItem, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
 import { CableData, CableFilterMode } from "@/components/canvas/CableLayer";
 import {
   ZoomIn,
@@ -24,7 +24,6 @@ import {
   Sparkles,
   Download,
   Palette,
-  Tag,
   X,
   Trash2,
   Unlink,
@@ -63,6 +62,53 @@ function CameraScaleIndicator() {
  * Calcule les coudes naturels orthogonaux (90°) pour relier une prise à une baie,
  * garantissant que CHAQUE angle visible sur le plan correspond à un coude modifiable sans coude orphelin.
  */
+
+/**
+ * Génère des équipements dédiés et indépendants pour chaque baie créée sur le plan.
+ * Évite le partage erroné de modules ou d'identifiants entre baies informatiques.
+ */
+export function createDefaultRackDevices(rackId: string, rackName: string): RackDeviceItem[] {
+  const shortNum = rackId.replace(/[^0-9]/g, "").slice(-2) || "02";
+  const numInt = parseInt(shortNum, 10) || 2;
+  return [
+    {
+      id: `dev-${rackId}-sw-01`,
+      name: `SW-${rackName}-01`,
+      slotU: 24,
+      uSize: 1,
+      deviceType: "SWITCH",
+      brand: "ARUBA",
+      model: "Aruba CX 6200F 24G 4SFP+ 370W",
+      ipAddress: `10.42.0.${20 + numInt}`,
+      macAddress: `B4:0C:25:88:${shortNum.padStart(2, "0")}:01`,
+      status: "ONLINE",
+      portsCount: 24,
+      cloudManagedBy: "ARUBA_CENTRAL",
+    },
+    {
+      id: `dev-${rackId}-pp-01`,
+      name: `PP-${rackName}-CAT6A`,
+      slotU: 23,
+      uSize: 1,
+      deviceType: "PATCH_PANEL",
+      brand: "GENERIC",
+      model: "LCS3 Panneau droit 24 ports RJ45 Cat6A STP",
+      portsCount: 24,
+      status: "ONLINE",
+    },
+    {
+      id: `dev-${rackId}-pdu-01`,
+      name: `PDU-${rackName}-A`,
+      slotU: 1,
+      uSize: 1,
+      deviceType: "PDU",
+      brand: "GENERIC",
+      model: "Basic Rack PDU 16A 230V",
+      status: "ONLINE",
+    },
+  ];
+}
+
 export function getNaturalCableWaypoints(
   sourcePos: { x: number; y: number },
   targetPos: { x: number; y: number },
@@ -86,9 +132,60 @@ export default function NetFloorApp() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [isTopologyOpen, setIsTopologyOpen] = useState(false);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(350);
+  const [inspectorWidth, setInspectorWidth] = useState(384);
+  const isResizingLeftRef = useRef(false);
+  const isResizingRightRef = useRef(false);
+
+  // Gestionnaire global du glisser-redimensionner (Drag-to-Resize) avec bornes min/max
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizingLeftRef.current) {
+        const minW = 280;
+        const maxW = Math.min(Math.round(window.innerWidth * 0.45), 620);
+        const newW = Math.min(Math.max(e.clientX, minW), maxW);
+        setLeftPanelWidth(newW);
+      } else if (isResizingRightRef.current) {
+        const minW = 320;
+        const maxW = Math.min(Math.round(window.innerWidth * 0.5), 680);
+        const newW = Math.min(Math.max(window.innerWidth - e.clientX, minW), maxW);
+        setInspectorWidth(newW);
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isResizingLeftRef.current || isResizingRightRef.current) {
+        isResizingLeftRef.current = false;
+        isResizingRightRef.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
+  const handleStartLeftResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingLeftRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  const handleStartRightResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRightRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
 
   // Mode d'affichage des libellés (false = au survol par défaut, true = tous affichés en permanence)
-  const [showAllLabels, setShowAllLabels] = useState(false);
+  const [showAllLabels, _setShowAllLabels] = useState(false);
 
   // Vue Métier active
   const [activeViewMode, setActiveViewMode] = useState<
@@ -483,8 +580,7 @@ export default function NetFloorApp() {
 
   // Nœud actuellement sélectionné (synchronisé en direct, incluant les baies)
   const selectedNode = useMemo(() => {
-    const fromNodes = nodes.find((n) => n.id === selectedNodeId);
-    if (fromNodes) return fromNodes;
+    // 1. Priorité absolue aux baies pour garantir l'indépendance et la synchronisation en temps réel des modules
     const fromRacks = racks.find((r) => r.id === selectedNodeId);
     if (fromRacks) {
       return {
@@ -498,17 +594,18 @@ export default function NetFloorApp() {
         subType: fromRacks.uHeight === 18 ? ("RACK_18U" as const) : ("RACK_42U" as const),
         uHeight: fromRacks.uHeight,
         description: `Baie informatique 19" (${fromRacks.uHeight}U) dans le local technique.`,
-        devices: fromRacks.devices,
+        devices: fromRacks.devices ?? [],
       };
     }
+    const fromNodes = nodes.find((n) => n.id === selectedNodeId);
+    if (fromNodes) return fromNodes;
     return null;
   }, [nodes, racks, selectedNodeId]);
 
   // Calcul dynamique des câbles : uniquement pour les prises explicitement raccordées à la baie
-  const cables: CableData[] = useMemo(() => {
+    const cables: CableData[] = useMemo(() => {
     if (activeViewMode === "HR") return [];
-    const rack = racks.find((r) => r.id === "rack-01") ?? racks[0];
-    if (!rack) return [];
+    if (racks.length === 0) return [];
 
     const list: CableData[] = [];
 
@@ -517,6 +614,8 @@ export default function NetFloorApp() {
       (n) => n.type === "WALL_OUTLET" && (n.isPatched || n.stackedPorts?.some((p) => p.isPatched))
     );
     wallOutlets.forEach((outlet, index) => {
+      const rack = racks.find((r) => r.id === outlet.connectedRackId) ?? racks.find((r) => r.id === "rack-01") ?? racks[0];
+      if (!rack) return;
       const isVoip = outlet.outletRole === "VOIP";
       const isPrinter = outlet.outletRole === "PRINTER";
       const isWifi = outlet.outletRole === "WIFI";
@@ -619,8 +718,8 @@ export default function NetFloorApp() {
       const currentScale = useCameraStore.getState().viewport.scale;
       const targetScale = Math.max(currentScale, 0.035);
 
-      const canvasLeft = isPaletteOpen ? 320 : isTopologyOpen ? 420 : 48;
-      const canvasWidth = typeof window !== "undefined" ? window.innerWidth - canvasLeft - 384 : 800;
+      const canvasLeft = (isPaletteOpen || isTopologyOpen) ? leftPanelWidth : 48;
+      const canvasWidth = typeof window !== "undefined" ? window.innerWidth - canvasLeft - inspectorWidth : 800;
       const canvasHeight = typeof window !== "undefined" ? window.innerHeight - 56 : 600;
 
       const panX = canvasLeft + canvasWidth / 2 - target.xMm * targetScale;
@@ -1171,14 +1270,17 @@ export default function NetFloorApp() {
     const finalName = computeName();
 
     if (isRack) {
+      const rackU = item.subType === "RACK_18U" ? 18 : 42;
+      const initialDevices = createDefaultRackDevices(newId, finalName);
       const newRack: RackDisplay = {
         id: newId,
         name: finalName,
         xMm: newX,
         yMm: newY,
         widthMm: item.widthMm ?? 800,
-        depthMm: item.heightMm ?? 1000,
-        uHeight: item.subType === "RACK_18U" ? 18 : 42,
+        depthMm: Math.max(item.heightMm ?? 1000, 320 + rackU * 36),
+        uHeight: rackU,
+        devices: initialDevices,
       };
       setRacks((prev) => [...prev, newRack]);
     }
@@ -1205,8 +1307,10 @@ export default function NetFloorApp() {
       xMm: newX,
       yMm: newY,
       widthMm: item.widthMm,
-      heightMm: item.heightMm,
+      heightMm: isRack ? Math.max(item.heightMm ?? 1000, 320 + (item.subType === "RACK_18U" ? 18 : 42) * 36) : item.heightMm,
       subType: item.subType,
+      uHeight: isRack ? (item.subType === "RACK_18U" ? 18 : 42) : undefined,
+      devices: isRack ? createDefaultRackDevices(newId, finalName) : undefined,
       outletRole: item.outletRole,
       assignedPerson: item.category === "FURNITURE" ? "Poste vacant / Flex" : undefined,
       department: item.category === "FURNITURE" ? "Espace Collaboratif" : undefined,
@@ -1553,26 +1657,32 @@ export default function NetFloorApp() {
 
       {/* 2. Workspace Body */}
       <div className="flex-1 flex relative overflow-hidden">
-        {/* Palette d'Équipements Escamotable avec bouton Paramètres DSI en bas à gauche */}
+        {/* Palette d'Équipements Escamotable & Redimensionnable avec Topologie intégrée */}
         <EquipmentPalette
           isOpen={isPaletteOpen}
           onToggle={() => {
-            setIsPaletteOpen((prev) => !prev);
-            if (!isPaletteOpen) setIsTopologyOpen(false);
+            if (isTopologyOpen) {
+              setIsTopologyOpen(false);
+              setIsPaletteOpen(true);
+            } else {
+              setIsPaletteOpen((prev) => !prev);
+            }
           }}
           onAddItem={handleAddItemFromPalette}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenTopology={() => {
-            setIsTopologyOpen((prev) => !prev);
-            if (!isTopologyOpen) setIsPaletteOpen(false);
+            if (isPaletteOpen) {
+              setIsPaletteOpen(false);
+              setIsTopologyOpen(true);
+            } else {
+              setIsTopologyOpen((prev) => !prev);
+            }
           }}
           isTopologyOpen={isTopologyOpen}
           vlanStyles={vlanStyles}
-        />
-
-        {/* Panneau de Topologie Réseau DSI Escamotable */}
-        {isTopologyOpen && (
-          <div className="absolute top-0 bottom-0 left-12 w-[420px] bg-slate-950 border-r border-slate-800 shadow-2xl z-20 flex flex-col animate-in fade-in slide-in-from-left duration-200">
+          width={leftPanelWidth}
+          onResizeStart={handleStartLeftResize}
+          topologyContent={
             <NetworkTopologyPanel
               racks={racks}
               nodes={nodes}
@@ -1586,14 +1696,13 @@ export default function NetFloorApp() {
                 handleFocusNode(nodeId);
               }}
             />
-          </div>
-        )}
+          }
+        />
 
-        {/* Main Canvas Area avec support Glisser-Déposer depuis la palette */}
+        {/* Main Canvas Area */}
         <div
-          className={`flex-1 h-full relative transition-all duration-300 ${
-            isPaletteOpen ? "ml-80" : isTopologyOpen ? "ml-[420px]" : "ml-12"
-          }`}
+          style={{ marginLeft: (isPaletteOpen || isTopologyOpen) ? `${leftPanelWidth}px` : "48px" }}
+          className="flex-1 h-full relative min-w-0"
           onDragOver={(e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "copy";
@@ -1690,44 +1799,21 @@ export default function NetFloorApp() {
               </button>
               <button
                 onClick={() => setCableFilterMode("SELECTED_ONLY")}
-                className={`px-2 py-1 rounded-lg transition ${
+                className={`px-2.5 py-1 rounded-lg transition ${
                   cableFilterMode === "SELECTED_ONLY"
-                    ? "bg-sky-500 text-slate-950 font-bold shadow"
+                    ? "bg-blue-600 text-white font-bold shadow"
                     : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
                 Sélectionné
               </button>
-
-              {/* Bouton direct de personnalisation des styles & tracés de câbles par VLAN */}
-              <button
-                onClick={() => setIsVlanStyleModalOpen(true)}
-                className="px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 bg-sky-950/60 hover:bg-sky-900/80 text-sky-300 border border-sky-800/70 shadow-sm ml-1 hover:border-sky-500/50"
-                title="Personnaliser les couleurs, pointillés et épaisseurs des câbles par VLAN"
-              >
-                <Palette className="w-3.5 h-3.5 text-sky-400" />
-                Styles & Tracés
-              </button>
-
-              {/* Bouton de bascule de visibilité des libellés (Au survol / Tous affichés) */}
-              <button
-                onClick={() => setShowAllLabels((prev) => !prev)}
-                className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 border shadow-sm ml-1 ${
-                  showAllLabels
-                    ? "bg-cyan-600 text-white border-cyan-400 font-bold"
-                    : "bg-slate-900 text-slate-400 hover:text-white border-slate-800 hover:bg-slate-850"
-                }`}
-                title="Basculer l'affichage des noms d'équipements : au survol (par défaut) ou tous visibles"
-              >
-                <Tag className="w-3.5 h-3.5 text-cyan-400" />
-                <span>{showAllLabels ? "Libellés : Tous" : "Libellés : Au survol"}</span>
-              </button>
             </div>
           )}
 
+          {/* Canvas React-Konva */}
           <DynamicFloorCanvas
-            floorWidthMm={floorData.widthMm}
-            floorHeightMm={floorData.heightMm}
+            floorWidthMm={30000}
+            floorHeightMm={20000}
             racks={racks}
             nodes={nodes}
             cables={cables}
@@ -1754,14 +1840,28 @@ export default function NetFloorApp() {
           </div>
         </div>
 
-        {/* Right Inspector Sidebar */}
-        <div className="w-96 border-l border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 flex flex-col shadow-2xl z-10 overflow-hidden">
+        {/* Right Inspector Sidebar - Redimensionnable et protégé contre tout écrasement flex */}
+        <div
+          style={{ width: `${inspectorWidth}px` }}
+          className="flex-shrink-0 relative border-l border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 flex flex-col shadow-2xl z-10 overflow-hidden"
+        >
+          {/* Poignée de redimensionnement interactif sur la bordure gauche */}
+          <div
+            onMouseDown={handleStartRightResize}
+            onDoubleClick={() => setInspectorWidth(384)}
+            className="absolute top-0 left-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/40 active:bg-blue-600 transition-colors z-30 group flex items-center justify-center select-none"
+            title="Glisser pour redimensionner l'inspecteur (Double-clic pour réinitialiser à 384px)"
+          >
+            <div className="w-0.5 h-8 bg-slate-700 group-hover:bg-blue-400 group-active:bg-white rounded-full transition" />
+          </div>
+
           <CircuitInspector
             traceResult={traceResult}
             isLoading={isTracing}
             selectedNode={selectedNode}
             allNodes={nodes}
             desks={desks}
+            racks={racks}
             onToggleAttachment={handleToggleAttachment}
             onAlignWithDesk={handleAlignWithDesk}
             onTriggerTrace={handleSelectOutlet}

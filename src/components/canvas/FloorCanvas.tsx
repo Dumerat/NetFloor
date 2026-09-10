@@ -59,19 +59,34 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   const { viewport, setViewport, zoomAt, fitFloor, gridConfig } = useCameraStore();
   const [dimensions, setDimensions] = useState({ width: 1200, height: 800 });
 
+  const hasInitialFitRef = useRef(false);
+
   useEffect(() => {
-    const updateSize = () => {
-      if (containerRef.current) {
-        const w = containerRef.current.clientWidth;
-        const h = containerRef.current.clientHeight;
-        setDimensions({ width: w, height: h });
+    if (!containerRef.current) return;
+    const updateDimensions = (w: number, h: number) => {
+      if (w <= 0 || h <= 0) return;
+      setDimensions({ width: w, height: h });
+      if (!hasInitialFitRef.current) {
+        hasInitialFitRef.current = true;
         fitFloor(floorWidthMm, floorHeightMm, w, h);
       }
     };
 
-    updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
+    const initialW = containerRef.current.clientWidth;
+    const initialH = containerRef.current.clientHeight;
+    if (initialW > 0 && initialH > 0) {
+      updateDimensions(initialW, initialH);
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        updateDimensions(width, height);
+      }
+    });
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
   }, [floorWidthMm, floorHeightMm, fitFloor]);
 
   // Fin du déplacement du Stage (Pan natif Konva sans lag React)

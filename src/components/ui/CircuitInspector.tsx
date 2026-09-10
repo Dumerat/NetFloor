@@ -4,6 +4,7 @@ import { useState, useMemo, memo, type FC } from "react";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import {
   NodeDisplay,
+  RackDisplay,
   OutletRole,
   PoeMode,
   DeskSeatOccupant,
@@ -302,6 +303,7 @@ export interface CircuitInspectorProps {
   selectedNode: NodeDisplay | null;
   allNodes: NodeDisplay[];
   desks: NodeDisplay[];
+  racks?: RackDisplay[] | undefined;
   onToggleAttachment: (outletId: string, deskId?: string | undefined) => void;
   onAlignWithDesk?: ((outletId: string, deskId: string) => void) | undefined;
   onTriggerTrace?: ((outletNode: NodeDisplay) => void) | undefined;
@@ -322,6 +324,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   selectedNode,
   allNodes,
   desks,
+  racks,
   onToggleAttachment,
   onAlignWithDesk,
   onTriggerTrace,
@@ -345,6 +348,24 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   // État interactif du Menu Baie & Branchements Internes
   const [rackTab, setRackTab] = useState<"PATCHING" | "EQUIPMENT" | "SWITCHES" | "VLANS">("EQUIPMENT");
   const [rackVlanFilter, setRackVlanFilter] = useState<string>("ALL");
+
+  const availableRacks = useMemo(() => {
+    if (racks && racks.length > 0) return racks;
+    const fromNodes = allNodes
+      .filter((n) => n.type === "PATCH_PANEL" || n.subType === "RACK_42U" || n.subType === "RACK_18U")
+      .map((n) => ({
+        id: n.id,
+        name: n.name,
+        xMm: n.xMm,
+        yMm: n.yMm,
+        widthMm: n.widthMm ?? 800,
+        depthMm: n.heightMm ?? 1000,
+        uHeight: n.uHeight ?? (n.subType === "RACK_18U" ? 18 : 42),
+      }));
+    return fromNodes.length > 0
+      ? fromNodes
+      : [{ id: "rack-01", name: "BAIE-PRINCIPALE-RDC", xMm: 12000, yMm: 14000, widthMm: 800, depthMm: 1000, uHeight: 42 }];
+  }, [racks, allNodes]);
   const [rackPatches, setRackPatches] = useState<InternalRackPatch[]>(DEFAULT_RACK_PATCHES);
   const [isAddingPatch, setIsAddingPatch] = useState(false);
   const [newPatchSourcePort, setNewPatchSourcePort] = useState("Port 08");
@@ -923,7 +944,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       onClick={() => {
                         onUpdateNodeProperties?.(selectedNode.id, {
                           isPatched: true,
-                          connectedRackId: "rack-01",
+                          connectedRackId: selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01",
                           connectedSwitchPort: "Gi1/0/1",
                         });
                       }}
@@ -1356,7 +1377,27 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 <div className="space-y-2 pt-1 border-t border-slate-800 text-[10px] font-mono">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Baie de destination :</span>
-                    <span className="text-purple-300 font-bold">BAIE-PRINCIPALE-RDC</span>
+                    {availableRacks.length > 1 ? (
+                      <select
+                        value={selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01"}
+                        onChange={(e) =>
+                          onUpdateNodeProperties?.(selectedNode.id, {
+                            connectedRackId: e.target.value,
+                          })
+                        }
+                        className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-purple-300 font-bold text-[10px]"
+                      >
+                        {availableRacks.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-purple-300 font-bold">
+                        {availableRacks.find((r) => r.id === selectedNode.connectedRackId)?.name ?? availableRacks[0]?.name ?? "BAIE-PRINCIPALE-RDC"}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Port commutateur :</span>
@@ -1399,7 +1440,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     onClick={() => {
                       onUpdateNodeProperties?.(selectedNode.id, {
                         isPatched: true,
-                        connectedRackId: "rack-01",
+                        connectedRackId: selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01",
                         connectedSwitchPort: "Gi1/0/1",
                       });
                     }}
@@ -1582,7 +1623,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     onClick={() => {
                       onUpdateNodeProperties?.(selectedNode.id, {
                         isPatched: true,
-                        connectedRackId: "rack-01",
+                        connectedRackId: selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01",
                         connectedSwitchPort: "Gi1/0/1",
                       });
                     }}
@@ -2140,7 +2181,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 onClick={() => {
                   onUpdateNodeProperties?.(selectedNode.id, {
                     isPatched: true,
-                    connectedRackId: "rack-01",
+                    connectedRackId: selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01",
                     connectedSwitchPort: "Gi1/0/1",
                   });
                 }}
@@ -2252,10 +2293,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const rackDepthMm = selectedNode.heightMm ?? 1000;
     const connectedOutlets = allNodes.filter((n) => n.type === "WALL_OUTLET");
 
-    const rackDevices: RackDeviceItem[] =
-      selectedNode.devices && selectedNode.devices.length > 0
-        ? selectedNode.devices
-        : DEFAULT_RACK_DEVICES;
+    const rackDevices: RackDeviceItem[] = selectedNode.devices ?? [];
 
     const sortedRackDevices = [...rackDevices].sort((a, b) => b.slotU - a.slotU);
     const switchDevices = sortedRackDevices.filter((d) => d.deviceType === "SWITCH");
@@ -3239,7 +3277,16 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
                 {/* Liste ordonnée des équipements dans le rack */}
                 <div className="space-y-1.5">
-                  {sortedRackDevices.map((dev) => {
+                  {sortedRackDevices.length === 0 ? (
+                    <div className="p-4 rounded-lg border border-dashed border-slate-800 text-center space-y-1 my-2">
+                      <Server className="w-5 h-5 mx-auto text-slate-600" />
+                      <div className="text-[11px] text-slate-400 font-semibold">Aucun module dans cette baie</div>
+                      <div className="text-[9px] text-slate-500 font-mono">
+                        Cliquez sur "+ Ajouter un équipement" ci-dessus pour équiper cette baie.
+                      </div>
+                    </div>
+                  ) : (
+                    sortedRackDevices.map((dev) => {
                     const isBrandAruba = dev.brand === "ARUBA";
                     const isBrandZyxel = dev.brand === "ZYXEL";
                     const isBrandCisco = dev.brand === "CISCO";
@@ -3391,7 +3438,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                )}
                 </div>
               </div>
             </div>
