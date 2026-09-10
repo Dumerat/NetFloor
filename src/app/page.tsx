@@ -139,7 +139,7 @@ export default function NetFloorApp() {
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [isTopologyOpen, setIsTopologyOpen] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(350);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(400);
   const [inspectorWidth, setInspectorWidth] = useState(384);
   const isResizingLeftRef = useRef(false);
   const isResizingRightRef = useRef(false);
@@ -148,7 +148,7 @@ export default function NetFloorApp() {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizingLeftRef.current) {
-        const minW = 280;
+        const minW = 320;
         const maxW = Math.min(Math.round(window.innerWidth * 0.45), 620);
         const newW = Math.min(Math.max(e.clientX, minW), maxW);
         setLeftPanelWidth(newW);
@@ -1097,7 +1097,7 @@ export default function NetFloorApp() {
       const currentScale = useCameraStore.getState().viewport.scale;
       const targetScale = Math.max(currentScale, 0.035);
 
-      const canvasLeft = (isPaletteOpen || isTopologyOpen) ? leftPanelWidth : 48;
+      const canvasLeft = (isPaletteOpen || isTopologyOpen || isInventoryOpen) ? leftPanelWidth : 56;
       const canvasWidth = typeof window !== "undefined" ? window.innerWidth - canvasLeft - inspectorWidth : 800;
       const canvasHeight = typeof window !== "undefined" ? window.innerHeight - 56 : 600;
 
@@ -2137,7 +2137,7 @@ export default function NetFloorApp() {
 
         {/* Main Canvas Area */}
         <div
-          style={{ marginLeft: (isPaletteOpen || isTopologyOpen || isInventoryOpen) ? `${leftPanelWidth}px` : "48px" }}
+          style={{ marginLeft: (isPaletteOpen || isTopologyOpen || isInventoryOpen) ? `${leftPanelWidth}px` : "56px" }}
           className="flex-1 h-full relative min-w-0"
           onDragOver={(e) => {
             e.preventDefault();

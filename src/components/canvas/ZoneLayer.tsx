@@ -105,9 +105,7 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
                 stroke={isSelected ? "#38bdf8" : zone.color}
                 strokeWidth={isSelected ? 24 : 16}
                 cornerRadius={14}
-                shadowColor="#000000"
-                shadowBlur={isSelected ? 30 : 15}
-                shadowOpacity={0.6}
+                shadowForStrokeEnabled={false}
               />
 
               {/* Pastille de couleur du service */}

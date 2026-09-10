@@ -471,11 +471,11 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
 
   return (
     <aside
-      style={{ width: isDrawerOpen ? `${width}px` : "48px" }}
+      style={{ width: isDrawerOpen ? `${width}px` : "56px" }}
       className="fixed top-14 left-0 bottom-0 z-30 flex bg-slate-950/95 backdrop-blur-md border-r border-slate-800 shadow-2xl text-slate-100 font-sans"
     >
       {/* 1. Barre latérale étroite (UN SEUL BOUTON AJOUT + PARAMÈTRES DSI) */}
-      <div className="w-12 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-3 justify-between flex-shrink-0">
+      <div className="w-14 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-3 justify-between flex-shrink-0">
         <div className="flex flex-col items-center gap-3">
           {/* Menu unique "Ajout" dans la barre latérale */}
           <button
