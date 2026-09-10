@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, memo, type FC } from "react";
+import { useState, useMemo, useCallback, memo, type FC } from "react";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import {
   NodeDisplay,
@@ -373,6 +373,57 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const devs: RackDeviceItem[] = targetRack?.devices ?? [];
     return devs.filter((d: RackDeviceItem) => d.deviceType === "SWITCH");
   };
+
+  // Recensement en temps réel des ports occupés par switch : key -> label de l'équipement occupant
+  // Key format: `${rackId || 'rack-01'}::${switchId || 'sw-default'}::${port}`
+  const occupiedPortsMap = useMemo(() => {
+    const map = new Map<string, string>();
+    allNodes.forEach((node) => {
+      if (node.type !== "WALL_OUTLET") return;
+
+      const isStackedNode =
+        node.subType === "FLOOR_BOX" || (node.stackedPorts && node.stackedPorts.length > 0);
+
+      if (isStackedNode && node.stackedPorts) {
+        node.stackedPorts.forEach((sp, pIdx) => {
+          if (sp.isPatched && sp.connectedSwitchPort) {
+            const rId = sp.connectedRackId || node.connectedRackId || "rack-01";
+            const swId = sp.connectedSwitchId || "sw-default";
+            const key = `${rId}::${swId}::${sp.connectedSwitchPort}`;
+            map.set(key, `${node.name} (P${pIdx + 1})`);
+          }
+        });
+      } else if (node.isPatched && node.connectedSwitchPort) {
+        const rId = node.connectedRackId || "rack-01";
+        const swId = node.connectedSwitchId || "sw-default";
+        const key = `${rId}::${swId}::${node.connectedSwitchPort}`;
+        map.set(key, node.name);
+      }
+    });
+    return map;
+  }, [allNodes]);
+
+  // Fonction utilitaire pour trouver le premier port libre sur un commutateur
+  const findFirstAvailablePort = useCallback(
+    (
+      rackId: string | undefined,
+      switchId: string | undefined,
+      totalPorts: number,
+      excludeKey?: string
+    ): string => {
+      const rId = rackId || "rack-01";
+      const swId = switchId || "sw-default";
+      for (let i = 1; i <= totalPorts; i++) {
+        const portName = `Gi1/0/${i}`;
+        const key = `${rId}::${swId}::${portName}`;
+        if (key === excludeKey || !occupiedPortsMap.has(key)) {
+          return portName;
+        }
+      }
+      return "Gi1/0/1"; // repli si tout est saturé
+    },
+    [occupiedPortsMap]
+  );
   const [rackPatches, setRackPatches] = useState<InternalRackPatch[]>(DEFAULT_RACK_PATCHES);
   const [isAddingPatch, setIsAddingPatch] = useState(false);
   const [newPatchSourcePort, setNewPatchSourcePort] = useState("Port 08");
@@ -965,11 +1016,16 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   ) : (
                     <button
                       onClick={() => {
+                        const targetRId = curPort.connectedRackId || availableRacks[0]?.id || "rack-01";
+                        const rSwitches = getSwitchesForRack(targetRId);
+                        const targetSwId = curPort.connectedSwitchId || rSwitches[0]?.id;
+                        const sw = rSwitches.find((s) => s.id === targetSwId) ?? rSwitches[0];
+                        const autoPort = findFirstAvailablePort(targetRId, targetSwId, sw?.portsCount ?? 24);
                         handleUpdateStackedPort(safeStackedPortIdx, {
                           isPatched: true,
-                          connectedRackId: curPort.connectedRackId || availableRacks[0]?.id || "rack-01",
-                          connectedSwitchId: curPort.connectedSwitchId || curPortRackSwitches[0]?.id,
-                          connectedSwitchPort: curPort.connectedSwitchPort || "Gi1/0/1",
+                          connectedRackId: targetRId,
+                          connectedSwitchId: targetSwId,
+                          connectedSwitchPort: autoPort,
                         });
                       }}
                       className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
@@ -1232,10 +1288,12 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                             onChange={(e) => {
                               const newRackId = e.target.value;
                               const newSwitches = getSwitchesForRack(newRackId);
+                              const targetSwId = newSwitches[0]?.id;
+                              const autoPort = findFirstAvailablePort(newRackId, targetSwId, newSwitches[0]?.portsCount ?? 24);
                               handleUpdateStackedPort(safeStackedPortIdx, {
                                 connectedRackId: newRackId,
-                                connectedSwitchId: newSwitches[0]?.id,
-                                connectedSwitchPort: "Gi1/0/1",
+                                connectedSwitchId: targetSwId,
+                                connectedSwitchPort: autoPort,
                               });
                             }}
                             className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-[10px] focus:outline-none focus:border-purple-500"
@@ -1264,9 +1322,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                             value={curPortSwitch?.id ?? curPortSwitchId}
                             onChange={(e) => {
                               const swId = e.target.value;
+                              const swObj = curPortRackSwitches.find((s) => s.id === swId);
+                              const autoPort = findFirstAvailablePort(curPortRackId, swId, swObj?.portsCount ?? 24);
                               handleUpdateStackedPort(safeStackedPortIdx, {
                                 connectedSwitchId: swId,
-                                connectedSwitchPort: "Gi1/0/1",
+                                connectedSwitchPort: autoPort,
                               });
                             }}
                             className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sky-300 font-bold text-[10px] focus:outline-none focus:border-sky-500"
@@ -1297,13 +1357,27 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                               connectedSwitchPort: e.target.value,
                             })
                           }
-                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px] focus:outline-none focus:border-blue-500"
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px] focus:outline-none focus:border-blue-500 font-mono"
                         >
-                          {Array.from({ length: curPortSwitchPortsCount }).map((_, i) => (
-                            <option key={`curport-sw-port-${i}`} value={`Gi1/0/${i + 1}`}>
-                              Port Gi1/0/{i + 1}
-                            </option>
-                          ))}
+                          {Array.from({ length: curPortSwitchPortsCount }).map((_, i) => {
+                            const pName = `Gi1/0/${i + 1}`;
+                            const swId = curPortSwitch?.id || curPortSwitchId || "sw-default";
+                            const pKey = `${curPortRackId}::${swId}::${pName}`;
+                            const myKey = `${curPortRackId}::${swId}::${curPort.connectedSwitchPort}`;
+                            const occupant = occupiedPortsMap.get(pKey);
+                            const isOccupiedByOther = occupant !== undefined && pKey !== myKey;
+
+                            return (
+                              <option
+                                key={`curport-sw-port-${i}`}
+                                value={pName}
+                                disabled={isOccupiedByOther}
+                                className={isOccupiedByOther ? "text-slate-600 bg-slate-900" : "text-slate-200"}
+                              >
+                                Port {pName} {isOccupiedByOther ? `(Occupé - ${occupant})` : pKey === myKey ? "(Actuel)" : "(Disponible)"}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
 
@@ -1329,11 +1403,16 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       </p>
                       <button
                         onClick={() => {
+                          const targetRId = curPort.connectedRackId || availableRacks[0]?.id || "rack-01";
+                          const rSwitches = getSwitchesForRack(targetRId);
+                          const targetSwId = curPort.connectedSwitchId || rSwitches[0]?.id;
+                          const sw = rSwitches.find((s) => s.id === targetSwId) ?? rSwitches[0];
+                          const autoPort = findFirstAvailablePort(targetRId, targetSwId, sw?.portsCount ?? 24);
                           handleUpdateStackedPort(safeStackedPortIdx, {
                             isPatched: true,
-                            connectedRackId: curPort.connectedRackId || availableRacks[0]?.id || "rack-01",
-                            connectedSwitchId: curPort.connectedSwitchId || curPortRackSwitches[0]?.id,
-                            connectedSwitchPort: curPort.connectedSwitchPort || "Gi1/0/1",
+                            connectedRackId: targetRId,
+                            connectedSwitchId: targetSwId,
+                            connectedSwitchPort: autoPort,
                           });
                         }}
                         className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
@@ -1697,10 +1776,16 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 ) : (
                   <button
                     onClick={() => {
+                      const defRackId = selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01";
+                      const defSwitches = getSwitchesForRack(defRackId);
+                      const defSwId = selectedNode.connectedSwitchId || defSwitches[0]?.id;
+                      const sw = defSwitches.find((s) => s.id === defSwId) ?? defSwitches[0];
+                      const autoPort = findFirstAvailablePort(defRackId, defSwId, sw?.portsCount ?? 24);
                       onUpdateNodeProperties?.(selectedNode.id, {
                         isPatched: true,
-                        connectedRackId: selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01",
-                        connectedSwitchPort: "Gi1/0/1",
+                        connectedRackId: defRackId,
+                        connectedSwitchId: defSwId,
+                        connectedSwitchPort: autoPort,
                       });
                     }}
                     className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
@@ -2230,10 +2315,12 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         onChange={(e) => {
                           const newRackId = e.target.value;
                           const newSwitches = getSwitchesForRack(newRackId);
+                          const targetSwId = newSwitches[0]?.id;
+                          const autoPort = findFirstAvailablePort(newRackId, targetSwId, newSwitches[0]?.portsCount ?? 24);
                           onUpdateNodeProperties?.(selectedNode.id, {
                             connectedRackId: newRackId,
-                            connectedSwitchId: newSwitches[0]?.id,
-                            connectedSwitchPort: "Gi1/0/1",
+                            connectedSwitchId: targetSwId,
+                            connectedSwitchPort: autoPort,
                           });
                         }}
                         className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-purple-300 font-bold text-[10px]"
@@ -2258,9 +2345,12 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       <select
                         value={singleSwitchId}
                         onChange={(e) => {
+                          const newSwId = e.target.value;
+                          const swObj = singleSwitches.find((s) => s.id === newSwId);
+                          const autoPort = findFirstAvailablePort(singleRackId, newSwId, swObj?.portsCount ?? 24);
                           onUpdateNodeProperties?.(selectedNode.id, {
-                            connectedSwitchId: e.target.value,
-                            connectedSwitchPort: "Gi1/0/1",
+                            connectedSwitchId: newSwId,
+                            connectedSwitchPort: autoPort,
                           });
                         }}
                         className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-sky-300 font-bold text-[10px] max-w-[190px] truncate"
@@ -2286,13 +2376,27 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           connectedSwitchPort: e.target.value,
                         })
                       }
-                      className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-slate-200 text-[10px] font-bold"
+                      className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-slate-200 text-[10px] font-mono font-bold max-w-[190px]"
                     >
-                      {Array.from({ length: singlePortsCount }).map((_, i) => (
-                        <option key={`sw-port-${i}`} value={`Gi1/0/${i + 1}`}>
-                          Gi1/0/{i + 1}
-                        </option>
-                      ))}
+                      {Array.from({ length: singlePortsCount }).map((_, i) => {
+                        const pName = `Gi1/0/${i + 1}`;
+                        const swId = singleSwitch?.id || singleSwitchId || "sw-default";
+                        const pKey = `${singleRackId}::${swId}::${pName}`;
+                        const myKey = `${singleRackId}::${swId}::${selectedNode.connectedSwitchPort}`;
+                        const occupant = occupiedPortsMap.get(pKey);
+                        const isOccupiedByOther = occupant !== undefined && pKey !== myKey;
+
+                        return (
+                          <option
+                            key={`sw-port-${i}`}
+                            value={pName}
+                            disabled={isOccupiedByOther}
+                            className={isOccupiedByOther ? "text-slate-600 bg-slate-900" : "text-slate-200"}
+                          >
+                            {pName} {isOccupiedByOther ? `(${occupant})` : pKey === myKey ? "(Actuel)" : "(Dispo)"}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -2320,11 +2424,14 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     onClick={() => {
                       const defRackId = availableRacks[0]?.id || "rack-01";
                       const defSwitches = getSwitchesForRack(defRackId);
+                      const defSwId = selectedNode.connectedSwitchId || defSwitches[0]?.id;
+                      const sw = defSwitches.find((s) => s.id === defSwId) ?? defSwitches[0];
+                      const autoPort = findFirstAvailablePort(defRackId, defSwId, sw?.portsCount ?? 24);
                       onUpdateNodeProperties?.(selectedNode.id, {
                         isPatched: true,
                         connectedRackId: defRackId,
-                        connectedSwitchId: defSwitches[0]?.id,
-                        connectedSwitchPort: "Gi1/0/1",
+                        connectedSwitchId: defSwId,
+                        connectedSwitchPort: autoPort,
                       });
                     }}
                     className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"

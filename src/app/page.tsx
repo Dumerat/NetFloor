@@ -602,7 +602,7 @@ export default function NetFloorApp() {
     return null;
   }, [nodes, racks, selectedNodeId]);
 
-  // Calcul dynamique des câbles : raccordement individuel par port pour les colonnettes et par prise pour les simples
+  // Calcul dynamique des câbles : regroupement en faisceau par colonnette + baie cible avec décalage ruban parallèle
   const cables: CableData[] = useMemo(() => {
     if (activeViewMode === "HR") return [];
     if (racks.length === 0) return [];
@@ -618,56 +618,82 @@ export default function NetFloorApp() {
       const isStacked = outlet.subType === "FLOOR_BOX" || (outlet.stackedPorts && outlet.stackedPorts.length > 0);
 
       if (isStacked && outlet.stackedPorts && outlet.stackedPorts.length > 0) {
-        // Traitement individuel par port RJ45 raccordé
-        outlet.stackedPorts.forEach((sp, pIdx) => {
-          if (!sp.isPatched) return;
+        // Filtrer les ports branchés de la colonnette
+        const patchedPorts = outlet.stackedPorts
+          .map((sp, originalIdx) => ({ sp, originalIdx }))
+          .filter(({ sp }) => sp.isPatched);
 
-          const targetRackId = sp.connectedRackId || outlet.connectedRackId || "rack-01";
-          const rack = racks.find((r) => r.id === targetRackId) ?? racks[0];
+        // Regroupement par baie cible pour former les faisceaux communs (split si baies différentes)
+        const portsByRack: Record<string, typeof patchedPorts> = {};
+        patchedPorts.forEach((item) => {
+          const targetRackId = item.sp.connectedRackId || outlet.connectedRackId || racks[0]?.id || "rack-01";
+          if (!portsByRack[targetRackId]) {
+            portsByRack[targetRackId] = [];
+          }
+          portsByRack[targetRackId]!.push(item);
+        });
+
+        // Générer chaque faisceau vers sa baie cible
+        Object.entries(portsByRack).forEach(([rackId, bundleItems]) => {
+          const rack = racks.find((r) => r.id === rackId) ?? racks[0];
           if (!rack) return;
 
-          const isVoip = sp.outletRole === "VOIP";
-          const isPrinter = sp.outletRole === "PRINTER";
-          const isWifi = sp.outletRole === "WIFI";
-          const vlanId = sp.vlanId ?? (isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20);
+          const bundleKey = `bundle-${outlet.id}-${rack.id}`;
+          const targetBasePos = { x: rack.xMm + 400, y: rack.yMm + 240 + globalIndex * 25 };
 
-          const customColor = vlanStyles[vlanId]?.color;
-          const baseAlpha = "0.85";
-          const cableColor = customColor
-            ? customColor
-            : isVoip
-            ? `rgba(168, 85, 247, ${baseAlpha})`
-            : isPrinter
-            ? `rgba(245, 158, 11, ${baseAlpha})`
-            : isWifi
-            ? `rgba(99, 102, 241, ${baseAlpha})`
-            : `rgba(59, 130, 246, ${baseAlpha})`;
-
-          const cableId = `cable-run-${outlet.id}-p${pIdx}`;
-          // Léger décalage sur la source et la cible pour que les câbles d'une même colonnette ne se superposent pas
-          const portOffsetMm = (pIdx - (outlet.stackedPorts!.length - 1) / 2) * 30;
-          const sourcePos = { x: outlet.xMm + portOffsetMm, y: outlet.yMm };
-          const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + globalIndex * 25 };
-
-          const customPivot = customPivots[cableId];
-          const pivot = customPivot ?? {
-            x: sourcePos.x,
-            y: targetPos.y,
+          // Pivot partagé pour l'ensemble du faisceau de cette colonnette vers cette baie
+          const customPivot = customPivots[bundleKey] ?? customPivots[`cable-run-${outlet.id}`];
+          const bundlePivot = customPivot ?? {
+            x: outlet.xMm,
+            y: targetBasePos.y,
           };
 
-          list.push({
-            id: cableId,
-            cableType: "HORIZONTAL_RUN",
-            category: "CAT6A",
-            lengthMm: 44200 + globalIndex * 300,
-            colorCode: cableColor,
-            sourcePos,
-            targetPos,
-            vlanId,
-            sourceNodeId: outlet.id,
-            targetNodeId: rack.id,
-            pivot,
+          const totalInBundle = bundleItems.length;
+
+          bundleItems.forEach(({ sp, originalIdx }, bIdx) => {
+            const isVoip = sp.outletRole === "VOIP";
+            const isPrinter = sp.outletRole === "PRINTER";
+            const isWifi = sp.outletRole === "WIFI";
+            const vlanId = sp.vlanId ?? (isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20);
+
+            const customColor = vlanStyles[vlanId]?.color;
+            const baseAlpha = "0.85";
+            const cableColor = customColor
+              ? customColor
+              : isVoip
+              ? `rgba(168, 85, 247, ${baseAlpha})`
+              : isPrinter
+              ? `rgba(245, 158, 11, ${baseAlpha})`
+              : isWifi
+              ? `rgba(99, 102, 241, ${baseAlpha})`
+              : `rgba(59, 130, 246, ${baseAlpha})`;
+
+            const cableId = `cable-run-${outlet.id}-p${originalIdx}`;
+
+            // Écart parallèle régulier (ruban plat / ribbon) : 6mm d'écartement constant
+            const offsetDistanceMm = totalInBundle > 1
+              ? (bIdx - (totalInBundle - 1) / 2) * 6
+              : 0;
+
+            list.push({
+              id: cableId,
+              cableType: "HORIZONTAL_RUN",
+              category: "CAT6A",
+              lengthMm: 44200 + globalIndex * 300,
+              colorCode: cableColor,
+              sourcePos: { x: outlet.xMm, y: outlet.yMm },
+              targetPos: targetBasePos,
+              vlanId,
+              sourceNodeId: outlet.id,
+              targetNodeId: rack.id,
+              pivot: bundlePivot,
+              bundleKey,
+              bundleIndex: bIdx,
+              bundleTotal: totalInBundle,
+              offsetDistanceMm,
+            });
           });
+
           globalIndex++;
         });
       } else if (outlet.isPatched) {
@@ -712,6 +738,10 @@ export default function NetFloorApp() {
           sourceNodeId: outlet.id,
           targetNodeId: rack.id,
           pivot,
+          bundleKey: cableId,
+          bundleIndex: 0,
+          bundleTotal: 1,
+          offsetDistanceMm: 0,
         });
         globalIndex++;
       }

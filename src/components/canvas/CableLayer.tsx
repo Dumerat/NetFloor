@@ -31,6 +31,10 @@ export interface CableData {
   targetNodeId?: string | undefined;
   pivot?: { x: number; y: number } | undefined;
   waypoints?: { x: number; y: number }[] | undefined;
+  bundleKey?: string | undefined;
+  bundleIndex?: number | undefined;
+  bundleTotal?: number | undefined;
+  offsetDistanceMm?: number | undefined;
 }
 
 interface CableLayerProps {
@@ -128,6 +132,9 @@ const CableLayerComponent: FC<CableLayerProps> = ({
     return true;
   });
 
+  // Ensemble des pivots déjà affichés pour éviter les poignées doublons au sein d'un même faisceau
+  const renderedPivotKeys = new Set<string>();
+
   return (
     <Group>
       {filteredCables.map((cable) => {
@@ -137,15 +144,21 @@ const CableLayerComponent: FC<CableLayerProps> = ({
             (cable.sourceNodeId === selectedNodeId || cable.targetNodeId === selectedNodeId))
         );
 
-        const Ax = cable.sourcePos.x;
+        // Décalage géométrique perpendiculaire pour faisceau parallèle (ruban / flat cable)
+        const offset = cable.offsetDistanceMm ?? 0;
+        const Ax = cable.sourcePos.x + offset;
         const Ay = cable.sourcePos.y;
         const Bx = cable.targetPos.x;
-        const By = cable.targetPos.y;
+        const By = cable.targetPos.y + offset;
 
-        // 1. Source de Vérité Unique : coordonnées absolues du pivot
-        const pivot = cable.pivot ?? {
-          x: Math.round((Ax + Bx) / 2),
-          y: By,
+        // 1. Source de Vérité Unique : coordonnées absolues du pivot (avec décalage de faisceau)
+        const basePivot = cable.pivot ?? {
+          x: Math.round((cable.sourcePos.x + cable.targetPos.x) / 2),
+          y: cable.targetPos.y,
+        };
+        const pivot = {
+          x: basePivot.x + offset,
+          y: basePivot.y + offset,
         };
 
         // 2. Tracé Orthogonal Strict calculé dynamiquement : [Ax, Ay, Ax, pivot.y, pivot.x, pivot.y, pivot.x, By, Bx, By]
@@ -167,6 +180,14 @@ const CableLayerComponent: FC<CableLayerProps> = ({
           ? vlanStyles?.[cable.vlanId] ?? DEFAULT_VLAN_STYLES[cable.vlanId]
           : undefined;
         const { strokeColor, strokeWidth, dash } = getKonvaStrokeConfig(vlanStyle, isHighlighted);
+
+        // Un seul pivot par faisceau (bundleKey) pour éviter la superposition de cercles
+        const pivotKey = cable.bundleKey || cable.id;
+        const shouldRenderPivot =
+          cable.cableType === "HORIZONTAL_RUN" && !renderedPivotKeys.has(pivotKey);
+        if (shouldRenderPivot) {
+          renderedPivotKeys.add(pivotKey);
+        }
 
         return (
           <Group key={cable.id}>
@@ -204,11 +225,11 @@ const CableLayerComponent: FC<CableLayerProps> = ({
             />
 
             {/* 3. Poignée de Pivot Unique : Konva.Circle draggable déplaçable librement en 2D */}
-            {cable.cableType === "HORIZONTAL_RUN" && (
+            {shouldRenderPivot && (
               <Circle
                 id={`pivot-${cable.id}`}
-                x={pivot.x}
-                y={pivot.y}
+                x={basePivot.x}
+                y={basePivot.y}
                 radius={24}
                 fill="transparent"
                 hitStrokeWidth={20}
@@ -228,7 +249,7 @@ const CableLayerComponent: FC<CableLayerProps> = ({
                 }}
                 onDragMove={(e: KonvaEventObject<DragEvent>) => {
                   e.cancelBubble = true;
-                  onPivotChange?.(cable.id, {
+                  onPivotChange?.(pivotKey, {
                     x: Math.round(e.target.x()),
                     y: Math.round(e.target.y()),
                   });
@@ -237,7 +258,7 @@ const CableLayerComponent: FC<CableLayerProps> = ({
                   const stage = e.target.getStage();
                   if (stage) stage.container().style.cursor = "grab";
                   e.cancelBubble = true;
-                  onPivotChange?.(cable.id, {
+                  onPivotChange?.(pivotKey, {
                     x: Math.round(e.target.x()),
                     y: Math.round(e.target.y()),
                   });
