@@ -153,8 +153,8 @@ export default function NetFloorApp() {
     saveStoredVlanStyles(DEFAULT_VLAN_STYLES);
   }, []);
 
-  // Waypoints de courbure personnalisés déplacés par l'utilisateur à la souris
-  const [customWaypoints, setCustomWaypoints] = useState<Record<string, { x: number; y: number }[]>>({});
+  // Pivots orthogonaux uniques personnalisés déplacés par l'utilisateur à la souris
+  const [customPivots, setCustomPivots] = useState<Record<string, { x: number; y: number }>>({});
 
   // Étage
   const [floorData] = useState({
@@ -536,14 +536,13 @@ export default function NetFloorApp() {
       const cableId = `cable-run-${outlet.id}`;
       const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + index * 35 };
 
-      // Cheminement orthogonal dynamique adapté à l'emplacement réel de la prise (zéro coude orphelin)
-      const defaultWaypoints = getNaturalCableWaypoints(
-        { x: outlet.xMm, y: outlet.yMm },
-        targetPos,
-        index
-      );
-      const custom = customWaypoints[cableId];
-      const cableWaypoints = custom && custom.length > 0 ? custom : defaultWaypoints;
+      // 1. Source de Vérité Unique : Pivot absolu { x, y }
+      // Par défaut : pivot à (outlet.xMm, targetPos.y) pour une montée verticale directe puis filage horizontal
+      const customPivot = customPivots[cableId];
+      const pivot = customPivot ?? {
+        x: outlet.xMm,
+        y: targetPos.y,
+      };
 
       list.push({
         id: cableId,
@@ -556,45 +555,25 @@ export default function NetFloorApp() {
         vlanId,
         sourceNodeId: outlet.id,
         targetNodeId: rack.id,
-        waypoints: cableWaypoints,
+        pivot,
       });
     });
 
     return list;
-  }, [nodes, racks, activeViewMode, customWaypoints, vlanStyles]);
+  }, [nodes, racks, activeViewMode, customPivots, vlanStyles]);
 
-  // Déplacement interactif libre d'un coude de câble
-  const handleWaypointChange = useCallback(
-    (cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => {
-      setCustomWaypoints((prev) => {
-        const targetCable = cables.find((c) => c.id === cableId);
-        let existing = prev[cableId];
-        if (!existing || existing.length === 0) {
-          existing = targetCable?.waypoints && targetCable.waypoints.length > 0
-            ? targetCable.waypoints.map((p) => ({ ...p }))
-            : targetCable
-            ? [{ x: targetCable.sourcePos.x, y: targetCable.targetPos.y }]
-            : [{ x: 14800, y: 8800 }];
-        }
-
-        const updated = existing.map((p) => ({ ...p }));
-        if (updated[waypointIndex]) {
-          // Déplacement libre et direct des coordonnées du coude sélectionné
-          updated[waypointIndex] = {
-            x: Math.max(0, Math.round(newPos.x)),
-            y: Math.max(0, Math.round(newPos.y)),
-          };
-        } else if (waypointIndex === 0 && updated.length === 0) {
-          updated.push({
-            x: Math.max(0, Math.round(newPos.x)),
-            y: Math.max(0, Math.round(newPos.y)),
-          });
-        }
-
-        return { ...prev, [cableId]: updated };
-      });
+  // Déplacement interactif libre 2D du pivot orthogonal unique
+  const handlePivotChange = useCallback(
+    (cableId: string, newPivot: { x: number; y: number }) => {
+      setCustomPivots((prev) => ({
+        ...prev,
+        [cableId]: {
+          x: Math.max(0, Math.round(newPivot.x)),
+          y: Math.max(0, Math.round(newPivot.y)),
+        },
+      }));
     },
-    [cables]
+    []
   );
 
   // Traçage CTE récursif lors du clic sur une prise murale
@@ -653,8 +632,8 @@ export default function NetFloorApp() {
   const rafNodeDragRef = useRef<number | null>(null);
   const pendingRackDragRef = useRef<{ id: string; pos: { x: number; y: number } } | null>(null);
   const rafRackDragRef = useRef<number | null>(null);
-  const pendingWaypointDragRef = useRef<{ cableId: string; waypointIndex: number; pos: { x: number; y: number } } | null>(null);
-  const rafWaypointDragRef = useRef<number | null>(null);
+  const pendingPivotDragRef = useRef<{ cableId: string; pos: { x: number; y: number } } | null>(null);
+  const rafPivotDragRef = useRef<number | null>(null);
 
   // Déplacement d'un nœud (bureau ou prise)
   const handleNodeUpdate = useCallback((id: string, newPos: { x: number; y: number }) => {
@@ -797,38 +776,6 @@ export default function NetFloorApp() {
     handleRackUpdate(id, newPos);
   }, [handleNodeUpdate, handleRackUpdate]);
 
-  // Ajout d'un coude orthogonal supplémentaire sur un câble
-  const handleAddWaypoint = useCallback(
-    (cableId: string) => {
-      setCustomWaypoints((prev) => {
-        let existing = prev[cableId];
-        if (!existing || existing.length === 0) {
-          const targetCable = cables.find((c) => c.id === cableId);
-          existing = targetCable?.waypoints ? targetCable.waypoints.map((p) => ({ ...p })) : [];
-        }
-        if (existing.length === 0) {
-          existing = [{ x: 14800, y: 8800 }];
-        }
-        const lastWp = existing[existing.length - 1] ?? { x: 14800, y: 9000 };
-        const newWp = {
-          x: Math.round(lastWp.x - 1200),
-          y: Math.round(lastWp.y + 1500),
-        };
-        return { ...prev, [cableId]: [...existing, newWp] };
-      });
-    },
-    [cables]
-  );
-
-  // Retrait du dernier coude d'un câble (minimum 1)
-  const handleRemoveWaypoint = useCallback((cableId: string) => {
-    setCustomWaypoints((prev) => {
-      const existing = prev[cableId] ?? [];
-      if (existing.length <= 1) return prev;
-      return { ...prev, [cableId]: existing.slice(0, -1) };
-    });
-  }, []);
-
   // Déplacement d'une baie throttlé par RAF
   const handleThrottledRackDragMove = useCallback((id: string, newPos: { x: number; y: number }) => {
     pendingRackDragRef.current = { id, pos: newPos };
@@ -842,24 +789,23 @@ export default function NetFloorApp() {
     }
   }, [handleRackUpdate]);
 
-  // Déplacement fluide des waypoints de câbles cadencé par RAF à 60 FPS
-  const handleThrottledWaypointChange = useCallback(
-    (cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => {
-      pendingWaypointDragRef.current = { cableId, waypointIndex, pos: newPos };
-      if (!rafWaypointDragRef.current) {
-        rafWaypointDragRef.current = requestAnimationFrame(() => {
-          if (pendingWaypointDragRef.current) {
-            handleWaypointChange(
-              pendingWaypointDragRef.current.cableId,
-              pendingWaypointDragRef.current.waypointIndex,
-              pendingWaypointDragRef.current.pos
+  // Déplacement fluide du pivot de câble cadencé par RAF à 60 FPS
+  const handleThrottledPivotChange = useCallback(
+    (cableId: string, newPivot: { x: number; y: number }) => {
+      pendingPivotDragRef.current = { cableId, pos: newPivot };
+      if (!rafPivotDragRef.current) {
+        rafPivotDragRef.current = requestAnimationFrame(() => {
+          if (pendingPivotDragRef.current) {
+            handlePivotChange(
+              pendingPivotDragRef.current.cableId,
+              pendingPivotDragRef.current.pos
             );
           }
-          rafWaypointDragRef.current = null;
+          rafPivotDragRef.current = null;
         });
       }
     },
-    [handleWaypointChange]
+    [handlePivotChange]
   );
 
   // Nettoyage des timers RAF au démontage
@@ -867,7 +813,7 @@ export default function NetFloorApp() {
     return () => {
       if (rafNodeDragRef.current) cancelAnimationFrame(rafNodeDragRef.current);
       if (rafRackDragRef.current) cancelAnimationFrame(rafRackDragRef.current);
-      if (rafWaypointDragRef.current) cancelAnimationFrame(rafWaypointDragRef.current);
+      if (rafPivotDragRef.current) cancelAnimationFrame(rafPivotDragRef.current);
     };
   }, []);
 
@@ -1279,8 +1225,8 @@ export default function NetFloorApp() {
       // Retirer des baies si c'était une baie
       setRacks((prev) => prev.filter((r) => r.id !== nodeId));
 
-      // Nettoyer les waypoints de câbles personnalisés rattachés
-      setCustomWaypoints((prev) => {
+      // Nettoyer le pivot de câble personnalisé rattaché
+      setCustomPivots((prev) => {
         const copy = { ...prev };
         delete copy[`cable-run-${nodeId}`];
         return copy;
@@ -1739,16 +1685,14 @@ export default function NetFloorApp() {
             onNodePositionChange={handleNodeMoveEnd}
             onNodeDragMove={handleThrottledNodeDragMove}
             onRackDragMove={handleThrottledRackDragMove}
-            onWaypointChange={handleThrottledWaypointChange}
-            onAddWaypoint={handleAddWaypoint}
-            onRemoveWaypoint={handleRemoveWaypoint}
+            onPivotChange={handleThrottledPivotChange}
           />
 
           {/* Quick tips badge */}
           <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-800 backdrop-blur rounded-lg p-2.5 text-[11px] text-slate-400 shadow-xl font-mono flex items-center gap-2 pointer-events-none z-10">
             <Sparkles className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
             <span>
-              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Colonnettes RJ45 stackées jusqu&apos;à 8 ports • Tracés orthogonaux 90° et couloirs de câblage ajustables.
+              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Colonnettes RJ45 stackées jusqu&apos;à 8 ports • Tracés orthogonaux 90° avec pivot unique ajustable.
             </span>
           </div>
         </div>
@@ -1769,8 +1713,6 @@ export default function NetFloorApp() {
             onAddOutletToDesk={handleAddOutletToDesk}
             onAddColonnetteToDesk={handleAddColonnetteToDesk}
             onUpdateNodeProperties={handleUpdateNodeProperties}
-            onAddWaypoint={handleAddWaypoint}
-            onRemoveWaypoint={handleRemoveWaypoint}
             onDeleteNode={handleDeleteNode}
             vlanStyles={vlanStyles}
             onUpdateVlanStyle={handleUpdateVlanStyle}

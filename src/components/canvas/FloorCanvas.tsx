@@ -32,9 +32,7 @@ interface FloorCanvasProps {
   onNodePositionChange?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onNodeDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
-  onWaypointChange?: ((cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => void) | undefined;
-  onAddWaypoint?: ((cableId: string) => void) | undefined;
-  onRemoveWaypoint?: ((cableId: string) => void) | undefined;
+  onPivotChange?: ((cableId: string, newPivot: { x: number; y: number }) => void) | undefined;
 }
 
 export const FloorCanvas: FC<FloorCanvasProps> = ({
@@ -55,9 +53,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   onNodePositionChange,
   onNodeDragMove,
   onRackDragMove,
-  onWaypointChange,
-  onAddWaypoint,
-  onRemoveWaypoint,
+  onPivotChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { viewport, setViewport, zoomAt, fitFloor, gridConfig } = useCameraStore();
@@ -162,14 +158,13 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     onNodePositionChange?.(id, snapResult.point);
   }, [nodes, gridConfig, onNodePositionChange]);
 
-  // Déplacement fluide des coudes/waypoints de câbles sans frottement ni blocage forcé
-  const handleWaypointMove = useCallback((
+  // Déplacement libre du pivot orthogonal du câble
+  const handlePivotMove = useCallback((
     cableId: string,
-    waypointIndex: number,
-    newPos: { x: number; y: number }
+    newPivot: { x: number; y: number }
   ) => {
-    onWaypointChange?.(cableId, waypointIndex, newPos);
-  }, [onWaypointChange]);
+    onPivotChange?.(cableId, newPivot);
+  }, [onPivotChange]);
 
   const handleSelectNodeId = useCallback((id: string) => {
     const node = nodes.find((n) => n.id === id);
@@ -201,7 +196,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
           />
         </Layer>
 
-        {/* Calque 2 : Câblage physique dynamique avec poignées de couloir interactives */}
+        {/* Calque 2 : Câblage physique dynamique avec pivot orthogonal unique */}
         <Layer>
           <CableLayer
             cables={cables}
@@ -210,9 +205,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             selectedNodeId={selectedNodeId ?? selectedOutletId}
             vlanStyles={vlanStyles}
             onSelectNodeId={handleSelectNodeId}
-            onWaypointChange={handleWaypointMove}
-            onAddWaypoint={onAddWaypoint}
-            onRemoveWaypoint={onRemoveWaypoint}
+            onPivotChange={handlePivotMove}
           />
         </Layer>
 

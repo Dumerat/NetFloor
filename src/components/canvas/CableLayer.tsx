@@ -29,6 +29,7 @@ export interface CableData {
   vlanId?: number | undefined;
   sourceNodeId?: string | undefined;
   targetNodeId?: string | undefined;
+  pivot?: { x: number; y: number } | undefined;
   waypoints?: { x: number; y: number }[] | undefined;
 }
 
@@ -40,9 +41,7 @@ interface CableLayerProps {
   selectedNodeId?: string | null | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onSelectNodeId?: ((nodeId: string) => void) | undefined;
-  onWaypointChange?: ((cableId: string, waypointIndex: number, newPos: { x: number; y: number }) => void) | undefined;
-  onAddWaypoint?: ((cableId: string) => void) | undefined;
-  onRemoveWaypoint?: ((cableId: string) => void) | undefined;
+  onPivotChange?: ((cableId: string, newPivot: { x: number; y: number }) => void) | undefined;
 }
 
 /**
@@ -94,8 +93,6 @@ function simplifyOrthogonalPoints(raw: number[]): number[] {
   return result;
 }
 
-
-
 const CableLayerComponent: FC<CableLayerProps> = ({
   cables,
   activeCircuitCableIds = new Set(),
@@ -104,7 +101,7 @@ const CableLayerComponent: FC<CableLayerProps> = ({
   selectedNodeId,
   vlanStyles,
   onSelectNodeId,
-  onWaypointChange,
+  onPivotChange,
 }) => {
   if (activeViewMode === "HR") {
     return null;
@@ -140,68 +137,29 @@ const CableLayerComponent: FC<CableLayerProps> = ({
             (cable.sourceNodeId === selectedNodeId || cable.targetNodeId === selectedNodeId))
         );
 
-        // Construction du tracé orthogonal strict
+        const Ax = cable.sourcePos.x;
+        const Ay = cable.sourcePos.y;
+        const Bx = cable.targetPos.x;
+        const By = cable.targetPos.y;
+
+        // 1. Source de Vérité Unique : coordonnées absolues du pivot
+        const pivot = cable.pivot ?? {
+          x: Math.round((Ax + Bx) / 2),
+          y: By,
+        };
+
+        // 2. Tracé Orthogonal Strict calculé dynamiquement : [Ax, Ay, Ax, pivot.y, pivot.x, pivot.y, pivot.x, By, Bx, By]
         let points: number[] = [];
-
         if (cable.cableType === "HORIZONTAL_RUN") {
-          const wps = cable.waypoints && cable.waypoints.length > 0 ? cable.waypoints : [];
-
-          if (wps.length === 0) {
-            // Par défaut : monte depuis la prise (Sx, Sy) jusqu'à hauteur de la baie (Sx, Ty), puis file horizontalement vers la baie (Tx, Ty)
-            points = [
-              cable.sourcePos.x,
-              cable.sourcePos.y,
-              cable.sourcePos.x,
-              cable.targetPos.y,
-              cable.targetPos.x,
-              cable.targetPos.y,
-            ];
-          } else {
-            // Tracé passant par les waypoints définis
-            points = [cable.sourcePos.x, cable.sourcePos.y];
-            for (let i = 0; i < wps.length; i++) {
-              const wp = wps[i]!;
-              const lastX = points[points.length - 2] ?? cable.sourcePos.x;
-              const lastY = points[points.length - 1] ?? cable.sourcePos.y;
-
-              // Raccordement orthogonal strict si pas aligné
-              if (Math.abs(lastX - wp.x) > 1 && Math.abs(lastY - wp.y) > 1) {
-                points.push(lastX, wp.y);
-              }
-              points.push(wp.x, wp.y);
-            }
-
-            const lastX = points[points.length - 2] ?? cable.sourcePos.x;
-            const lastY = points[points.length - 1] ?? cable.sourcePos.y;
-            if (Math.abs(lastX - cable.targetPos.x) > 1 && Math.abs(lastY - cable.targetPos.y) > 1) {
-              points.push(lastX, cable.targetPos.y);
-            }
-            points.push(cable.targetPos.x, cable.targetPos.y);
-          }
-
-          // Nettoyage des doublons et alignements colinéaires
-          points = simplifyOrthogonalPoints(points);
+          points = simplifyOrthogonalPoints([
+            Ax, Ay,
+            Ax, pivot.y,
+            pivot.x, pivot.y,
+            pivot.x, By,
+            Bx, By,
+          ]);
         } else {
-          // Liaison directe droite
-          points = [
-            cable.sourcePos.x,
-            cable.sourcePos.y,
-            cable.targetPos.x,
-            cable.targetPos.y,
-          ];
-        }
-
-        // Identification de tous les angles réels du tracé (excluant le départ sourcePos et l'arrivée targetPos)
-        // Les angles réels du tracé sont aux indices 2..points.length - 4
-        const cornerPoints: { index: number; x: number; y: number }[] = [];
-        if (cable.cableType === "HORIZONTAL_RUN" && points.length >= 6) {
-          for (let i = 2; i <= points.length - 4; i += 2) {
-            const cx = points[i];
-            const cy = points[i + 1];
-            if (cx !== undefined && cy !== undefined) {
-              cornerPoints.push({ index: Math.floor((i - 2) / 2), x: cx, y: cy });
-            }
-          }
+          points = [Ax, Ay, Bx, By];
         }
 
         // Configuration du style personnalisé du câble (couleur, tirets/pointillés, épaisseur)
@@ -245,50 +203,47 @@ const CableLayerComponent: FC<CableLayerProps> = ({
               }}
             />
 
-            {/* Poignées interactives invisibles directement sur les angles réels du tracé */}
-            {cable.cableType === "HORIZONTAL_RUN" &&
-              cornerPoints.map((corner) => {
-                return (
-                  <Group
-                    key={`corner-${cable.id}-${corner.index}`}
-                    x={corner.x}
-                    y={corner.y}
-                    draggable={true}
-                    onMouseEnter={(e: KonvaEventObject<MouseEvent>) => {
-                      const stage = e.target.getStage();
-                      if (stage) stage.container().style.cursor = "grab";
-                    }}
-                    onMouseLeave={(e: KonvaEventObject<MouseEvent>) => {
-                      const stage = e.target.getStage();
-                      if (stage) stage.container().style.cursor = "default";
-                    }}
-                    onDragStart={(e: KonvaEventObject<DragEvent>) => {
-                      const stage = e.target.getStage();
-                      if (stage) stage.container().style.cursor = "grabbing";
-                      e.cancelBubble = true;
-                    }}
-                    onDragMove={(e: KonvaEventObject<DragEvent>) => {
-                      e.cancelBubble = true;
-                      onWaypointChange?.(cable.id, corner.index, {
-                        x: Math.round(e.target.x()),
-                        y: Math.round(e.target.y()),
-                      });
-                    }}
-                    onDragEnd={(e: KonvaEventObject<DragEvent>) => {
-                      const stage = e.target.getStage();
-                      if (stage) stage.container().style.cursor = "grab";
-                      e.cancelBubble = true;
-                      onWaypointChange?.(cable.id, corner.index, {
-                        x: Math.round(e.target.x()),
-                        y: Math.round(e.target.y()),
-                      });
-                    }}
-                  >
-                    {/* Zone de préhension tactile invisible directement sur l'angle (zéro point visible) */}
-                    <Circle radius={30} fill="transparent" />
-                  </Group>
-                );
-              })}
+            {/* 3. Poignée de Pivot Unique : Konva.Circle draggable déplaçable librement en 2D */}
+            {cable.cableType === "HORIZONTAL_RUN" && (
+              <Circle
+                id={`pivot-${cable.id}`}
+                x={pivot.x}
+                y={pivot.y}
+                radius={24}
+                fill="transparent"
+                hitStrokeWidth={20}
+                draggable={true}
+                onMouseEnter={(e: KonvaEventObject<MouseEvent>) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = "grab";
+                }}
+                onMouseLeave={(e: KonvaEventObject<MouseEvent>) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = "default";
+                }}
+                onDragStart={(e: KonvaEventObject<DragEvent>) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = "grabbing";
+                  e.cancelBubble = true;
+                }}
+                onDragMove={(e: KonvaEventObject<DragEvent>) => {
+                  e.cancelBubble = true;
+                  onPivotChange?.(cable.id, {
+                    x: Math.round(e.target.x()),
+                    y: Math.round(e.target.y()),
+                  });
+                }}
+                onDragEnd={(e: KonvaEventObject<DragEvent>) => {
+                  const stage = e.target.getStage();
+                  if (stage) stage.container().style.cursor = "grab";
+                  e.cancelBubble = true;
+                  onPivotChange?.(cable.id, {
+                    x: Math.round(e.target.x()),
+                    y: Math.round(e.target.y()),
+                  });
+                }}
+              />
+            )}
           </Group>
         );
       })}

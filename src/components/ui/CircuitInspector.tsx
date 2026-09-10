@@ -309,8 +309,6 @@ export interface CircuitInspectorProps {
   onAddOutletToDesk?: ((deskId: string, role: OutletRole) => void) | undefined;
   onAddColonnetteToDesk?: ((deskId: string, portsCount?: number | undefined) => void) | undefined;
   onUpdateNodeProperties?: ((nodeId: string, updates: Partial<NodeDisplay>) => void) | undefined;
-  onAddWaypoint?: ((cableId: string) => void) | undefined;
-  onRemoveWaypoint?: ((cableId: string) => void) | undefined;
   onDeleteNode?: ((nodeId: string) => void) | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
@@ -331,8 +329,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   onAddOutletToDesk,
   onAddColonnetteToDesk,
   onUpdateNodeProperties,
-  onAddWaypoint,
-  onRemoveWaypoint,
   onDeleteNode,
   vlanStyles,
   onUpdateVlanStyle,
@@ -1889,36 +1885,18 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
           </div>
         </div>
 
-        {/* 1b. Carte : Cheminement Câble & Coudes Orthogonaux 90° */}
+        {/* 1b. Carte : Pivot Orthogonal Unique */}
         <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
               <RotateCw className="w-3.5 h-3.5 text-blue-400" />
-              Coudes Câble (90° Orthogonal)
+              Pivot Orthogonal (90°)
             </span>
-            <span className="text-[10px] text-slate-500 font-mono">Routing</span>
+            <span className="text-[10px] text-slate-500 font-mono">2D Drag</span>
           </div>
           <p className="text-[10px] text-slate-400 leading-relaxed">
-            Chaque coude est déplaçable librement pour contourner les bureaux ou suivre les cloisons.
+            Le câble est contrôlé par un pivot unique. Attrapez l&apos;angle sur le plan pour l&apos;orienter librement en 2D à 90°.
           </p>
-          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-            <button
-              onClick={() => onAddWaypoint?.(`cable-run-${selectedNode.id}`)}
-              className="py-1 px-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
-              title="Ajouter un coude orthogonal à 90°"
-            >
-              <Plus className="w-3 h-3" />
-              + Coude (90°)
-            </button>
-            <button
-              onClick={() => onRemoveWaypoint?.(`cable-run-${selectedNode.id}`)}
-              className="py-1 px-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition"
-              title="Retirer le dernier coude du câble"
-            >
-              <Trash2 className="w-3 h-3" />
-              - Retirer coude
-            </button>
-          </div>
         </div>
 
         {/* 2. Carte : Liaison Mobilier & Postes */}
