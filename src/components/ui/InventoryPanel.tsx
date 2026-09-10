@@ -17,6 +17,7 @@ import {
   HardDrive,
   Cpu,
   GripVertical,
+  Phone,
 } from "lucide-react";
 import {
   NodeDisplay,
@@ -63,83 +64,116 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
     return nodes.filter((n) => n.type === "WALL_OUTLET");
   }, [nodes]);
 
-  // Correspondance Utilisateur -> Bureau & Port RJ45
+  // Correspondance Utilisateur -> Bureaux multiples, Prises multiples & Téléphone IP
   const usersWithAssignments = useMemo(() => {
     return ENTERPRISE_DIRECTORY.map((user) => {
-      // Trouver le meuble assigné
-      let assignedDesk: NodeDisplay | null = null;
-      let seatLabel = "";
+      // 1. Trouver TOUS les meubles assignés à cet utilisateur
+      interface UserDeskAssignment {
+        desk: NodeDisplay;
+        seatLabel: string;
+      }
+      const assignedDesks: UserDeskAssignment[] = [];
 
       for (const desk of deskNodes) {
         if (desk.assignedPerson === user.fullName) {
-          assignedDesk = desk;
-          seatLabel = "Poste principal";
-          break;
+          assignedDesks.push({
+            desk,
+            seatLabel: "Poste principal",
+          });
         }
         if (desk.seats && desk.seats.length > 0) {
-          const seatIdx = desk.seats.findIndex((s) => s.fullName === user.fullName);
-          if (seatIdx !== -1) {
-            assignedDesk = desk;
-            const seatItem = desk.seats[seatIdx];
-            seatLabel = `Place #${seatIdx + 1} (${seatItem?.seatLabel ?? "Poste"})`;
-            break;
-          }
+          desk.seats.forEach((seatItem, seatIdx) => {
+            if (seatItem.fullName === user.fullName) {
+              assignedDesks.push({
+                desk,
+                seatLabel: `Place #${seatIdx + 1} (${seatItem.seatLabel ?? "Poste"})`,
+              });
+            }
+          });
         }
       }
 
-      // Trouver une prise ou un port de colonnette assigné à cet utilisateur ou lié à ce bureau
-      let connectedOutlet: NodeDisplay | null = null;
-      let portInfo: string | null = null;
-      let vlanId: number | undefined = undefined;
+      // 2. Trouver TOUTES les prises/ports associés à cet utilisateur (directement ou via les bureaux)
+      interface UserOutletAssignment {
+        outlet: NodeDisplay;
+        portInfo: string;
+        vlanId?: number | undefined;
+        isVoip?: boolean | undefined;
+      }
+      const assignedOutlets: UserOutletAssignment[] = [];
 
+      // Prises assignées nommément à l'utilisateur
       for (const outlet of outletNodes) {
         // Colonnette multi-ports
         if (outlet.stackedPorts && outlet.stackedPorts.length > 0) {
-          const matchedPort = outlet.stackedPorts.find(
-            (p) => p.assignedPerson === user.fullName
-          );
-          if (matchedPort) {
-            connectedOutlet = outlet;
-            portInfo = `${matchedPort.portLabel} (${matchedPort.outletRole || "DATA"})`;
-            vlanId = matchedPort.vlanId;
-            break;
-          }
+          outlet.stackedPorts.forEach((sp) => {
+            if (sp.assignedPerson === user.fullName) {
+              assignedOutlets.push({
+                outlet,
+                portInfo: `${sp.portLabel} (${sp.outletRole || "DATA"})`,
+                vlanId: sp.vlanId,
+                isVoip: sp.outletRole === "VOIP" || sp.vlanId === 30,
+              });
+            }
+          });
         }
         // Prise simple
         if (outlet.assignedPerson === user.fullName) {
-          connectedOutlet = outlet;
-          portInfo = outlet.outletRole || "DATA";
-          vlanId = outlet.vlanId;
-          break;
+          assignedOutlets.push({
+            outlet,
+            portInfo: outlet.outletRole || "DATA",
+            vlanId: outlet.vlanId,
+            isVoip: outlet.outletRole === "VOIP" || outlet.vlanId === 30,
+          });
         }
       }
 
-      // Si pas d'affectation directe mais bureau trouvé, chercher les prises liées à ce bureau
-      if (!connectedOutlet && assignedDesk) {
-        const linkedOutlet = outletNodes.find(
-          (o) => o.attachedToDeskId === assignedDesk?.id
-        );
-        if (linkedOutlet) {
-          connectedOutlet = linkedOutlet;
-          const firstPort = linkedOutlet.stackedPorts?.[0];
-          if (firstPort) {
-            portInfo = `${firstPort.portLabel} (via ${linkedOutlet.name})`;
-            vlanId = firstPort.vlanId;
-          } else {
-            portInfo = `${linkedOutlet.outletRole || "DATA"} (via ${linkedOutlet.name})`;
-            vlanId = linkedOutlet.vlanId;
+      // Prises solidaires des bureaux occupés par l'utilisateur
+      assignedDesks.forEach(({ desk }) => {
+        const linkedOutlets = outletNodes.filter((o) => o.attachedToDeskId === desk.id);
+        linkedOutlets.forEach((lo) => {
+          const alreadyInList = assignedOutlets.some((ao) => ao.outlet.id === lo.id);
+          if (!alreadyInList) {
+            if (lo.stackedPorts && lo.stackedPorts.length > 0) {
+              lo.stackedPorts.forEach((sp) => {
+                assignedOutlets.push({
+                  outlet: lo,
+                  portInfo: `${sp.portLabel} (via ${lo.name})`,
+                  vlanId: sp.vlanId,
+                  isVoip: sp.outletRole === "VOIP" || sp.vlanId === 30,
+                });
+              });
+            } else {
+              assignedOutlets.push({
+                outlet: lo,
+                portInfo: `${lo.outletRole || "DATA"} (via ${lo.name})`,
+                vlanId: lo.vlanId,
+                isVoip: lo.outletRole === "VOIP" || lo.vlanId === 30,
+              });
+            }
           }
-        }
-      }
+        });
+      });
+
+      // 3. Détection ou attribution du Téléphone IP relié au port Téléphonie
+      // Rechercher en priorité si l'utilisateur possède un port VoIP (VLAN 30 ou rôle VOIP)
+      const voipOutlet = assignedOutlets.find((o) => o.isVoip);
+      const ipPhone = {
+        model: "Cisco IP Phone 8845 / Yealink T54W",
+        phoneNumber: user.phone || `+33 1 42 68 01 ${user.id.slice(-2)}`,
+        macAddress: `00:08:5D:${user.id.slice(-2)}:A4:1F`,
+        extension: `20${user.id.slice(-2)}`,
+        connectedPort: voipOutlet ? `${voipOutlet.outlet.name} • ${voipOutlet.portInfo}` : null,
+        vlanId: voipOutlet?.vlanId ?? 30,
+        hasVoipPort: Boolean(voipOutlet),
+      };
 
       return {
         user,
-        assignedDesk,
-        seatLabel,
-        connectedOutlet,
-        portInfo,
-        vlanId,
-        isAssigned: !!assignedDesk || !!connectedOutlet,
+        assignedDesks,
+        assignedOutlets,
+        ipPhone,
+        isAssigned: assignedDesks.length > 0 || assignedOutlets.length > 0,
       };
     });
   }, [deskNodes, outletNodes]);
@@ -303,15 +337,22 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
   // Filtre Utilisateurs
   const filteredUsers = useMemo(() => {
-    return usersWithAssignments.filter(({ user, assignedDesk, portInfo }) => {
+    return usersWithAssignments.filter(({ user, assignedDesks, assignedOutlets, ipPhone }) => {
       if (!query) return true;
-      return (
-        user.fullName.toLowerCase().includes(query) ||
-        user.jobTitle.toLowerCase().includes(query) ||
-        user.department.toLowerCase().includes(query) ||
-        (assignedDesk && assignedDesk.name.toLowerCase().includes(query)) ||
-        (portInfo && portInfo.toLowerCase().includes(query))
+      const matchName = user.fullName.toLowerCase().includes(query);
+      const matchJob = user.jobTitle.toLowerCase().includes(query);
+      const matchDept = user.department.toLowerCase().includes(query);
+      const matchDesk = assignedDesks.some((d) => d.desk.name.toLowerCase().includes(query));
+      const matchOutlet = assignedOutlets.some(
+        (o) =>
+          o.outlet.name.toLowerCase().includes(query) ||
+          o.portInfo.toLowerCase().includes(query)
       );
+      const matchPhone =
+        ipPhone.phoneNumber.toLowerCase().includes(query) ||
+        ipPhone.extension.toLowerCase().includes(query);
+
+      return matchName || matchJob || matchDept || matchDesk || matchOutlet || matchPhone;
     });
   }, [usersWithAssignments, query]);
 
@@ -591,8 +632,8 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 Aucun utilisateur trouvé pour cette recherche.
               </div>
             ) : (
-              filteredUsers.map(({ user, assignedDesk, seatLabel, connectedOutlet, portInfo, vlanId }) => {
-                const vlanStyle = vlanId ? vlanStyles[vlanId] : undefined;
+              filteredUsers.map(({ user, assignedDesks, assignedOutlets, ipPhone }) => {
+                const primaryDesk = assignedDesks[0];
 
                 return (
                   <div
@@ -648,8 +689,11 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                         <div>
                           <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300 transition flex items-center gap-1.5">
                             {user.fullName}
-                            {assignedDesk ? (
-                              <span className="w-2 h-2 rounded-full bg-emerald-400" title="Au bureau" />
+                            {assignedDesks.length > 0 ? (
+                              <span
+                                className="w-2 h-2 rounded-full bg-emerald-400"
+                                title={`Au bureau (${assignedDesks.length} poste${assignedDesks.length > 1 ? "s" : ""})`}
+                              />
                             ) : (
                               <span className="w-2 h-2 rounded-full bg-slate-500" title="Télétravail / Non assigné" />
                             )}
@@ -660,68 +704,129 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                         </div>
                       </div>
 
-                      {assignedDesk && (
+                      {primaryDesk && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleItemClick(assignedDesk);
+                            handleItemClick(primaryDesk.desk);
                           }}
                           className="p-1 hover:bg-slate-800 text-slate-400 hover:text-blue-400 rounded transition"
-                          title="Localiser le bureau sur le plan"
+                          title="Localiser le bureau principal sur le plan"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
 
-                    {/* Détails du poste & du port connecté */}
-                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex flex-col gap-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400 flex items-center gap-1">
-                          <Monitor className="w-3 h-3 text-slate-500" />
-                          Bureau :
-                        </span>
-                        {assignedDesk ? (
-                          <span
-                            onClick={() => handleItemClick(assignedDesk)}
-                            className="font-medium text-blue-400 hover:underline cursor-pointer"
-                          >
-                            {assignedDesk.name} {seatLabel ? `• ${seatLabel}` : ""}
+                    {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
+                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex flex-col gap-1.5">
+                      {/* Section Bureaux */}
+                      {assignedDesks.length === 0 ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400 flex items-center gap-1">
+                            <Monitor className="w-3 h-3 text-slate-500" />
+                            Bureau :
                           </span>
-                        ) : (
                           <span className="text-slate-500 italic">Non assigné</span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400 flex items-center gap-1">
-                          <Plug className="w-3 h-3 text-slate-500" />
-                          Prise / Port :
-                        </span>
-                        {connectedOutlet ? (
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              onClick={() => handleItemClick(connectedOutlet)}
-                              className="font-medium text-emerald-400 hover:underline cursor-pointer"
-                            >
-                              {connectedOutlet.name} {portInfo ? `[${portInfo}]` : ""}
+                        </div>
+                      ) : (
+                        assignedDesks.map(({ desk, seatLabel }, dIdx) => (
+                          <div key={desk.id + dIdx} className="flex items-center justify-between">
+                            <span className="text-slate-400 flex items-center gap-1">
+                              <Monitor className="w-3 h-3 text-slate-500" />
+                              {assignedDesks.length > 1 ? `Bureau ${dIdx + 1} :` : "Bureau :"}
                             </span>
-                            {vlanId && (
-                              <span
-                                className="px-1 py-0.2 rounded text-[9px] font-mono border"
-                                style={{
-                                  color: vlanStyle?.color ?? "#38bdf8",
-                                  borderColor: `${vlanStyle?.color ?? "#38bdf8"}40`,
-                                  backgroundColor: `${vlanStyle?.color ?? "#38bdf8"}15`,
-                                }}
-                              >
-                                V{vlanId}
-                              </span>
-                            )}
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleItemClick(desk);
+                              }}
+                              className="font-medium text-blue-400 hover:underline cursor-pointer"
+                              title="Cliquer pour centrer sur le plan"
+                            >
+                              {desk.name} {seatLabel ? `• ${seatLabel}` : ""}
+                            </span>
                           </div>
-                        ) : (
+                        ))
+                      )}
+
+                      {/* Section Prises & Ports RJ45 */}
+                      {assignedOutlets.length === 0 ? (
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-850">
+                          <span className="text-slate-400 flex items-center gap-1">
+                            <Plug className="w-3 h-3 text-slate-500" />
+                            Prise / Port :
+                          </span>
                           <span className="text-slate-500 italic">Aucune prise raccordée</span>
-                        )}
+                        </div>
+                      ) : (
+                        assignedOutlets.map((ao, oIdx) => {
+                          const vStyle = ao.vlanId ? vlanStyles[ao.vlanId] : undefined;
+                          return (
+                            <div key={ao.outlet.id + oIdx} className="flex items-center justify-between pt-1 border-t border-slate-850">
+                              <span className="text-slate-400 flex items-center gap-1">
+                                <Plug className="w-3 h-3 text-slate-500" />
+                                {assignedOutlets.length > 1 ? `Prise ${oIdx + 1} :` : "Prise / Port :"}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleItemClick(ao.outlet);
+                                  }}
+                                  className="font-medium text-emerald-400 hover:underline cursor-pointer"
+                                  title="Cliquer pour localiser sur le plan"
+                                >
+                                  {ao.outlet.name} {ao.portInfo ? `[${ao.portInfo}]` : ""}
+                                </span>
+                                {ao.vlanId && (
+                                  <span
+                                    className="px-1 py-0.2 rounded text-[9px] font-mono border"
+                                    style={{
+                                      color: vStyle?.color ?? "#38bdf8",
+                                      borderColor: `${vStyle?.color ?? "#38bdf8"}40`,
+                                      backgroundColor: `${vStyle?.color ?? "#38bdf8"}15`,
+                                    }}
+                                  >
+                                    V{ao.vlanId}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+
+                      {/* Section Téléphone IP dédié à l'utilisateur */}
+                      <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400 flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-purple-400" />
+                            Téléphone IP :
+                          </span>
+                          <span className="text-purple-300 font-mono font-medium">
+                            {ipPhone.phoneNumber} <span className="text-slate-400">(Ext: {ipPhone.extension})</span>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[9px] font-mono bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800">
+                          <span className="text-slate-400 flex items-center gap-1">
+                            <span>Relais :</span>
+                            <span className={ipPhone.hasVoipPort ? "text-emerald-400" : "text-amber-400"}>
+                              {ipPhone.connectedPort || "Attente port VoIP dédié"}
+                            </span>
+                          </span>
+                          <span
+                            className="px-1 rounded border text-[8px]"
+                            style={{
+                              color: vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc",
+                              borderColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}40`,
+                              backgroundColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}15`,
+                            }}
+                          >
+                            V{ipPhone.vlanId} VoIP
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
