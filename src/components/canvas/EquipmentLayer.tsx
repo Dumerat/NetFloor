@@ -399,8 +399,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
       {activeViewMode !== "HR" &&
         racks.map((rack) => {
           const isSelected = activeSelectedId === rack.id;
+          const totalU = rack.uHeight || 42;
           const rWidth = rack.widthMm ?? 800;
-          const rDepth = rack.depthMm ?? 1000;
+          // Hauteur proportionnelle garantissant une hauteur minimale par U pour une excellente lisibilité
+          const minDepthForU = 320 + totalU * 36;
+          const rDepth = Math.max(rack.depthMm ?? 1000, minDepthForU);
 
           return (
             <Group
@@ -479,44 +482,25 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 fill="rgba(15, 23, 42, 0.65)"
                 listening={false}
               />
-              {/* Montants intérieurs normalisés 19 pouces (Rails de rack) */}
-              <Rect
-                x={70}
-                y={130}
-                width={16}
-                height={rDepth - 220}
-                fill="#64748b"
-                cornerRadius={4}
-                listening={false}
-              />
-              <Rect
-                x={rWidth - 86}
-                y={130}
-                width={16}
-                height={rDepth - 220}
-                fill="#64748b"
-                cornerRadius={4}
-                listening={false}
-              />
 
               {/* Bandeau supérieur d'identification & Statut Baie */}
               <Rect
                 x={40}
                 y={40}
                 width={rWidth - 80}
-                height={95}
+                height={85}
                 fill="rgba(2, 6, 23, 0.92)"
                 stroke={isSelected ? "#38bdf8" : "#2563eb"}
-                strokeWidth={8}
-                cornerRadius={14}
+                strokeWidth={6}
+                cornerRadius={12}
                 listening={false}
               />
               <Text
                 x={55}
-                y={58}
+                y={55}
                 width={rWidth - 190}
                 text={`⚡ ${rack.name}`}
-                fontSize={56}
+                fontSize={48}
                 fontFamily="monospace"
                 fontStyle="bold"
                 fill="#38bdf8"
@@ -526,10 +510,10 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               />
               <Text
                 x={rWidth - 165}
-                y={60}
+                y={57}
                 width={110}
-                text={`${rack.uHeight}U`}
-                fontSize={52}
+                text={`${totalU}U`}
+                fontSize={44}
                 fontFamily="monospace"
                 fontStyle="bold"
                 fill="#93c5fd"
@@ -537,119 +521,192 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 wrap="none"
                 listening={false}
               />
-
-              {/* Voyants LED d'état (Power vert, Uplink bleu, zéro shadowBlur) */}
+              {/* Voyants LED d'état */}
               <Circle
-                x={rWidth - 195}
-                y={75}
-                radius={12}
+                x={rWidth - 190}
+                y={72}
+                radius={10}
                 fill="#22c55e"
                 stroke="#15803d"
                 strokeWidth={2}
                 listening={false}
               />
               <Circle
-                x={rWidth - 225}
-                y={75}
-                radius={12}
+                x={rWidth - 215}
+                y={72}
+                radius={10}
                 fill="#38bdf8"
                 stroke="#0284c7"
                 strokeWidth={2}
                 listening={false}
               />
 
+              {/* Montants intérieurs normalisés 19 pouces (Rails de rack) avec graduations U */}
+              <Rect
+                x={70}
+                y={130}
+                width={20}
+                height={rDepth - 220}
+                fill="#475569"
+                cornerRadius={4}
+                listening={false}
+              />
+              <Rect
+                x={rWidth - 90}
+                y={130}
+                width={20}
+                height={rDepth - 220}
+                fill="#475569"
+                cornerRadius={4}
+                listening={false}
+              />
+
               {/* Rendu dynamique des équipements raqués dans le châssis selon slotU */}
               {(() => {
-                const totalU = rack.uHeight || 42;
                 const devList = rack.devices && rack.devices.length > 0 ? rack.devices : [];
                 // Espace utile vertical pour les U : de y=150 à y=(rDepth - 180)
                 const usableTop = 150;
-                const usableHeight = Math.max(200, rDepth - 330);
+                const usableHeight = Math.max(300, rDepth - 330);
                 const uStep = usableHeight / totalU;
 
-                return devList.map((dev) => {
-                  const uSize = dev.uSize ?? 1;
-                  // slotU est de 1 (bas) à totalU (haut)
-                  // On calcule la position Y inverse : slotU élevé = en haut
-                  const devY = usableTop + (totalU - dev.slotU) * uStep;
-                  const devH = Math.max(30, uStep * uSize - 6);
-
-                  const isSw = dev.deviceType === "SWITCH";
-                  const isPp = dev.deviceType === "PATCH_PANEL";
-                  const isFw = dev.deviceType === "FIREWALL";
-                  const isSrv = dev.deviceType === "SERVER";
-                  const isPdu = dev.deviceType === "PDU";
-
-                  const devFill = isSw
-                    ? "#172554"
-                    : isPp
-                    ? "#1e293b"
-                    : isFw
-                    ? "#450a0a"
-                    : isSrv
-                    ? "#09090b"
-                    : isPdu
-                    ? "#422006"
-                    : "#1e293b";
-
-                  const devStroke = isSw
-                    ? "#3b82f6"
-                    : isPp
-                    ? "#64748b"
-                    : isFw
-                    ? "#ef4444"
-                    : isSrv
-                    ? "#a1a1aa"
-                    : isPdu
-                    ? "#f59e0b"
-                    : "#475569";
-
+                // Repères textuels de U sur le rail gauche tous les 5U ou 1U si totalU <= 18
+                const uMarks = Array.from({ length: totalU }).map((_, idx) => {
+                  const uNum = idx + 1;
+                  const isKeyU = uNum % 5 === 0 || uNum === 1 || uNum === totalU || totalU <= 18;
+                  if (!isKeyU) return null;
+                  const markY = usableTop + (totalU - uNum) * uStep + uStep / 2 - 8;
                   return (
-                    <Group key={dev.id}>
-                      <Rect
-                        x={95}
-                        y={devY}
-                        width={rWidth - 190}
-                        height={devH}
-                        fill={devFill}
-                        stroke={devStroke}
-                        strokeWidth={6}
-                        cornerRadius={8}
-                        listening={false}
-                      />
-                      <Text
-                        x={110}
-                        y={devY + 12}
-                        width={rWidth - 220}
-                        text={`U${String(dev.slotU).padStart(2, "0")}: ${dev.name}`}
-                        fontSize={Math.min(42, Math.max(24, devH * 0.4))}
-                        fontFamily="monospace"
-                        fontStyle="bold"
-                        fill="#f8fafc"
-                        wrap="none"
-                        ellipsis={true}
-                        listening={false}
-                      />
-                      {/* Représentation des ports RJ45 / LEDs si équipement avec ports */}
-                      {dev.portsCount && devH >= 50 && (
-                        <Group y={devY + devH - 25}>
-                          {Array.from({ length: Math.min(12, Math.ceil(dev.portsCount / 2)) }).map((_, pIdx) => (
-                            <Rect
-                              key={`dev-port-${dev.id}-${pIdx}`}
-                              x={115 + pIdx * ((rWidth - 240) / 12)}
-                              y={0}
-                              width={18}
-                              height={16}
-                              fill={pIdx < 7 ? (isSw ? "#22c55e" : "#38bdf8") : "#334155"}
-                              cornerRadius={3}
-                              listening={false}
-                            />
-                          ))}
-                        </Group>
-                      )}
-                    </Group>
+                    <Text
+                      key={`umark-${uNum}`}
+                      x={35}
+                      y={markY}
+                      width={32}
+                      text={`${uNum}`}
+                      fontSize={Math.max(14, Math.min(22, uStep * 0.55))}
+                      fontFamily="monospace"
+                      fontStyle="bold"
+                      fill="#64748b"
+                      align="right"
+                      listening={false}
+                    />
                   );
                 });
+
+                return (
+                  <Group>
+                    {uMarks}
+                    {devList.map((dev) => {
+                      const uSize = dev.uSize ?? 1;
+                      // slotU est de 1 (bas) à totalU (haut)
+                      // Position Y inverse : slotU élevé = en haut
+                      const devY = usableTop + (totalU - dev.slotU) * uStep;
+                      const devH = Math.max(32, uStep * uSize - 4);
+
+                      const isSw = dev.deviceType === "SWITCH";
+                      const isPp = dev.deviceType === "PATCH_PANEL";
+                      const isFw = dev.deviceType === "FIREWALL";
+                      const isSrv = dev.deviceType === "SERVER";
+                      const isPdu = dev.deviceType === "PDU";
+
+                      const devFill = isSw
+                        ? "#172554"
+                        : isPp
+                        ? "#1e293b"
+                        : isFw
+                        ? "#450a0a"
+                        : isSrv
+                        ? "#09090b"
+                        : isPdu
+                        ? "#422006"
+                        : "#1e293b";
+
+                      const devStroke = isSw
+                        ? "#3b82f6"
+                        : isPp
+                        ? "#64748b"
+                        : isFw
+                        ? "#ef4444"
+                        : isSrv
+                        ? "#a1a1aa"
+                        : isPdu
+                        ? "#f59e0b"
+                        : "#475569";
+
+                      const typeBadge = isSw ? "SW" : isPp ? "PP" : isFw ? "FW" : isSrv ? "SRV" : isPdu ? "PDU" : "DEV";
+
+                      return (
+                        <Group key={dev.id}>
+                          <Rect
+                            x={95}
+                            y={devY}
+                            width={rWidth - 190}
+                            height={devH}
+                            fill={devFill}
+                            stroke={devStroke}
+                            strokeWidth={6}
+                            cornerRadius={8}
+                            listening={false}
+                          />
+                          {/* Badge de Type & Emplacement U */}
+                          <Rect
+                            x={105}
+                            y={devY + Math.max(4, (devH - 28) / 2)}
+                            width={75}
+                            height={Math.min(28, devH - 8)}
+                            fill="rgba(2, 6, 23, 0.75)"
+                            stroke={devStroke}
+                            strokeWidth={2}
+                            cornerRadius={4}
+                            listening={false}
+                          />
+                          <Text
+                            x={107}
+                            y={devY + Math.max(8, (devH - 20) / 2)}
+                            width={71}
+                            text={`U${dev.slotU} ${typeBadge}`}
+                            fontSize={Math.min(18, Math.max(13, devH * 0.35))}
+                            fontFamily="monospace"
+                            fontStyle="bold"
+                            fill="#38bdf8"
+                            align="center"
+                            listening={false}
+                          />
+                          {/* Nom de l'équipement avec excellente lisibilité */}
+                          <Text
+                            x={190}
+                            y={devY + Math.max(6, (devH - 26) / 2)}
+                            width={rWidth - 300}
+                            text={dev.name}
+                            fontSize={Math.min(32, Math.max(18, devH * 0.42))}
+                            fontFamily="monospace"
+                            fontStyle="bold"
+                            fill="#f8fafc"
+                            wrap="none"
+                            ellipsis={true}
+                            listening={false}
+                          />
+                          {/* Représentation des ports RJ45 / LEDs */}
+                          {dev.portsCount && devH >= 54 && (
+                            <Group y={devY + devH - 24}>
+                              {Array.from({ length: Math.min(12, Math.ceil(dev.portsCount / 2)) }).map((_, pIdx) => (
+                                <Rect
+                                  key={`dev-port-${dev.id}-${pIdx}`}
+                                  x={190 + pIdx * ((rWidth - 320) / 12)}
+                                  y={0}
+                                  width={18}
+                                  height={14}
+                                  fill={pIdx < 7 ? (isSw ? "#22c55e" : "#38bdf8") : "#334155"}
+                                  cornerRadius={3}
+                                  listening={false}
+                                />
+                              ))}
+                            </Group>
+                          )}
+                        </Group>
+                      );
+                    })}
+                  </Group>
+                );
               })()}
 
               {/* Grille de ventilation inférieure */}

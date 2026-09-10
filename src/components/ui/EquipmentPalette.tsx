@@ -21,7 +21,8 @@ import {
   Trash2,
   Check,
   GripVertical,
-} from "lucide-react";
+  Network,
+  } from "lucide-react";
 import {
   OutletRole,
   NodeSubType,
@@ -246,6 +247,8 @@ interface EquipmentPaletteProps {
   onToggle: () => void;
   onAddItem: (item: PaletteItem) => void;
   onOpenSettings?: (() => void) | undefined;
+  onOpenTopology?: (() => void) | undefined;
+  isTopologyOpen?: boolean | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
 }
 
@@ -254,6 +257,8 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   onToggle,
   onAddItem,
   onOpenSettings,
+  onOpenTopology,
+  isTopologyOpen = false,
   vlanStyles = DEFAULT_VLAN_STYLES,
 }) => {
   // 3 sous-menus d'équipements dans la seconde fenêtre latérale
@@ -371,7 +376,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
             }}
             title="Catalogue & Ajout d'équipements"
             className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 ${
-              isOpen
+              isOpen && !isTopologyOpen
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/40"
                 : "text-slate-400 hover:text-blue-400 hover:bg-slate-800"
             }`}
@@ -379,6 +384,22 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
             <PlusCircle className="w-5 h-5" />
             <span className="text-[8px] font-bold uppercase tracking-wider">Ajout</span>
           </button>
+
+          {/* Bouton "Topologie" pour ouvrir le panneau arborescent réseau */}
+          {onOpenTopology && (
+            <button
+              onClick={onOpenTopology}
+              title="Topologie Réseau & Arborescence DSI"
+              className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 ${
+                isTopologyOpen
+                  ? "bg-purple-600 text-white shadow-lg shadow-purple-600/40"
+                  : "text-slate-400 hover:text-purple-400 hover:bg-slate-800"
+              }`}
+            >
+              <Network className="w-5 h-5" />
+              <span className="text-[8px] font-bold uppercase tracking-wider">Topo</span>
+            </button>
+          )}
         </div>
 
         {/* Paramètres DSI compact (Bas de barre) & Bouton replier */}

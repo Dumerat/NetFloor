@@ -7,6 +7,7 @@ import { CircuitInspector, DEFAULT_RACK_DEVICES } from "@/components/ui/CircuitI
 import { EquipmentPalette, PaletteItem } from "@/components/ui/EquipmentPalette";
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { SettingsModal } from "@/components/ui/SettingsModal";
+import { NetworkTopologyPanel } from "@/components/ui/NetworkTopologyPanel";
 import { DeviceTelemetry } from "@/data/settingsStore";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import { NodeDisplay, RackDisplay, OutletRole, StackedPortItem, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
@@ -84,6 +85,7 @@ export default function NetFloorApp() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
+  const [isTopologyOpen, setIsTopologyOpen] = useState(false);
 
   // Mode d'affichage des libellés (false = au survol par défaut, true = tous affichés en permanence)
   const [showAllLabels, setShowAllLabels] = useState(false);
@@ -607,6 +609,28 @@ export default function NetFloorApp() {
   }, []);
 
   // Sélection d'un nœud quelconque (bureau ou prise)
+  const handleFocusNode = useCallback(
+    (nodeId: string) => {
+      setSelectedNodeId(nodeId);
+      const target =
+        nodes.find((n) => n.id === nodeId) || racks.find((r) => r.id === nodeId);
+      if (!target) return;
+
+      const currentScale = useCameraStore.getState().viewport.scale;
+      const targetScale = Math.max(currentScale, 0.035);
+
+      const canvasLeft = isPaletteOpen ? 320 : isTopologyOpen ? 420 : 48;
+      const canvasWidth = typeof window !== "undefined" ? window.innerWidth - canvasLeft - 384 : 800;
+      const canvasHeight = typeof window !== "undefined" ? window.innerHeight - 56 : 600;
+
+      const panX = canvasLeft + canvasWidth / 2 - target.xMm * targetScale;
+      const panY = 56 + canvasHeight / 2 - target.yMm * targetScale;
+
+      useCameraStore.getState().setViewport({ panX, panY, scale: targetScale });
+    },
+    [nodes, racks, isPaletteOpen, isTopologyOpen]
+  );
+
   const handleSelectNode = (node: NodeDisplay) => {
     setSelectedNodeId(node.id);
     if (node.type === "WALL_OUTLET") {
@@ -1532,15 +1556,44 @@ export default function NetFloorApp() {
         {/* Palette d'Équipements Escamotable avec bouton Paramètres DSI en bas à gauche */}
         <EquipmentPalette
           isOpen={isPaletteOpen}
-          onToggle={() => setIsPaletteOpen((prev) => !prev)}
+          onToggle={() => {
+            setIsPaletteOpen((prev) => !prev);
+            if (!isPaletteOpen) setIsTopologyOpen(false);
+          }}
           onAddItem={handleAddItemFromPalette}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
+          onOpenTopology={() => {
+            setIsTopologyOpen((prev) => !prev);
+            if (!isTopologyOpen) setIsPaletteOpen(false);
+          }}
+          isTopologyOpen={isTopologyOpen}
           vlanStyles={vlanStyles}
         />
 
+        {/* Panneau de Topologie Réseau DSI Escamotable */}
+        {isTopologyOpen && (
+          <div className="absolute top-0 bottom-0 left-12 w-[420px] bg-slate-950 border-r border-slate-800 shadow-2xl z-20 flex flex-col animate-in fade-in slide-in-from-left duration-200">
+            <NetworkTopologyPanel
+              racks={racks}
+              nodes={nodes}
+              cables={cables}
+              vlanStyles={vlanStyles}
+              onClose={() => setIsTopologyOpen(false)}
+              onSelectNode={(node) => {
+                handleSelectNode(node);
+              }}
+              onFocusNode={(nodeId) => {
+                handleFocusNode(nodeId);
+              }}
+            />
+          </div>
+        )}
+
         {/* Main Canvas Area avec support Glisser-Déposer depuis la palette */}
         <div
-          className={`flex-1 h-full relative transition-all duration-300 ${isPaletteOpen ? "ml-80" : "ml-12"}`}
+          className={`flex-1 h-full relative transition-all duration-300 ${
+            isPaletteOpen ? "ml-80" : isTopologyOpen ? "ml-[420px]" : "ml-12"
+          }`}
           onDragOver={(e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "copy";

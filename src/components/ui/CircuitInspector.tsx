@@ -380,6 +380,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [editingDeviceName, setEditingDeviceName] = useState("");
   const [editingDeviceSlotU, setEditingDeviceSlotU] = useState(24);
   const [editingDeviceUSize, setEditingDeviceUSize] = useState(1);
+  const [addDeviceError, setAddDeviceError] = useState<string | null>(null);
+  const [editDeviceError, setEditDeviceError] = useState<string | null>(null);
 
   // État pour le renommage et dimensions de la baie
   const [isEditingRackName, setIsEditingRackName] = useState(false);
@@ -2258,13 +2260,60 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const sortedRackDevices = [...rackDevices].sort((a, b) => b.slotU - a.slotU);
     const switchDevices = sortedRackDevices.filter((d) => d.deviceType === "SWITCH");
 
+    // Vérifie si un équipement chevauche un slot U déjà occupé
+    // Un équipement de position slotU et taille uSize occupe les slots [slotU - uSize + 1, slotU]
+    const findSlotCollision = (candidateSlot: number, candidateSize: number, ignoreDeviceId?: string): RackDeviceItem | null => {
+      const candMin = candidateSlot - candidateSize + 1;
+      const candMax = candidateSlot;
+
+      for (const dev of rackDevices) {
+        if (ignoreDeviceId && dev.id === ignoreDeviceId) continue;
+        const devSize = dev.uSize ?? 1;
+        const devMin = dev.slotU - devSize + 1;
+        const devMax = dev.slotU;
+
+        // Condition de chevauchement d'intervalles entiers
+        if (Math.max(candMin, devMin) <= Math.min(candMax, devMax)) {
+          return dev;
+        }
+      }
+      return null;
+    };
+
+    // Trouve le prochain slot U libre en partant du haut
+    const findNextFreeSlot = (size: number = 1): number => {
+      for (let u = totalU; u >= size; u--) {
+        if (!findSlotCollision(u, size)) {
+          return u;
+        }
+      }
+      return 1;
+    };
+
     const handleAddRackDevice = (newDev: RackDeviceItem) => {
+      const collision = findSlotCollision(newDev.slotU, newDev.uSize ?? 1);
+      if (collision) {
+        setAddDeviceError(`Le slot U${newDev.slotU} chevauche "${collision.name}" (U${collision.slotU}, ${collision.uSize ?? 1}U).`);
+        return;
+      }
+      setAddDeviceError(null);
       const updated = [...rackDevices, newDev];
       onUpdateNodeProperties?.(selectedNode.id, { devices: updated });
       setIsAddingRackDevice(false);
     };
 
     const handleUpdateRackDevice = (devId: string, updates: Partial<RackDeviceItem>) => {
+      const targetDev = rackDevices.find((d) => d.id === devId);
+      if (!targetDev) return;
+      const finalSlot = updates.slotU ?? targetDev.slotU;
+      const finalSize = updates.uSize ?? (targetDev.uSize ?? 1);
+
+      const collision = findSlotCollision(finalSlot, finalSize, devId);
+      if (collision) {
+        setEditDeviceError(`Le slot U${finalSlot} chevauche "${collision.name}" (U${collision.slotU}, ${collision.uSize ?? 1}U).`);
+        return;
+      }
+      setEditDeviceError(null);
       const updated = rackDevices.map((d) => (d.id === devId ? { ...d, ...updates } : d));
       onUpdateNodeProperties?.(selectedNode.id, { devices: updated });
       setEditingDeviceId(null);
@@ -2530,6 +2579,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   <option value={800}>800 mm</option>
                   <option value={1000}>1000 mm</option>
                   <option value={1200}>1200 mm</option>
+                  <option value={1500}>1500 mm (Grand format)</option>
+                  <option value={1800}>1800 mm (Optimal 42U/48U)</option>
+                  <option value={2100}>2100 mm (Spacieux)</option>
                 </select>
               </div>
 
@@ -2539,9 +2591,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   value={totalU}
                   onChange={(e) => {
                     const u = Number(e.target.value);
+                    const minDepth = Math.max(1000, 320 + u * 36);
                     onUpdateNodeProperties?.(selectedNode.id, {
                       uHeight: u,
                       subType: u <= 18 ? "RACK_18U" : "RACK_42U",
+                      heightMm: Math.max(rackDepthMm, minDepth),
                     });
                   }}
                   className="w-full bg-slate-900 border border-purple-500/50 text-purple-300 font-bold rounded px-1.5 py-0.5 text-[10px]"
@@ -3009,8 +3063,14 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     </button>
                     <button
                       onClick={() => {
-                        setIsAddingRackDevice(!isAddingRackDevice);
-                        setNewDeviceName(`SW-ACCESS-${sortedRackDevices.length + 1}`);
+                        const nextState = !isAddingRackDevice;
+                        setIsAddingRackDevice(nextState);
+                        if (nextState) {
+                          setNewDeviceName(`SW-ACCESS-${sortedRackDevices.length + 1}`);
+                          setNewDeviceSlotU(findNextFreeSlot(1));
+                          setNewDeviceUSize(1);
+                          setAddDeviceError(null);
+                        }
                       }}
                       className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[10px] font-medium flex items-center gap-1 transition"
                       title="Ajouter manuellement un équipement au rack"
@@ -3136,9 +3196,19 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       </div>
                     </div>
 
+                    {addDeviceError && (
+                      <div className="p-2 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-mono flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-400 flex-shrink-0 animate-ping" />
+                        <span>{addDeviceError}</span>
+                      </div>
+                    )}
+
                     <div className="flex justify-end gap-1.5 pt-1">
                       <button
-                        onClick={() => setIsAddingRackDevice(false)}
+                        onClick={() => {
+                          setIsAddingRackDevice(false);
+                          setAddDeviceError(null);
+                        }}
                         className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
                       >
                         Annuler
@@ -3191,7 +3261,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         className="p-2 bg-slate-950 rounded border border-slate-800 hover:border-slate-700 transition space-y-1 group"
                       >
                         {editingDeviceId === dev.id ? (
-                          <div className="space-y-2 p-1 bg-slate-900/60 rounded border border-purple-500/40">
+                          <div className="space-y-2 p-1.5 bg-slate-900/60 rounded border border-purple-500/40">
                             <div className="flex items-center gap-1.5">
                               <input
                                 type="text"
@@ -3207,13 +3277,19 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                                   min={1}
                                   max={totalU}
                                   value={editingDeviceSlotU}
-                                  onChange={(e) => setEditingDeviceSlotU(Number(e.target.value))}
+                                  onChange={(e) => {
+                                    setEditingDeviceSlotU(Number(e.target.value));
+                                    setEditDeviceError(null);
+                                  }}
                                   className="w-12 bg-slate-950 border border-slate-700 rounded px-1 py-1 text-purple-300 font-mono text-[10px]"
                                 />
                                 <label className="text-[9px] text-slate-400">Taille</label>
                                 <select
                                   value={editingDeviceUSize}
-                                  onChange={(e) => setEditingDeviceUSize(Number(e.target.value))}
+                                  onChange={(e) => {
+                                    setEditingDeviceUSize(Number(e.target.value));
+                                    setEditDeviceError(null);
+                                  }}
                                   className="bg-slate-950 border border-slate-700 rounded px-1 py-1 text-slate-200 text-[10px]"
                                 >
                                   <option value={1}>1U</option>
@@ -3223,9 +3299,17 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                                 </select>
                               </div>
                             </div>
+                            {editDeviceError && (
+                              <div className="p-1.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[9px] font-mono">
+                                ⚠️ {editDeviceError}
+                              </div>
+                            )}
                             <div className="flex justify-end gap-1">
                               <button
-                                onClick={() => setEditingDeviceId(null)}
+                                onClick={() => {
+                                  setEditingDeviceId(null);
+                                  setEditDeviceError(null);
+                                }}
                                 className="px-2 py-0.5 bg-slate-800 text-slate-400 hover:text-white rounded text-[10px]"
                               >
                                 Annuler
