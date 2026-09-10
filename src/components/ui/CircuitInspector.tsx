@@ -10,7 +10,11 @@ import {
   StackedPortItem,
   getDeskSeatCount,
   getDefaultSeatLabels,
+  RackDeviceItem,
+  RackDeviceBrand,
+  RackDeviceType,
 } from "@/components/canvas/EquipmentLayer";
+import { CloudSwitchDiscoveryModal } from "./CloudSwitchDiscoveryModal";
 import { ENTERPRISE_DIRECTORY } from "@/data/directory";
 import {
   Zap,
@@ -46,9 +50,90 @@ import {
   Trash2,
   Tag,
   ArrowLeftRight,
+  X,
+  Edit3,
+  Cloud,
+  PlusCircle,
 } from "lucide-react";
 import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
+
+export const DEFAULT_RACK_DEVICES: RackDeviceItem[] = [
+  {
+    id: "dev-sw-aruba-01",
+    name: "SW-ARUBA-2930F-24G",
+    slotU: 24,
+    uSize: 1,
+    deviceType: "SWITCH",
+    brand: "ARUBA",
+    model: "Aruba 2930F 24G PoE+ 4SFP+ 370W",
+    ipAddress: "10.42.0.21",
+    macAddress: "B4:0C:25:88:1A:01",
+    status: "ONLINE",
+    portsCount: 24,
+    cloudManagedBy: "ARUBA_CENTRAL",
+  },
+  {
+    id: "dev-sw-zyxel-01",
+    name: "SW-ZYXEL-GS1920-24HP",
+    slotU: 22,
+    uSize: 1,
+    deviceType: "SWITCH",
+    brand: "ZYXEL_NEBULA",
+    model: "Zyxel GS1920-24HP NebulaFlex 24-Port GbE PoE+ 375W",
+    ipAddress: "10.42.0.22",
+    macAddress: "BC:CF:4F:91:02:44",
+    status: "ONLINE",
+    portsCount: 24,
+    cloudManagedBy: "NEBULA_CLOUD",
+  },
+  {
+    id: "dev-pp-01",
+    name: "PP-24P-CAT6A (U20)",
+    slotU: 20,
+    uSize: 1,
+    deviceType: "PATCH_PANEL",
+    brand: "GENERIC",
+    model: "Panneau de Brassage 24 Ports RJ45 STP Blindé",
+    status: "SYNCED",
+    portsCount: 24,
+  },
+  {
+    id: "dev-fw-01",
+    name: "FW-FORTIGATE-100F (U15)",
+    slotU: 15,
+    uSize: 1,
+    deviceType: "FIREWALL",
+    brand: "FORTINET",
+    model: "Fortinet FortiGate 100F Next-Gen Firewall",
+    ipAddress: "10.42.0.1",
+    macAddress: "70:4C:A5:11:22:33",
+    status: "ONLINE",
+    cloudManagedBy: "FORTICLOUD",
+  },
+  {
+    id: "dev-srv-01",
+    name: "SRV-ESXI-POWEREDGE (U10)",
+    slotU: 10,
+    uSize: 2,
+    deviceType: "SERVER",
+    brand: "GENERIC",
+    model: "Dell PowerEdge R650 VMware ESXi 8.0",
+    ipAddress: "10.42.0.50",
+    macAddress: "F8:F2:1E:44:55:66",
+    status: "ONLINE",
+  },
+  {
+    id: "dev-pdu-01",
+    name: "PDU-APC-16A (U01)",
+    slotU: 1,
+    uSize: 1,
+    deviceType: "PDU",
+    brand: "GENERIC",
+    model: "Bandeau PDU Ondulé 16A Secouru",
+    status: "ONLINE",
+  },
+];
 
 export interface InternalRackPatch {
   id: string;
@@ -261,7 +346,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [activeStackedPortIdx, setActiveStackedPortIdx] = useState(0);
 
   // État interactif du Menu Baie & Branchements Internes
-  const [rackTab, setRackTab] = useState<"PATCHING" | "EQUIPMENT" | "VLANS">("PATCHING");
+  const [rackTab, setRackTab] = useState<"PATCHING" | "EQUIPMENT" | "VLANS">("EQUIPMENT");
   const [rackVlanFilter, setRackVlanFilter] = useState<string>("ALL");
   const [rackPatches, setRackPatches] = useState<InternalRackPatch[]>(DEFAULT_RACK_PATCHES);
   const [isAddingPatch, setIsAddingPatch] = useState(false);
@@ -269,6 +354,23 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [newPatchTargetPort, setNewPatchTargetPort] = useState("Gi1/0/8");
   const [newPatchVlan, setNewPatchVlan] = useState(20);
   const [newPatchRole, setNewPatchRole] = useState("Poste Travail Flex (Data)");
+
+  // État pour la découverte Cloud / SNMP et gestion dynamique des équipements raqués
+  const [isCloudDiscoveryOpen, setIsCloudDiscoveryOpen] = useState(false);
+  const [isAddingRackDevice, setIsAddingRackDevice] = useState(false);
+  const [newDeviceName, setNewDeviceName] = useState("");
+  const [newDeviceSlotU, setNewDeviceSlotU] = useState(24);
+  const [newDeviceType, setNewDeviceType] = useState<RackDeviceType>("SWITCH");
+  const [newDeviceBrand, setNewDeviceBrand] = useState<RackDeviceBrand>("ARUBA");
+  const [newDeviceModel, setNewDeviceModel] = useState("");
+  const [newDeviceIp, setNewDeviceIp] = useState("10.42.0.25");
+  const [newDevicePorts, setNewDevicePorts] = useState(24);
+  const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+  const [editingDeviceName, setEditingDeviceName] = useState("");
+
+  // État pour le renommage de la baie
+  const [isEditingRackName, setIsEditingRackName] = useState(false);
+  const [tempRackName, setTempRackName] = useState("");
 
   // Sécuriser l'index du port actif pour le slot multi-ports
   const safeStackedPortIdx = useMemo(() => {
@@ -521,54 +623,56 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
   // Sélecteur de mode : Consultation (Lecture seule / Télémétrie rapide) vs Modification (Édition complète)
   const renderModeBanner = () => (
-    <div className="flex items-center justify-between p-2 mb-2.5 bg-slate-900/90 border border-slate-800 rounded-lg flex-shrink-0">
-      <div className="flex items-center gap-2">
-        <div
-          className={`w-2 h-2 rounded-full ${
-            inspectorMode === "VIEW" ? "bg-emerald-400" : "bg-sky-400"
-          } animate-pulse`}
-        />
-        <span className="text-[11px] font-semibold text-slate-200">
-          {inspectorMode === "VIEW" ? "Mode Consultation" : "Mode Modification"}
-        </span>
-        <span className="text-[10px] text-slate-400 hidden sm:inline">
-          {inspectorMode === "VIEW" ? "(Lecture seule)" : "(Édition des paramètres)"}
-        </span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <div className="flex items-center bg-slate-950 p-0.5 rounded-md border border-slate-800">
-          <button
-            onClick={() => setInspectorMode("VIEW")}
-            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors flex items-center gap-1 ${
-              inspectorMode === "VIEW"
-                ? "bg-slate-800 text-emerald-300 font-bold shadow-sm border border-emerald-500/30"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Mode consultation rapide (lecture seule et télémétrie)"
-          >
-            👁️ Consultation
-          </button>
-          <button
-            onClick={() => setInspectorMode("EDIT")}
-            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors flex items-center gap-1 ${
-              inspectorMode === "EDIT"
-                ? "bg-sky-600 text-white font-bold shadow-sm"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-            title="Mode modification (édition des paramètres, câblage, VLAN, ports)"
-          >
-            ✏️ Modification
-          </button>
+    <div className="p-2 mb-2.5 bg-slate-900/90 border border-slate-800 rounded-lg flex-shrink-0 space-y-1.5 overflow-hidden">
+      <div className="flex items-center justify-between gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              inspectorMode === "VIEW" ? "bg-emerald-400" : "bg-sky-400"
+            } animate-pulse`}
+          />
+          <span className="text-[11px] font-semibold text-slate-200 truncate">
+            {inspectorMode === "VIEW" ? "Mode Consultation" : "Mode Modification"}
+          </span>
+          <span className="text-[10px] text-slate-400 truncate hidden xs:inline">
+            {inspectorMode === "VIEW" ? "(Lecture seule)" : "(Édition)"}
+          </span>
         </div>
         {onDeleteNode && selectedNode && (
           <button
             onClick={() => onDeleteNode(selectedNode.id)}
             title="Supprimer cet équipement du plan"
-            className="p-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-200 border border-red-800/50 hover:border-red-600 rounded-md transition"
+            className="px-2 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-200 border border-red-800/50 hover:border-red-600 rounded text-[10px] font-medium transition flex items-center gap-1 flex-shrink-0"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-3 h-3" />
+            <span>Supprimer</span>
           </button>
         )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-1 bg-slate-950 p-0.5 rounded-md border border-slate-800">
+        <button
+          onClick={() => setInspectorMode("VIEW")}
+          className={`py-1 text-[10px] font-medium rounded transition-colors flex items-center justify-center gap-1.5 ${
+            inspectorMode === "VIEW"
+              ? "bg-slate-800 text-emerald-300 font-bold shadow-sm border border-emerald-500/30"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+          title="Mode consultation rapide (lecture seule et télémétrie)"
+        >
+          👁️ Consultation
+        </button>
+        <button
+          onClick={() => setInspectorMode("EDIT")}
+          className={`py-1 text-[10px] font-medium rounded transition-colors flex items-center justify-center gap-1.5 ${
+            inspectorMode === "EDIT"
+              ? "bg-sky-600 text-white font-bold shadow-sm"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+          title="Mode modification (édition des paramètres, câblage, VLAN, ports)"
+        >
+          ✏️ Modification
+        </button>
       </div>
     </div>
   );
@@ -753,6 +857,68 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     <span className="text-emerald-300 font-semibold font-mono">👤 {curPort.assignedPerson}</span>
                   </div>
                 )}
+              </div>
+
+              {/* Raccordement physique au switch / Câblage manuel */}
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Link2 className="w-3.5 h-3.5 text-sky-400" />
+                    Câblage & Raccordement Switch
+                  </span>
+                  <span
+                    className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
+                      selectedNode.isPatched
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                        : "bg-slate-950 text-slate-400 border-slate-800"
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                      }`}
+                    />
+                    {selectedNode.isPatched ? "Raccordé au Switch" : "Non branché"}
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  {selectedNode.isPatched
+                    ? `Câblé vers la baie principale (${selectedNode.connectedSwitchPort || "Gi1/0/1"}). Câble tracé à 90°.`
+                    : "Non relié. Aucun câble n'encombre le plan tant que vous ne décidez pas de le brancher."}
+                </p>
+
+                <div className="pt-0.5">
+                  {selectedNode.isPatched ? (
+                    <button
+                      onClick={() => {
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          isPatched: false,
+                          connectedRackId: undefined,
+                          connectedSwitchPort: undefined,
+                        });
+                      }}
+                      className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Unlink className="w-3.5 h-3.5 text-red-400" />
+                      <span>Débrancher du switch (Masquer le câble)</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          isPatched: true,
+                          connectedRackId: "rack-01",
+                          connectedSwitchPort: "Gi1/0/1",
+                        });
+                      }}
+                      className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-300" />
+                      <span>⚡ Câbler vers la Baie (Afficher le tracé)</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Bouton d'action pour passer en mode édition */}
@@ -1148,6 +1314,89 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               )}
             </div>
 
+            {/* 3b. Carte : Raccordement physique au switch / Câblage manuel */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-sky-400" />
+                  Raccordement Switch & Câblage
+                </span>
+                <span
+                  className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
+                    selectedNode.isPatched
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                      : "bg-slate-950 text-slate-400 border-slate-800"
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                    }`}
+                  />
+                  {selectedNode.isPatched ? "Raccordé" : "Non branché"}
+                </span>
+              </div>
+
+              {selectedNode.isPatched ? (
+                <div className="space-y-2 pt-1 border-t border-slate-800 text-[10px] font-mono">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Baie de destination :</span>
+                    <span className="text-purple-300 font-bold">BAIE-PRINCIPALE-RDC</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Port commutateur :</span>
+                    <select
+                      value={selectedNode.connectedSwitchPort || "Gi1/0/1"}
+                      onChange={(e) =>
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          connectedSwitchPort: e.target.value,
+                        })
+                      }
+                      className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px]"
+                    >
+                      {Array.from({ length: 24 }).map((_, i) => (
+                        <option key={`sw-port-${i}`} value={`Gi1/0/${i + 1}`}>
+                          Gi1/0/{i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => {
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        isPatched: false,
+                        connectedRackId: undefined,
+                        connectedSwitchPort: undefined,
+                      });
+                    }}
+                    className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition mt-1"
+                  >
+                    <Unlink className="w-3.5 h-3.5 text-red-400" />
+                    <span>Débrancher du switch (Masquer le câble)</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1 border-t border-slate-800">
+                  <p className="text-[10px] text-slate-400 leading-tight">
+                    L'équipement n'a pas de câble tiré sur le plateau. Branchez-le pour générer le cheminement orthogonal Cat6A vers la baie.
+                  </p>
+                  <button
+                    onClick={() => {
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        isPatched: true,
+                        connectedRackId: "rack-01",
+                        connectedSwitchPort: "Gi1/0/1",
+                      });
+                    }}
+                    className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-300" />
+                    <span>⚡ Câbler vers la Baie (Afficher le tracé)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* 4. Bouton Traçage CTE */}
             {onTriggerTrace && (
               <button
@@ -1268,6 +1517,68 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Raccordement physique au switch / Câblage manuel */}
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-sky-400" />
+                  Câblage & Raccordement Switch
+                </span>
+                <span
+                  className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
+                    selectedNode.isPatched
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                      : "bg-slate-950 text-slate-400 border-slate-800"
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                    }`}
+                  />
+                  {selectedNode.isPatched ? "Raccordé au Switch" : "Non branché"}
+                </span>
+              </div>
+
+              <p className="text-[10px] text-slate-400 leading-tight">
+                {selectedNode.isPatched
+                  ? `Câblé vers la baie principale (${selectedNode.connectedSwitchPort || "Gi1/0/1"}). Câble Cat6A tracé à 90°.`
+                  : "Non relié. Aucun câble n'encombre le plan tant que vous ne décidez pas de le brancher."}
+              </p>
+
+              <div className="pt-0.5">
+                {selectedNode.isPatched ? (
+                  <button
+                    onClick={() => {
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        isPatched: false,
+                        connectedRackId: undefined,
+                        connectedSwitchPort: undefined,
+                      });
+                    }}
+                    className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <Unlink className="w-3.5 h-3.5 text-red-400" />
+                    <span>Débrancher du switch (Masquer le câble)</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        isPatched: true,
+                        connectedRackId: "rack-01",
+                        connectedSwitchPort: "Gi1/0/1",
+                      });
+                    }}
+                    className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-300" />
+                    <span>⚡ Câbler vers la Baie (Afficher le tracé)</span>
+                  </button>
+                )}
+              </div>
+            </div>
 
             {/* Bouton d'action pour passer en mode édition */}
             <div className="pt-1">
@@ -1762,6 +2073,89 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
           )}
         </div>
 
+        {/* 2b. Carte : Raccordement physique au switch / Câblage manuel */}
+        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+              <Link2 className="w-3.5 h-3.5 text-sky-400" />
+              Raccordement Switch & Câblage
+            </span>
+            <span
+              className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
+                selectedNode.isPatched
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                  : "bg-slate-950 text-slate-400 border-slate-800"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                }`}
+              />
+              {selectedNode.isPatched ? "Raccordé" : "Non branché"}
+            </span>
+          </div>
+
+          {selectedNode.isPatched ? (
+            <div className="space-y-2 pt-1 border-t border-slate-800 text-[10px] font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Baie de destination :</span>
+                <span className="text-purple-300 font-bold">BAIE-PRINCIPALE-RDC</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Port commutateur :</span>
+                <select
+                  value={selectedNode.connectedSwitchPort || "Gi1/0/1"}
+                  onChange={(e) =>
+                    onUpdateNodeProperties?.(selectedNode.id, {
+                      connectedSwitchPort: e.target.value,
+                    })
+                  }
+                  className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px]"
+                >
+                  {Array.from({ length: 24 }).map((_, i) => (
+                    <option key={`sw-port-single-${i}`} value={`Gi1/0/${i + 1}`}>
+                      Gi1/0/{i + 1}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={() => {
+                  onUpdateNodeProperties?.(selectedNode.id, {
+                    isPatched: false,
+                    connectedRackId: undefined,
+                    connectedSwitchPort: undefined,
+                  });
+                }}
+                className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition mt-1"
+              >
+                <Unlink className="w-3.5 h-3.5 text-red-400" />
+                <span>Débrancher du switch (Masquer le câble)</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2 pt-1 border-t border-slate-800">
+              <p className="text-[10px] text-slate-400 leading-tight">
+                L'équipement n'a pas de câble tiré sur le plateau. Branchez-le pour générer le cheminement orthogonal Cat6A vers la baie.
+              </p>
+              <button
+                onClick={() => {
+                  onUpdateNodeProperties?.(selectedNode.id, {
+                    isPatched: true,
+                    connectedRackId: "rack-01",
+                    connectedSwitchPort: "Gi1/0/1",
+                  });
+                }}
+                className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>⚡ Câbler vers la Baie (Afficher le tracé)</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* 3. Traçage CTE & Circuit Physique */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
@@ -1860,6 +2254,30 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const rackDepthMm = selectedNode.heightMm ?? 1000;
     const connectedOutlets = allNodes.filter((n) => n.type === "WALL_OUTLET");
 
+    const rackDevices: RackDeviceItem[] =
+      selectedNode.devices && selectedNode.devices.length > 0
+        ? selectedNode.devices
+        : DEFAULT_RACK_DEVICES;
+
+    const sortedRackDevices = [...rackDevices].sort((a, b) => b.slotU - a.slotU);
+
+    const handleAddRackDevice = (newDev: RackDeviceItem) => {
+      const updated = [...rackDevices, newDev];
+      onUpdateNodeProperties?.(selectedNode.id, { devices: updated });
+      setIsAddingRackDevice(false);
+    };
+
+    const handleUpdateRackDevice = (devId: string, updates: Partial<RackDeviceItem>) => {
+      const updated = rackDevices.map((d) => (d.id === devId ? { ...d, ...updates } : d));
+      onUpdateNodeProperties?.(selectedNode.id, { devices: updated });
+      setEditingDeviceId(null);
+    };
+
+    const handleDeleteRackDevice = (devId: string) => {
+      const updated = rackDevices.filter((d) => d.id !== devId);
+      onUpdateNodeProperties?.(selectedNode.id, { devices: updated });
+    };
+
     const filteredPatches = rackPatches.filter((p) => {
       if (rackVlanFilter === "ALL") return true;
       return String(p.vlanId) === rackVlanFilter;
@@ -1912,7 +2330,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 <div className="bg-slate-950 p-2 rounded border border-slate-850">
                   <div className="text-slate-400 text-[10px]">Châssis 19" :</div>
                   <div className="text-purple-300 font-bold mt-0.5">
-                    Baie standard 42U
+                    Baie {selectedNode.subType === "RACK_18U" ? "18U" : "42U"} ({rackDevices.length} équipements)
                   </div>
                 </div>
                 <div className="bg-slate-950 p-2 rounded border border-slate-850">
@@ -1937,8 +2355,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 </span>
               </div>
 
-              {/* Filtre VLAN rapide */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px] font-mono">
+              {/* Filtre VLAN rapide sans ascenseur horizontal */}
+              <div className="flex flex-wrap items-center gap-1 py-1 text-[10px] font-mono">
                 {["ALL", "10", "20", "30", "40", "50", "99", "100"].map((v) => (
                   <button
                     key={v}
@@ -2006,16 +2424,68 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         ) : (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* En-tête Baie */}
-        <div className="border-b border-slate-800 pb-3 mb-2 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
-              <Server className="w-4 h-4 text-purple-400 flex-shrink-0" />
-              {selectedNode.name}
-            </span>
-            <span className="text-[10px] font-mono bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30 flex-shrink-0">
-              BAIE 19&quot; (42U)
-            </span>
-          </div>
+            <div className="border-b border-slate-800 pb-3 mb-2 flex-shrink-0">
+              {isEditingRackName ? (
+                <div className="flex items-center gap-1.5 w-full mb-1">
+                  <Server className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={tempRackName}
+                    onChange={(e) => setTempRackName(e.target.value)}
+                    className="flex-1 px-2 py-0.5 bg-slate-900 border border-purple-500 rounded text-slate-100 text-xs font-semibold focus:outline-none"
+                    autoFocus
+                    placeholder="Nom de la baie..."
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && tempRackName.trim()) {
+                        onUpdateNodeProperties?.(selectedNode.id, { name: tempRackName.trim() });
+                        setIsEditingRackName(false);
+                      }
+                      if (e.key === "Escape") setIsEditingRackName(false);
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (tempRackName.trim()) {
+                        onUpdateNodeProperties?.(selectedNode.id, { name: tempRackName.trim() });
+                      }
+                      setIsEditingRackName(false);
+                    }}
+                    className="p-1 bg-purple-600 hover:bg-purple-500 text-white rounded transition"
+                    title="Valider le renommage"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setIsEditingRackName(false)}
+                    className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded transition"
+                    title="Annuler"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <div className="flex items-center gap-1.5 truncate min-w-0">
+                    <Server className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                    <span className="font-semibold text-slate-100 truncate text-xs">
+                      {selectedNode.name}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setTempRackName(selectedNode.name);
+                        setIsEditingRackName(true);
+                      }}
+                      className="p-1 text-slate-400 hover:text-purple-300 transition"
+                      title="Renommer cette baie"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <span className="text-[10px] font-mono bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30 flex-shrink-0">
+                    BAIE 19&quot; ({selectedNode.subType === "RACK_18U" ? 18 : 42}U)
+                  </span>
+                </div>
+              )}
           <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between font-mono">
             <span>
               Châssis : {(rackWidthMm / 1000).toFixed(2)} × {(rackDepthMm / 1000).toFixed(2)} m
@@ -2173,7 +2643,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 )}
 
                 {/* Filtre par VLAN */}
-                <div className="flex items-center gap-1 overflow-x-auto pt-1 pb-0.5 font-mono text-[9px]">
+                <div className="flex items-center gap-1 flex-wrap pt-1 pb-0.5 font-mono text-[9px]">
                   <span className="text-slate-500 flex-shrink-0">Filtrer :</span>
                   {[
                     { id: "ALL", label: "Tous" },
@@ -2285,122 +2755,279 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
           {rackTab === "EQUIPMENT" && (
             <div className="space-y-2">
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-purple-400" />
-                  Élévation Châssis Rack 19&quot; (42U)
-                </span>
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between gap-1.5">
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-purple-400" />
+                      Élévation Châssis Rack ({sortedRackDevices.length} équipements)
+                    </span>
+                    <span className="text-[9px] text-slate-400">
+                      Gestion des commutateurs Aruba, Zyxel, Cisco, PDU & Baie
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setIsCloudDiscoveryOpen(true)}
+                      className="px-2 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded text-[10px] font-medium flex items-center gap-1 transition shadow"
+                      title="Détecter automatiquement les switchs via Aruba Central, Zyxel Nebula Cloud ou SNMP Walk"
+                    >
+                      <Cloud className="w-3 h-3" />
+                      <span>Découverte</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsAddingRackDevice(!isAddingRackDevice);
+                        setNewDeviceName(`SW-ACCESS-${sortedRackDevices.length + 1}`);
+                      }}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[10px] font-medium flex items-center gap-1 transition"
+                      title="Ajouter manuellement un équipement au rack"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>{isAddingRackDevice ? "Fermer" : "Ajouter"}</span>
+                    </button>
+                  </div>
+                </div>
 
+                {/* Formulaire d'ajout manuel d'équipement raqué */}
+                {isAddingRackDevice && (
+                  <div className="p-2.5 bg-slate-950 rounded-lg border border-purple-500/40 space-y-2">
+                    <div className="text-[10px] font-semibold text-purple-300 flex items-center gap-1">
+                      <PlusCircle className="w-3 h-3" />
+                      Nouvel Équipement Raqué
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Nom de l'équipement</label>
+                        <input
+                          type="text"
+                          value={newDeviceName}
+                          onChange={(e) => setNewDeviceName(e.target.value)}
+                          placeholder="Ex: SW-ACCESS-02"
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Emplacement U (1 - 42)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={42}
+                          value={newDeviceSlotU}
+                          onChange={(e) => setNewDeviceSlotU(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Marque / Écosystème</label>
+                        <select
+                          value={newDeviceBrand}
+                          onChange={(e) => setNewDeviceBrand(e.target.value as RackDeviceBrand)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
+                        >
+                          <option value="ARUBA">Aruba / HPE</option>
+                          <option value="ZYXEL">Zyxel Nebula</option>
+                          <option value="CISCO">Cisco Catalyst</option>
+                          <option value="FORTINET">Fortinet FortiGate</option>
+                          <option value="GENERIC">Générique / Autre</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Type de matériel</label>
+                        <select
+                          value={newDeviceType}
+                          onChange={(e) => setNewDeviceType(e.target.value as RackDeviceType)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
+                        >
+                          <option value="SWITCH">Commutateur (Switch)</option>
+                          <option value="PATCH_PANEL">Panneau de Brassage</option>
+                          <option value="FIREWALL">Pare-feu / Routeur</option>
+                          <option value="SERVER">Serveur / ESXi</option>
+                          <option value="PDU">Bandeau PDU / Onduleur</option>
+                          <option value="FIBER_TRAY">Tiroir Optique FTTO</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">Modèle / Référence</label>
+                        <input
+                          type="text"
+                          value={newDeviceModel}
+                          onChange={(e) => setNewDeviceModel(e.target.value)}
+                          placeholder="Ex: CX 6200F 24G PoE+"
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-0.5">
+                          {newDeviceType === "SWITCH" ? "Nb Ports & IP Mgmt" : "Adresse IP Mgmt"}
+                        </label>
+                        <div className="flex gap-1">
+                          {newDeviceType === "SWITCH" && (
+                            <input
+                              type="number"
+                              min={8}
+                              max={48}
+                              value={newDevicePorts}
+                              onChange={(e) => setNewDevicePorts(Number(e.target.value))}
+                              title="Nombre de ports"
+                              className="w-12 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                            />
+                          )}
+                          <input
+                            type="text"
+                            value={newDeviceIp}
+                            onChange={(e) => setNewDeviceIp(e.target.value)}
+                            placeholder="Ex: 10.42.0.25"
+                            className="flex-1 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-1.5 pt-1">
+                      <button
+                        onClick={() => setIsAddingRackDevice(false)}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        onClick={() => {
+                          const newDev: RackDeviceItem = {
+                            id: `dev-${Date.now()}`,
+                            name: newDeviceName.trim() || `DEV-U${newDeviceSlotU}`,
+                            slotU: newDeviceSlotU,
+                            uSize: 1,
+                            deviceType: newDeviceType,
+                            brand: newDeviceBrand,
+                            model: newDeviceModel.trim() || `${newDeviceBrand} Device`,
+                            ipAddress: newDeviceIp.trim() || undefined,
+                            portsCount: newDeviceType === "SWITCH" ? newDevicePorts : undefined,
+                            status: "ONLINE",
+                          };
+                          handleAddRackDevice(newDev);
+                        }}
+                        className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-semibold"
+                      >
+                        Ajouter au rack
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Liste ordonnée des équipements dans le rack */}
                 <div className="space-y-1.5">
-                  {/* U24 Panneau de brassage */}
-                  <div className="p-2 bg-slate-950 rounded border border-blue-500/30 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-blue-400" />
-                        U24 : PP-24P-CAT6A-U24
-                      </span>
-                      <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                        {connectedOutlets.length}/24 brassés
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Panneau RJ45 Cat6A blindé STP • Câblage horizontal des bureaux
-                    </div>
-                  </div>
+                  {sortedRackDevices.map((dev) => {
+                    const isBrandAruba = dev.brand === "ARUBA";
+                    const isBrandZyxel = dev.brand === "ZYXEL";
+                    const isBrandCisco = dev.brand === "CISCO";
+                    const isBrandFortinet = dev.brand === "FORTINET";
 
-                  {/* U22 Switch Cisco */}
-                  <div className="p-2 bg-slate-950 rounded border border-emerald-500/30 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        U22 : SW-ACCESS-4A-U22
-                      </span>
-                      <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
-                        Cisco C9300
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      24 Ports 1GbE PoE+ 370W • Uplink 10GbE SFP+ vers Cœur
-                    </div>
-                  </div>
+                    const brandBadgeColor = isBrandAruba
+                      ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+                      : isBrandZyxel
+                      ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                      : isBrandCisco
+                      ? "text-blue-400 bg-blue-500/10 border-blue-500/30"
+                      : isBrandFortinet
+                      ? "text-rose-400 bg-rose-500/10 border-rose-500/30"
+                      : "text-slate-400 bg-slate-800 border-slate-700";
 
-                  {/* U20 Switch d'agrégation */}
-                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                        U20 : SW-DISTRIB-4B
-                      </span>
-                      <span className="text-[9px] font-mono text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">
-                        48P 10GbE
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Commutateur de distribution & agrégation LACP 802.1AX
-                    </div>
-                  </div>
+                    return (
+                      <div
+                        key={dev.id}
+                        className="p-2 bg-slate-950 rounded border border-slate-800 hover:border-slate-700 transition space-y-1 group"
+                      >
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
+                            <span className="font-mono text-purple-300 font-bold bg-purple-950/60 px-1 py-0.5 rounded text-[10px] border border-purple-800/40">
+                              U{String(dev.slotU).padStart(2, "0")}
+                            </span>
 
-                  {/* U15 Pare-feu Fortinet */}
-                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-rose-400" />
-                        U15 : FW-FORTIGATE-100F
-                      </span>
-                      <span className="text-[9px] font-mono text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
-                        Next-Gen
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Pare-feu périmétrique, VPN IPsec & inspection SSL
-                    </div>
-                  </div>
+                            {editingDeviceId === dev.id ? (
+                              <div className="flex items-center gap-1 flex-1">
+                                <input
+                                  type="text"
+                                  value={editingDeviceName}
+                                  onChange={(e) => setEditingDeviceName(e.target.value)}
+                                  className="bg-slate-900 border border-purple-500 rounded px-1 py-0.5 text-slate-100 font-mono text-[10px] flex-1"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      handleUpdateRackDevice(dev.id, { name: editingDeviceName.trim() || dev.name });
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => handleUpdateRackDevice(dev.id, { name: editingDeviceName.trim() || dev.name })}
+                                  className="text-emerald-400 hover:text-emerald-300 p-0.5"
+                                  title="Valider"
+                                >
+                                  <Check className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="font-mono text-slate-200 font-semibold truncate flex items-center gap-1">
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    dev.status === "ONLINE" ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                                  }`}
+                                />
+                                <span className="truncate">{dev.name}</span>
+                                <button
+                                  onClick={() => {
+                                    setEditingDeviceId(dev.id);
+                                    setEditingDeviceName(dev.name);
+                                  }}
+                                  className="text-slate-600 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition p-0.5"
+                                  title="Renommer cet équipement"
+                                >
+                                  <Edit3 className="w-2.5 h-2.5" />
+                                </button>
+                              </span>
+                            )}
+                          </div>
 
-                  {/* U10 Serveur ESXi */}
-                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                        U10 : SRV-ESXI-POWEREDGE
-                      </span>
-                      <span className="text-[9px] font-mono text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
-                        VMware ESXi
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Serveur applicatif DSI, contrôleur AD DC & DNS local
-                    </div>
-                  </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <span className={`text-[8px] font-mono px-1 py-0.5 rounded border uppercase ${brandBadgeColor}`}>
+                              {dev.brand ?? "GENERIC"}
+                            </span>
+                            {dev.cloudManaged && (
+                              <span
+                                className="text-[8px] font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1 py-0.5 rounded flex items-center gap-0.5"
+                                title="Géré et synchronisé dans le Cloud"
+                              >
+                                <Cloud className="w-2.5 h-2.5" />
+                                Cloud
+                              </span>
+                            )}
+                            <button
+                              onClick={() => handleDeleteRackDevice(dev.id)}
+                              className="text-slate-600 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+                              title="Retirer cet équipement du rack"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
 
-                  {/* U05 Tiroir optique FTTO */}
-                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-amber-400" />
-                        U05 : Tiroir Optique FTTO
-                      </span>
-                      <span className="text-[9px] font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                        Fibre Orange
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Arrivée opérateur Fibre Dédiée 1 Gbps symétrique GTR 4H
-                    </div>
-                  </div>
-
-                  {/* U01 PDU */}
-                  <div className="p-2 bg-slate-950 rounded border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-mono text-slate-200 font-semibold flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-amber-400" />
-                        U01 : PDU-APC-16A
-                      </span>
-                      <span className="text-[9px] font-mono text-amber-400">230V Ondulé</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Alimentation secourue sur onduleur centralisé
-                    </div>
-                  </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                          <span className="truncate">{dev.model}</span>
+                          <span className="font-mono text-[9px] text-slate-500 flex-shrink-0 ml-1">
+                            {dev.ipAddress ? dev.ipAddress : dev.deviceType}
+                            {dev.portsCount ? ` • ${dev.portsCount}P` : ""}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -2589,6 +3216,16 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         </div>
       </div>
     )}
+
+    {/* Modal de découverte switchs Cloud (Aruba Central, Nebula, SNMP) */}
+    <CloudSwitchDiscoveryModal
+      isOpen={isCloudDiscoveryOpen}
+      onClose={() => setIsCloudDiscoveryOpen(false)}
+      rackName={selectedNode.name}
+      rackUHeight={42}
+      existingDevices={rackDevices}
+      onAddDeviceToRack={handleAddRackDevice}
+    />
   </div>
 );
 }

@@ -102,11 +102,11 @@ export function saveStoredVlanStyles(styles: Record<number, VlanStyle>): void {
 export function getKonvaStrokeConfig(style?: VlanStyle, isHighlighted?: boolean) {
   const color = isHighlighted ? "#38bdf8" : (style?.color ?? "#3b82f6");
 
-  let baseWidth = 42;
-  if (style?.thickness === "FINE") baseWidth = 22;
-  else if (style?.thickness === "THICK") baseWidth = 68;
+  let baseWidth = 14;
+  if (style?.thickness === "FINE") baseWidth = 8;
+  else if (style?.thickness === "THICK") baseWidth = 22;
 
-  const strokeWidth = isHighlighted ? baseWidth + 26 : baseWidth;
+  const strokeWidth = isHighlighted ? baseWidth + 6 : baseWidth;
 
   let dash: number[] | undefined = undefined;
   if (style?.strokePattern === "DASHED") {

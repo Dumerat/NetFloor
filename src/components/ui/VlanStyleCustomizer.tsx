@@ -73,7 +73,7 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
           <span className="text-[10px] text-slate-400 font-mono block">
             Sélectionner le VLAN à personnaliser :
           </span>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 font-mono text-[10px]">
+          <div className="flex flex-wrap items-center gap-1.5 py-1 font-mono text-[10px]">
             {vlanList.map((vlan) => {
               const isSelected = activeVlanId === vlan.vlanId;
               return (
@@ -168,7 +168,7 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
             </div>
           </div>
           {/* Palette rapide */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+          <div className="flex flex-wrap items-center gap-1.5 py-1">
             {PRESET_VLAN_COLORS.map((preset) => (
               <button
                 key={preset.hex}
