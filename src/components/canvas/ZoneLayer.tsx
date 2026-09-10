@@ -22,6 +22,7 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
     <Group>
       {zones.map((zone) => {
         const isSelected = selectedZoneId === zone.id;
+        const canDrag = isSelected && !zone.isLocked;
         const widthM = (zone.widthMm / 1000).toFixed(1);
         const heightM = (zone.heightMm / 1000).toFixed(1);
         const areaM2 = Math.round((zone.widthMm * zone.heightMm) / 1000000);
@@ -32,29 +33,32 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
             key={zone.id}
             x={zone.xMm}
             y={zone.yMm}
-            draggable={!zone.isLocked}
-            onClick={() => onSelectZone?.(zone)}
-            onTap={() => onSelectZone?.(zone)}
+            draggable={canDrag}
+            onDragStart={(e: KonvaEventObject<DragEvent>) => {
+              e.cancelBubble = true;
+            }}
             onDragEnd={(e: KonvaEventObject<DragEvent>) => {
+              e.cancelBubble = true;
               onZoneMoveEnd?.(zone.id, {
                 x: Math.round(e.target.x()),
                 y: Math.round(e.target.y()),
               });
             }}
           >
-            {/* 1. Rectangle d emprise de zone avec fond teinte semi-transparent */}
+            {/* 1. Rectangle d'emprise de zone : listening uniquement si sélectionnée, sinon laisse passer les clics pour le scroll/pan du canvas */}
             <Rect
               width={zone.widthMm}
               height={zone.heightMm}
               fill={zone.color}
-              opacity={isSelected ? Math.min(1, (zone.opacity ?? 0.12) + 0.08) : zone.opacity ?? 0.12}
+              opacity={isSelected ? Math.min(1, (zone.opacity ?? 0.12) + 0.08) : (zone.opacity ?? 0.12)}
               cornerRadius={24}
               stroke={isSelected ? "#ffffff" : zone.color}
               strokeWidth={isSelected ? 60 : 35}
               dash={isSelected ? [120, 60] : [80, 50]}
+              listening={isSelected}
             />
 
-            {/* 2. Lisere interieur pour finition architecturale */}
+            {/* 2. Liseré intérieur architectural */}
             <Rect
               x={40}
               y={40}
@@ -67,16 +71,43 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
               listening={false}
             />
 
-            {/* 3. Cartouche d en-tete de zone (titre, dimensions et surface) */}
-            <Group x={60} y={60} listening={false}>
-              {/* Fond du badge */}
+            {/* 3. Cartouche d'en-tête de zone : toujours interactif pour permettre la sélection au clic */}
+            <Group
+              x={60}
+              y={60}
+              listening={true}
+              onClick={(e) => {
+                e.cancelBubble = true;
+                onSelectZone?.(zone);
+              }}
+              onTap={(e) => {
+                e.cancelBubble = true;
+                onSelectZone?.(zone);
+              }}
+              onMouseEnter={(e) => {
+                const stage = e.target.getStage();
+                if (stage) {
+                  stage.container().style.cursor = isSelected ? "move" : "pointer";
+                }
+              }}
+              onMouseLeave={(e) => {
+                const stage = e.target.getStage();
+                if (stage) {
+                  stage.container().style.cursor = "grab";
+                }
+              }}
+            >
+              {/* Fond du badge cartouche */}
               <Rect
                 width={Math.min(zone.widthMm - 120, 2600)}
                 height={550}
-                fill="rgba(15, 23, 42, 0.92)"
-                stroke={zone.color}
-                strokeWidth={16}
+                fill="rgba(15, 23, 42, 0.94)"
+                stroke={isSelected ? "#38bdf8" : zone.color}
+                strokeWidth={isSelected ? 24 : 16}
                 cornerRadius={14}
+                shadowColor="#000000"
+                shadowBlur={isSelected ? 30 : 15}
+                shadowOpacity={0.6}
               />
 
               {/* Pastille de couleur du service */}
@@ -87,9 +118,10 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
                 height={390}
                 fill={zone.color}
                 cornerRadius={8}
+                listening={false}
               />
 
-              {/* Nom du service / pole */}
+              {/* Nom du service / pôle */}
               <Text
                 x={140}
                 y={65}
@@ -101,9 +133,10 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
                 fill="#ffffff"
                 wrap="none"
                 ellipsis={true}
+                listening={false}
               />
 
-              {/* Sous-titre : dimensions, surface metrique et code service */}
+              {/* Sous-titre : dimensions, surface métrique et code service */}
               <Text
                 x={140}
                 y={280}
@@ -111,13 +144,28 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
                 text={subText}
                 fontSize={120}
                 fontFamily="monospace"
-                fill={zone.color}
+                fill={isSelected ? "#38bdf8" : zone.color}
                 wrap="none"
                 ellipsis={true}
+                listening={false}
               />
+
+              {/* Indicateur d'état */}
+              {isSelected && (
+                <Text
+                  x={Math.min(zone.widthMm - 120, 2600) - 520}
+                  y={190}
+                  text={zone.isLocked ? "🔒 FIXE" : "✥ DÉPLACER"}
+                  fontSize={100}
+                  fontFamily="monospace"
+                  fontStyle="bold"
+                  fill="#38bdf8"
+                  listening={false}
+                />
+              )}
             </Group>
 
-            {/* Repere de coin inferieur droit */}
+            {/* Repère de coin inférieur droit */}
             <Line
               points={[
                 zone.widthMm - 250, zone.heightMm - 50,

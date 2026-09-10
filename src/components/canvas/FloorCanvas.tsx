@@ -32,6 +32,7 @@ interface FloorCanvasProps {
   cableFilterMode?: CableFilterMode | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
   showAllLabels?: boolean | undefined;
+  onDeselectAll?: (() => void) | undefined;
   onSelectOutlet: (node: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onNodeContextMenu?: ((node: NodeDisplay, pos: { x: number; y: number }) => void) | undefined;
@@ -57,6 +58,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   cableFilterMode = "ALL",
   vlanStyles,
   showAllLabels = false,
+  onDeselectAll,
   onSelectOutlet,
   onSelectNode,
   onNodeContextMenu,
@@ -211,6 +213,17 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
         draggable={true} // Pan natif GPU Konva 60 FPS
         onDragEnd={handleStageDragEnd}
         onWheel={handleWheel}
+        onClick={(e) => {
+          // Si on clique directement sur le fond vide du Stage (ou sur la grille)
+          if (e.target === e.target.getStage()) {
+            onDeselectAll?.();
+          }
+        }}
+        onTap={(e) => {
+          if (e.target === e.target.getStage()) {
+            onDeselectAll?.();
+          }
+        }}
       >
         {/* Calque 1 : Grille Métrique (listening={false} pour 0 overhead hit-canvas) */}
         <Layer listening={false}>
