@@ -94,15 +94,7 @@ function simplifyOrthogonalPoints(raw: number[]): number[] {
   return result;
 }
 
-interface SegmentHandle {
-  id: string;
-  cableId: string;
-  waypointIndex: number;
-  axis: "X" | "Y"; // "X": segment vertical déplaçable en X; "Y": segment horizontal déplaçable en Y
-  midX: number;
-  midY: number;
-  length: number;
-}
+
 
 const CableLayerComponent: FC<CableLayerProps> = ({
   cables,
@@ -150,57 +142,45 @@ const CableLayerComponent: FC<CableLayerProps> = ({
 
         // Construction du tracé orthogonal strict
         let points: number[] = [];
-        const handles: SegmentHandle[] = [];
 
         if (cable.cableType === "HORIZONTAL_RUN") {
           const wps = cable.waypoints && cable.waypoints.length > 0 ? cable.waypoints : [];
 
-          // 1. Génération des sommets orthogonaux
-          points = [cable.sourcePos.x, cable.sourcePos.y];
-          for (let i = 0; i < wps.length; i++) {
-            const wp = wps[i]!;
+          if (wps.length === 0) {
+            // Par défaut : monte depuis la prise (Sx, Sy) jusqu'à hauteur de la baie (Sx, Ty), puis file horizontalement vers la baie (Tx, Ty)
+            points = [
+              cable.sourcePos.x,
+              cable.sourcePos.y,
+              cable.sourcePos.x,
+              cable.targetPos.y,
+              cable.targetPos.x,
+              cable.targetPos.y,
+            ];
+          } else {
+            // Tracé passant par les waypoints définis
+            points = [cable.sourcePos.x, cable.sourcePos.y];
+            for (let i = 0; i < wps.length; i++) {
+              const wp = wps[i]!;
+              const lastX = points[points.length - 2] ?? cable.sourcePos.x;
+              const lastY = points[points.length - 1] ?? cable.sourcePos.y;
+
+              // Raccordement orthogonal strict si pas aligné
+              if (Math.abs(lastX - wp.x) > 1 && Math.abs(lastY - wp.y) > 1) {
+                points.push(lastX, wp.y);
+              }
+              points.push(wp.x, wp.y);
+            }
+
             const lastX = points[points.length - 2] ?? cable.sourcePos.x;
             const lastY = points[points.length - 1] ?? cable.sourcePos.y;
-
-            if (Math.abs(lastX - wp.x) > 1 && Math.abs(lastY - wp.y) > 1) {
-              points.push(lastX, wp.y);
+            if (Math.abs(lastX - cable.targetPos.x) > 1 && Math.abs(lastY - cable.targetPos.y) > 1) {
+              points.push(lastX, cable.targetPos.y);
             }
-            points.push(wp.x, wp.y);
+            points.push(cable.targetPos.x, cable.targetPos.y);
           }
-
-          const lastX = points[points.length - 2] ?? cable.sourcePos.x;
-          const lastY = points[points.length - 1] ?? cable.sourcePos.y;
-          if (Math.abs(lastX - cable.targetPos.x) > 1 && Math.abs(lastY - cable.targetPos.y) > 1) {
-            points.push(lastX, cable.targetPos.y);
-          }
-          points.push(cable.targetPos.x, cable.targetPos.y);
 
           // Nettoyage des doublons et alignements colinéaires
           points = simplifyOrthogonalPoints(points);
-
-          // 2. Création des poignées de contrôle mono-axe sur les segments intermédiaires
-          // Chaque waypoint stocké correspond à un coude ou segment modifiable
-          for (let wpIdx = 0; wpIdx < wps.length; wpIdx++) {
-            const wp = wps[wpIdx]!;
-            // Déterminer l'orientation du segment associé :
-            // wpIdx === 0 : contrôle la hauteur du couloir (segment horizontal Y) ou le décalage X
-            // Pour 3 waypoints standard :
-            // wp[0]: hauteur de raccordement / couloir horizontal (déplacement Y)
-            // wp[1]: position de la chute technique verticale (déplacement X)
-            // wp[2]: hauteur d'arrivée baie (déplacement Y)
-            const isVerticalSegment = wpIdx === 1 || (wps.length === 2 && wpIdx === 1);
-            const axis: "X" | "Y" = isVerticalSegment ? "X" : "Y";
-
-            handles.push({
-              id: `handle-${cable.id}-${wpIdx}`,
-              cableId: cable.id,
-              waypointIndex: wpIdx,
-              axis,
-              midX: wp.x,
-              midY: wp.y,
-              length: 60,
-            });
-          }
         } else {
           // Liaison directe droite
           points = [
@@ -209,6 +189,19 @@ const CableLayerComponent: FC<CableLayerProps> = ({
             cable.targetPos.x,
             cable.targetPos.y,
           ];
+        }
+
+        // Identification de tous les angles réels du tracé (excluant le départ sourcePos et l'arrivée targetPos)
+        // Les angles réels du tracé sont aux indices 2..points.length - 4
+        const cornerPoints: { index: number; x: number; y: number }[] = [];
+        if (cable.cableType === "HORIZONTAL_RUN" && points.length >= 6) {
+          for (let i = 2; i <= points.length - 4; i += 2) {
+            const cx = points[i];
+            const cy = points[i + 1];
+            if (cx !== undefined && cy !== undefined) {
+              cornerPoints.push({ index: Math.floor((i - 2) / 2), x: cx, y: cy });
+            }
+          }
         }
 
         // Configuration du style personnalisé du câble (couleur, tirets/pointillés, épaisseur)
@@ -252,40 +245,18 @@ const CableLayerComponent: FC<CableLayerProps> = ({
               }}
             />
 
-            {/* Poignées de contrôle éditables avec contrainte mono-axe 90° (dragBoundFunc) */}
+            {/* Poignées interactives invisibles directement sur les angles réels du tracé */}
             {cable.cableType === "HORIZONTAL_RUN" &&
-              handles.map((h) => {
+              cornerPoints.map((corner) => {
                 return (
                   <Group
-                    key={h.id}
-                    x={h.midX}
-                    y={h.midY}
+                    key={`corner-${cable.id}-${corner.index}`}
+                    x={corner.x}
+                    y={corner.y}
                     draggable={true}
-                    // Règle 2 : dragBoundFunc contraint sur un axe unique selon l'orientation
-                    dragBoundFunc={function (this: any, pos) {
-                      const groupNode = this as any;
-                      const stage = groupNode.getStage();
-                      if (!stage) return pos;
-
-                      // Transformation dans le repère local absolu pour préserver la position axiale fixe
-                      const transform = groupNode.getParent().getAbsoluteTransform().copy().invert();
-                      const localTarget = transform.point(pos);
-
-                      if (h.axis === "X") {
-                        // Segment vertical : se déplace UNIQUEMENT sur l'axe X (Y reste fixé à h.midY)
-                        const constrainedLocal = { x: localTarget.x, y: h.midY };
-                        return groupNode.getParent().getAbsoluteTransform().point(constrainedLocal);
-                      } else {
-                        // Segment horizontal : se déplace UNIQUEMENT sur l'axe Y (X reste fixé à h.midX)
-                        const constrainedLocal = { x: h.midX, y: localTarget.y };
-                        return groupNode.getParent().getAbsoluteTransform().point(constrainedLocal);
-                      }
-                    }}
                     onMouseEnter={(e: KonvaEventObject<MouseEvent>) => {
                       const stage = e.target.getStage();
-                      if (stage) {
-                        stage.container().style.cursor = h.axis === "X" ? "col-resize" : "row-resize";
-                      }
+                      if (stage) stage.container().style.cursor = "grab";
                     }}
                     onMouseLeave={(e: KonvaEventObject<MouseEvent>) => {
                       const stage = e.target.getStage();
@@ -293,30 +264,28 @@ const CableLayerComponent: FC<CableLayerProps> = ({
                     }}
                     onDragStart={(e: KonvaEventObject<DragEvent>) => {
                       const stage = e.target.getStage();
-                      if (stage) {
-                        stage.container().style.cursor = h.axis === "X" ? "col-resize" : "row-resize";
-                      }
+                      if (stage) stage.container().style.cursor = "grabbing";
                       e.cancelBubble = true;
                     }}
                     onDragMove={(e: KonvaEventObject<DragEvent>) => {
                       e.cancelBubble = true;
-                      const newX = h.axis === "X" ? Math.round(e.target.x()) : h.midX;
-                      const newY = h.axis === "Y" ? Math.round(e.target.y()) : h.midY;
-                      onWaypointChange?.(cable.id, h.waypointIndex, { x: newX, y: newY });
+                      onWaypointChange?.(cable.id, corner.index, {
+                        x: Math.round(e.target.x()),
+                        y: Math.round(e.target.y()),
+                      });
                     }}
                     onDragEnd={(e: KonvaEventObject<DragEvent>) => {
                       const stage = e.target.getStage();
-                      if (stage) {
-                        stage.container().style.cursor = h.axis === "X" ? "col-resize" : "row-resize";
-                      }
+                      if (stage) stage.container().style.cursor = "grab";
                       e.cancelBubble = true;
-                      const newX = h.axis === "X" ? Math.round(e.target.x()) : h.midX;
-                      const newY = h.axis === "Y" ? Math.round(e.target.y()) : h.midY;
-                      onWaypointChange?.(cable.id, h.waypointIndex, { x: newX, y: newY });
+                      onWaypointChange?.(cable.id, corner.index, {
+                        x: Math.round(e.target.x()),
+                        y: Math.round(e.target.y()),
+                      });
                     }}
                   >
-                    {/* Zone de préhension tactile invisible et sans saut */}
-                    <Circle radius={32} fill="transparent" />
+                    {/* Zone de préhension tactile invisible directement sur l'angle (zéro point visible) */}
+                    <Circle radius={30} fill="transparent" />
                   </Group>
                 );
               })}

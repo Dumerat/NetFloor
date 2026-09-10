@@ -65,37 +65,12 @@ function CameraScaleIndicator() {
 export function getNaturalCableWaypoints(
   sourcePos: { x: number; y: number },
   targetPos: { x: number; y: number },
-  index: number
+  _index: number
 ): { x: number; y: number }[] {
-  const Sx = sourcePos.x;
-  const Sy = sourcePos.y;
-  const Tx = targetPos.x;
-  const Ty = targetPos.y;
-
-  // Cas 1 : Plateaux de bureaux sur la droite du bâtiment (Sx >= 18000)
-  if (Sx >= 18000) {
-    const corridorY = Sy > 10000 ? 8800 + (index % 10) * 70 : Math.max(2500, Sy - 1500);
-    const chuteX = 14800 + (index % 10) * 50;
-    return [
-      { x: Sx, y: corridorY },       // Coude 1 : Descente verticale directe au-dessus de la prise
-      { x: chuteX, y: corridorY },   // Coude 2 : Virage du couloir de faux-plafond vers la trémie
-      { x: chuteX, y: Ty },          // Coude 3 : Entrée horizontale dans la baie
-    ];
-  }
-
-  // Cas 2 : Prises situées dans ou à proximité du local technique / vers la gauche (Sx < 18000)
-  if (Sx <= Tx) {
-    // La prise est à gauche ou au même niveau que l'entrée de la baie : descente directe à hauteur baie
-    return [
-      { x: Sx, y: Ty },
-    ];
-  }
-
-  // Entre la trémie et la baie (12400 < Sx < 18000)
-  const midX = Math.round((Sx + Tx) / 2);
+  // Cheminement naturel par défaut : le câble monte verticalement depuis la prise
+  // puis part horizontalement direct vers la baie informatique (1 seul angle droit net)
   return [
-    { x: midX, y: Sy },
-    { x: midX, y: Ty },
+    { x: sourcePos.x, y: targetPos.y },
   ];
 }
 
@@ -568,22 +543,7 @@ export default function NetFloorApp() {
         index
       );
       const custom = customWaypoints[cableId];
-      let cableWaypoints: { x: number; y: number }[];
-
-      if (custom && custom.length > 1) {
-        cableWaypoints = custom;
-      } else if (custom && custom.length === 1) {
-        // Migration fluide d'un ancien point unique vers 3 coudes modifiables
-        const chuteX = custom[0]?.x ?? 14800;
-        const corridorY = custom[0]?.y ?? 8800;
-        cableWaypoints = [
-          { x: outlet.xMm, y: corridorY },
-          { x: chuteX, y: corridorY },
-          { x: chuteX, y: targetPos.y },
-        ];
-      } else {
-        cableWaypoints = defaultWaypoints;
-      }
+      const cableWaypoints = custom && custom.length > 0 ? custom : defaultWaypoints;
 
       list.push({
         id: cableId,
@@ -610,10 +570,11 @@ export default function NetFloorApp() {
         const targetCable = cables.find((c) => c.id === cableId);
         let existing = prev[cableId];
         if (!existing || existing.length === 0) {
-          existing = targetCable?.waypoints ? targetCable.waypoints.map((p) => ({ ...p })) : [];
-        }
-        if (existing.length === 0) {
-          existing = [{ x: 14800, y: 8800 }];
+          existing = targetCable?.waypoints && targetCable.waypoints.length > 0
+            ? targetCable.waypoints.map((p) => ({ ...p }))
+            : targetCable
+            ? [{ x: targetCable.sourcePos.x, y: targetCable.targetPos.y }]
+            : [{ x: 14800, y: 8800 }];
         }
 
         const updated = existing.map((p) => ({ ...p }));
@@ -623,6 +584,11 @@ export default function NetFloorApp() {
             x: Math.max(0, Math.round(newPos.x)),
             y: Math.max(0, Math.round(newPos.y)),
           };
+        } else if (waypointIndex === 0 && updated.length === 0) {
+          updated.push({
+            x: Math.max(0, Math.round(newPos.x)),
+            y: Math.max(0, Math.round(newPos.y)),
+          });
         }
 
         return { ...prev, [cableId]: updated };
