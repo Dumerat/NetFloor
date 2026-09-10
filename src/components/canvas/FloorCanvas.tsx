@@ -10,13 +10,19 @@ import {
   snapToOutletDocking,
 } from "@/engine/spatial/snapping";
 import { GridLayer } from "./GridLayer";
+import { ZoneLayer } from "./ZoneLayer";
 import { CableLayer, CableData, CableFilterMode } from "./CableLayer";
 import { EquipmentLayer, RackDisplay, NodeDisplay } from "./EquipmentLayer";
 import { VlanStyle } from "@/data/vlanStyles";
+import { FloorZone } from "@/types/zones";
 
 interface FloorCanvasProps {
   floorWidthMm: number;
   floorHeightMm: number;
+  zones?: FloorZone[] | undefined;
+  selectedZoneId?: string | null | undefined;
+  onSelectZone?: ((zone: FloorZone) => void) | undefined;
+  onZoneMoveEnd?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   racks: RackDisplay[];
   nodes: NodeDisplay[];
   cables: CableData[];
@@ -38,6 +44,10 @@ interface FloorCanvasProps {
 export const FloorCanvas: FC<FloorCanvasProps> = ({
   floorWidthMm,
   floorHeightMm,
+  zones = [],
+  selectedZoneId,
+  onSelectZone,
+  onZoneMoveEnd,
   racks,
   nodes,
   cables,
@@ -208,6 +218,16 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             floorWidthMm={floorWidthMm}
             floorHeightMm={floorHeightMm}
             scale={viewport.scale}
+          />
+        </Layer>
+
+        {/* Calque 1.5 : Zones et Délimitations des Services RH / DSI / Pôles */}
+        <Layer>
+          <ZoneLayer
+            zones={zones}
+            selectedZoneId={selectedZoneId}
+            onSelectZone={onSelectZone}
+            onZoneMoveEnd={onZoneMoveEnd}
           />
         </Layer>
 

@@ -30,6 +30,7 @@ import {
   Phone,
   Laptop,
   Printer,
+  Plug,
   Plus,
   ArrowRight,
   Ruler,
@@ -59,6 +60,7 @@ import {
 } from "lucide-react";
 import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
+import { FloorZone } from "@/types/zones";
 
 export const DEFAULT_RACK_DEVICES: RackDeviceItem[] = [
   {
@@ -301,6 +303,7 @@ export interface CircuitInspectorProps {
   traceResult: CircuitTraceResult | null;
   isLoading: boolean;
   selectedNode: NodeDisplay | null;
+  selectedZone?: FloorZone | null | undefined;
   allNodes: NodeDisplay[];
   desks: NodeDisplay[];
   racks?: RackDisplay[] | undefined;
@@ -313,6 +316,8 @@ export interface CircuitInspectorProps {
   onAddColonnetteToDesk?: ((deskId: string, portsCount?: number | undefined) => void) | undefined;
   onUpdateNodeProperties?: ((nodeId: string, updates: Partial<NodeDisplay>) => void) | undefined;
   onDeleteNode?: ((nodeId: string) => void) | undefined;
+  onUpdateZone?: ((zoneId: string, updates: Partial<FloorZone>) => void) | undefined;
+  onDeleteZone?: ((zoneId: string) => void) | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
   onResetVlanStyles?: (() => void) | undefined;
@@ -322,6 +327,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   traceResult,
   isLoading,
   selectedNode,
+  selectedZone,
   allNodes,
   desks,
   racks,
@@ -334,6 +340,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   onAddColonnetteToDesk,
   onUpdateNodeProperties,
   onDeleteNode,
+  onUpdateZone,
+  onDeleteZone,
   vlanStyles,
   onUpdateVlanStyle,
   onResetVlanStyles,
@@ -771,6 +779,242 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     </div>
   );
 
+  // Cas Spécial : Zone du Plan Sélectionnée (Service, Pôle RH, Tech Lab, Salle, etc.)
+  if (!selectedNode && selectedZone) {
+    const widthM = (selectedZone.widthMm / 1000).toFixed(1);
+    const heightM = (selectedZone.heightMm / 1000).toFixed(1);
+    const areaM2 = Math.round((selectedZone.widthMm * selectedZone.heightMm) / 1000000);
+
+    // Équipements géométriquement contenus dans cette zone
+    const containedDesks = allNodes.filter(
+      (n) =>
+        n.type === "DESK" &&
+        n.xMm >= selectedZone.xMm &&
+        n.xMm <= selectedZone.xMm + selectedZone.widthMm &&
+        n.yMm >= selectedZone.yMm &&
+        n.yMm <= selectedZone.yMm + selectedZone.heightMm
+    );
+
+    const containedOutlets = allNodes.filter(
+      (n) =>
+        n.type === "WALL_OUTLET" &&
+        n.xMm >= selectedZone.xMm &&
+        n.xMm <= selectedZone.xMm + selectedZone.widthMm &&
+        n.yMm >= selectedZone.yMm &&
+        n.yMm <= selectedZone.yMm + selectedZone.heightMm
+    );
+
+    const ZONE_COLOR_PALETTE = [
+      { name: "Bleu Ciel (Tech)", hex: "#0284c7" },
+      { name: "Émeraude (RH / RSE)", hex: "#059669" },
+      { name: "Violet (DSI / Infra)", hex: "#7c3aed" },
+      { name: "Ambre (Support)", hex: "#d97706" },
+      { name: "Indigo (Direction)", hex: "#4f46e5" },
+      { name: "Rose (Marketing)", hex: "#e11d48" },
+      { name: "Cyan (Réseaux)", hex: "#0891b2" },
+    ];
+
+    return (
+      <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
+        {/* Header Zone */}
+        <div className="p-3 mb-2 bg-slate-900/90 border border-slate-800 rounded-lg flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className="w-4 h-4 rounded-md border flex-shrink-0"
+              style={{ backgroundColor: selectedZone.color, borderColor: `${selectedZone.color}80` }}
+            />
+            <div className="min-w-0">
+              <h3 className="text-xs font-bold text-slate-100 truncate">{selectedZone.name}</h3>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Délimitation de Service / Pôle
+              </span>
+            </div>
+          </div>
+          {onDeleteZone && (
+            <button
+              onClick={() => onDeleteZone(selectedZone.id)}
+              title="Supprimer cette zone"
+              className="px-2 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-200 border border-red-800/50 rounded text-[10px] font-medium transition flex items-center gap-1 flex-shrink-0"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Supprimer</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          {/* Fiche Métrique & Superficie */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <Ruler className="w-3.5 h-3.5 text-blue-400" />
+                Dimensions & Superficie
+              </span>
+              <span
+                className="px-2 py-0.5 rounded font-mono font-bold text-[10px] border"
+                style={{
+                  color: selectedZone.color,
+                  borderColor: `${selectedZone.color}40`,
+                  backgroundColor: `${selectedZone.color}15`,
+                }}
+              >
+                {areaM2} m²
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 border-t border-slate-800">
+              <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                <div className="text-slate-400 text-[10px]">Largeur X (m)&nbsp;:</div>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="2"
+                  value={Number(widthM)}
+                  onChange={(e) =>
+                    onUpdateZone?.(selectedZone.id, {
+                      widthMm: Math.max(2000, Math.round(Number(e.target.value) * 1000)),
+                    })
+                  }
+                  className="w-full mt-1 px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="bg-slate-950 p-2 rounded border border-slate-850">
+                <div className="text-slate-400 text-[10px]">Longueur Y (m)&nbsp;:</div>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="2"
+                  value={Number(heightM)}
+                  onChange={(e) =>
+                    onUpdateZone?.(selectedZone.id, {
+                      heightMm: Math.max(2000, Math.round(Number(e.target.value) * 1000)),
+                    })
+                  }
+                  className="w-full mt-1 px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Édition du Nom & Code de Service */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">Nom de la Zone / Pôle&nbsp;:</label>
+              <input
+                type="text"
+                value={selectedZone.name}
+                onChange={(e) => onUpdateZone?.(selectedZone.id, { name: e.target.value })}
+                className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs font-semibold focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Code Service&nbsp;:</label>
+                <input
+                  type="text"
+                  value={selectedZone.serviceCode ?? ""}
+                  placeholder="Ex: TECH, RH..."
+                  onChange={(e) => onUpdateZone?.(selectedZone.id, { serviceCode: e.target.value.toUpperCase() })}
+                  className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Opacité Fond&nbsp;:</label>
+                <select
+                  value={selectedZone.opacity ?? 0.12}
+                  onChange={(e) => onUpdateZone?.(selectedZone.id, { opacity: Number(e.target.value) })}
+                  className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs focus:outline-none focus:border-blue-500 font-mono"
+                >
+                  <option value="0.08">8% (Très léger)</option>
+                  <option value="0.12">12% (Standard)</option>
+                  <option value="0.18">18% (Accent)</option>
+                  <option value="0.25">25% (Soutenu)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Nuancier de couleur du service */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <span className="text-[10px] text-slate-400 block">Thème de couleur du service&nbsp;:</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {ZONE_COLOR_PALETTE.map((theme) => {
+                const isSelected = selectedZone.color.toLowerCase() === theme.hex.toLowerCase();
+                return (
+                  <button
+                    key={theme.hex}
+                    onClick={() => onUpdateZone?.(selectedZone.id, { color: theme.hex })}
+                    style={{ backgroundColor: theme.hex }}
+                    className={`w-7 h-7 rounded-lg transition-transform flex items-center justify-center shadow-md ${
+                      isSelected ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-slate-900" : "hover:scale-105 opacity-80"
+                    }`}
+                    title={theme.name}
+                  >
+                    {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Recensement des Équipements dans la zone */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <span className="text-xs font-semibold text-slate-200 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Building className="w-3.5 h-3.5 text-emerald-400" />
+                Équipements Détectés dans la Zone
+              </span>
+              <span className="font-mono text-[10px] text-slate-400">
+                {containedDesks.length} meuble(s) • {containedOutlets.length} prise(s)
+              </span>
+            </span>
+
+            <div className="space-y-1 max-h-48 overflow-y-auto pr-1 text-[10px]">
+              {containedDesks.length === 0 && containedOutlets.length === 0 ? (
+                <div className="text-slate-500 italic py-2 text-center">
+                  Aucun équipement actuellement dans cette emprise.
+                </div>
+              ) : (
+                <>
+                  {containedDesks.map((d) => (
+                    <div
+                      key={d.id}
+                      onClick={() => onSelectNode?.(d)}
+                      className="p-1.5 rounded bg-slate-950 hover:bg-slate-850 border border-slate-800 flex items-center justify-between cursor-pointer transition"
+                    >
+                      <span className="text-emerald-400 font-medium truncate flex items-center gap-1">
+                        <Monitor className="w-3 h-3 text-slate-500" />
+                        {d.name}
+                      </span>
+                      <span className="text-slate-400 truncate max-w-[120px]">
+                        {d.assignedPerson || "Libre"}
+                      </span>
+                    </div>
+                  ))}
+                  {containedOutlets.map((o) => (
+                    <div
+                      key={o.id}
+                      onClick={() => onSelectNode?.(o)}
+                      className="p-1.5 rounded bg-slate-950 hover:bg-slate-850 border border-slate-800 flex items-center justify-between cursor-pointer transition"
+                    >
+                      <span className="text-sky-400 font-medium truncate flex items-center gap-1">
+                        <Plug className="w-3 h-3 text-slate-500" />
+                        {o.name}
+                      </span>
+                      <span className="font-mono text-slate-500 text-[9px]">
+                        {o.outletRole || "DATA"}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Aucun équipement sélectionné
   if (!selectedNode) {
     return (
@@ -780,7 +1024,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         </div>
         <p className="text-xs font-semibold text-slate-300">Aucun élément sélectionné</p>
         <p className="text-[11px] text-slate-500 mt-1 max-w-xs">
-          Cliquez sur un bureau (RH & Espace), une prise murale, une boîte de sol ou une baie pour configurer ses propriétés réelles.
+          Cliquez sur une zone de service, un bureau (RH & Espace), une prise murale ou une baie pour configurer ses propriétés réelles.
         </p>
       </div>
     );

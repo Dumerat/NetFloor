@@ -13,6 +13,8 @@ import { DeviceTelemetry } from "@/data/settingsStore";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import { NodeDisplay, RackDisplay, RackDeviceItem, OutletRole, StackedPortItem, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
 import { CableData, CableFilterMode } from "@/components/canvas/CableLayer";
+import { FloorDimensionsModal } from "@/components/ui/FloorDimensionsModal";
+import { FloorZone, DEFAULT_ZONES } from "@/types/zones";
 import {
   ZoomIn,
   ZoomOut,
@@ -30,6 +32,7 @@ import {
   Unlink,
   Search,
   AlertCircle,
+  Ruler,
 } from "lucide-react";
 import { screenToWorld } from "@/engine/spatial/matrix";
 import {
@@ -131,6 +134,8 @@ export default function NetFloorApp() {
   const [isTracing, setIsTracing] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isDimensionsModalOpen, setIsDimensionsModalOpen] = useState(false);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [isTopologyOpen, setIsTopologyOpen] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
@@ -257,11 +262,14 @@ export default function NetFloorApp() {
   // Pivots orthogonaux uniques personnalisés déplacés par l'utilisateur à la souris
   const [customPivots, setCustomPivots] = useState<Record<string, { x: number; y: number }>>({});
 
-  // Étage
-  const [floorData] = useState({
+  // Étage & Dimensions configurables
+  const [floorData, setFloorData] = useState({
     widthMm: 60000,
     heightMm: 35000,
   });
+
+  // Zones de services / pôles d'aménagement
+  const [zones, setZones] = useState<FloorZone[]>(DEFAULT_ZONES);
 
   // Baies informatiques (Local Technique DSI)
   const [racks, setRacks] = useState<RackDisplay[]>([
@@ -603,6 +611,55 @@ export default function NetFloorApp() {
     if (fromNodes) return fromNodes;
     return null;
   }, [nodes, racks, selectedNodeId]);
+
+  // Zone actuellement sélectionnée
+  const selectedZone = useMemo(() => {
+    if (!selectedZoneId) return null;
+    return zones.find((z) => z.id === selectedZoneId) ?? null;
+  }, [zones, selectedZoneId]);
+
+  // Actions de manipulation des zones
+  const handleSelectZone = useCallback((zone: FloorZone) => {
+    setSelectedZoneId(zone.id);
+    setSelectedNodeId(null);
+  }, []);
+
+  const handleZoneMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
+    setZones((prev) =>
+      prev.map((z) => (z.id === id ? { ...z, xMm: newPos.x, yMm: newPos.y } : z))
+    );
+  }, []);
+
+  const handleUpdateZone = useCallback((zoneId: string, updates: Partial<FloorZone>) => {
+    setZones((prev) =>
+      prev.map((z) => (z.id === zoneId ? { ...z, ...updates } : z))
+    );
+  }, []);
+
+  const handleDeleteZone = useCallback((zoneId: string) => {
+    setZones((prev) => prev.filter((z) => z.id !== zoneId));
+    setSelectedZoneId((prev) => (prev === zoneId ? null : prev));
+  }, []);
+
+  const handleAddZone = useCallback((newZone?: Partial<FloorZone>) => {
+    const nextIdx = zones.length + 1;
+    const createdZone: FloorZone = {
+      id: `zone-${Date.now()}`,
+      name: newZone?.name || `Zone de Service ${nextIdx}`,
+      serviceCode: newZone?.serviceCode || `S${nextIdx}`,
+      department: newZone?.department,
+      color: newZone?.color || "#0284c7",
+      xMm: newZone?.xMm ?? 15000,
+      yMm: newZone?.yMm ?? 15000,
+      widthMm: newZone?.widthMm ?? 12000,
+      heightMm: newZone?.heightMm ?? 8000,
+      opacity: newZone?.opacity ?? 0.12,
+      description: newZone?.description || "Nouvelle zone de service délimitée.",
+    };
+    setZones((prev) => [...prev, createdZone]);
+    setSelectedZoneId(createdZone.id);
+    setSelectedNodeId(null);
+  }, [zones.length]);
 
   // Calcul dynamique des câbles : regroupement en faisceau par colonnette + baie cible avec décalage ruban parallèle
   const cables: CableData[] = useMemo(() => {
@@ -1711,6 +1768,26 @@ export default function NetFloorApp() {
             <span>Échelle : <CameraScaleIndicator /></span>
           </div>
 
+          {/* Contrôle des Dimensions du Plan de Base */}
+          <button
+            onClick={() => setIsDimensionsModalOpen(true)}
+            title="Modifier la taille du plan (largeur × longueur en mètres)"
+            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 rounded-lg transition flex items-center gap-1.5 text-xs font-mono"
+          >
+            <Ruler className="w-3.5 h-3.5 text-blue-400" />
+            <span>{floorData.widthMm / 1000}m × {floorData.heightMm / 1000}m</span>
+          </button>
+
+          {/* Bouton Création d'une nouvelle Zone */}
+          <button
+            onClick={() => handleAddZone()}
+            title="Créer une nouvelle zone de service ou d'aménagement"
+            className="px-2.5 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 hover:text-emerald-100 border border-emerald-800/50 hover:border-emerald-600 rounded-lg transition flex items-center gap-1.5 text-xs font-sans"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>+ Zone</span>
+          </button>
+
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5">
             <button
               onClick={() => zoomIn()}
@@ -1793,6 +1870,7 @@ export default function NetFloorApp() {
             <InventoryPanel
               nodes={nodes}
               racks={racks}
+              zones={zones}
               vlanStyles={vlanStyles}
               onClose={() => setIsInventoryOpen(false)}
               onSelectNode={(node) => {
@@ -2011,8 +2089,12 @@ export default function NetFloorApp() {
 
           {/* Canvas React-Konva */}
           <DynamicFloorCanvas
-            floorWidthMm={30000}
-            floorHeightMm={20000}
+            floorWidthMm={floorData.widthMm}
+            floorHeightMm={floorData.heightMm}
+            zones={zones}
+            selectedZoneId={selectedZoneId}
+            onSelectZone={handleSelectZone}
+            onZoneMoveEnd={handleZoneMoveEnd}
             racks={racks}
             nodes={nodes}
             cables={cables}
@@ -2022,7 +2104,10 @@ export default function NetFloorApp() {
             vlanStyles={vlanStyles}
             showAllLabels={showAllLabels}
             onSelectOutlet={handleSelectOutlet}
-            onSelectNode={handleSelectNode}
+            onSelectNode={(node) => {
+              setSelectedZoneId(null);
+              handleSelectNode(node);
+            }}
             onNodeContextMenu={handleNodeContextMenu}
             onNodePositionChange={handleNodeMoveEnd}
             onNodeDragMove={handleThrottledNodeDragMove}
@@ -2058,6 +2143,7 @@ export default function NetFloorApp() {
             traceResult={traceResult}
             isLoading={isTracing}
             selectedNode={selectedNode}
+            selectedZone={selectedZone}
             allNodes={nodes}
             desks={desks}
             racks={racks}
@@ -2070,6 +2156,8 @@ export default function NetFloorApp() {
             onAddColonnetteToDesk={handleAddColonnetteToDesk}
             onUpdateNodeProperties={handleUpdateNodeProperties}
             onDeleteNode={handleDeleteNode}
+            onUpdateZone={handleUpdateZone}
+            onDeleteZone={handleDeleteZone}
             vlanStyles={vlanStyles}
             onUpdateVlanStyle={handleUpdateVlanStyle}
             onResetVlanStyles={handleResetVlanStyles}
@@ -2083,6 +2171,18 @@ export default function NetFloorApp() {
         onClose={() => setIsImportModalOpen(false)}
         onSuccess={() => {
           // Callback après import réussi
+        }}
+      />
+
+      {/* 3b. Modal de Personnalisation des Dimensions du Plan de Base */}
+      <FloorDimensionsModal
+        isOpen={isDimensionsModalOpen}
+        onClose={() => setIsDimensionsModalOpen(false)}
+        currentWidthMm={floorData.widthMm}
+        currentHeightMm={floorData.heightMm}
+        onApplyDimensions={(w, h) => {
+          setFloorData({ widthMm: w, heightMm: h });
+          fitFloor(w, h, window.innerWidth, window.innerHeight);
         }}
       />
 

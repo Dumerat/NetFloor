@@ -26,6 +26,7 @@ import {
 } from "@/components/canvas/EquipmentLayer";
 import { ENTERPRISE_DIRECTORY } from "@/data/directory";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
+import { FloorZone } from "@/types/zones";
 
 export type InventoryTab = "USERS" | "DESKS" | "PORTS" | "DEVICES" | "INFRA";
 export type DeviceSubFilter = "ALL" | "PRINTER" | "WIFI" | "CAMERA" | "OTHER";
@@ -33,6 +34,7 @@ export type DeviceSubFilter = "ALL" | "PRINTER" | "WIFI" | "CAMERA" | "OTHER";
 interface InventoryPanelProps {
   nodes: NodeDisplay[];
   racks: RackDisplay[];
+  zones?: FloorZone[] | undefined;
   vlanStyles?: Record<number, VlanStyle>;
   onSelectNode?: (node: NodeDisplay) => void;
   onFocusNode?: (nodeId: string) => void;
@@ -42,6 +44,7 @@ interface InventoryPanelProps {
 export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   nodes,
   racks,
+  zones = [],
   vlanStyles = DEFAULT_VLAN_STYLES,
   onSelectNode,
   onFocusNode,
@@ -942,6 +945,15 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                   ? 1
                   : 0;
 
+                // Trouver la zone contenant ce bureau
+                const parentZone = zones.find(
+                  (z) =>
+                    desk.xMm >= z.xMm &&
+                    desk.xMm <= z.xMm + z.widthMm &&
+                    desk.yMm >= z.yMm &&
+                    desk.yMm <= z.yMm + z.heightMm
+                );
+
                 return (
                   <div
                     key={desk.id}
@@ -954,8 +966,20 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                           <Monitor className="w-4 h-4" />
                         </div>
                         <div>
-                          <div className="text-xs font-semibold text-slate-100 group-hover:text-indigo-300 transition">
-                            {desk.name}
+                          <div className="text-xs font-semibold text-slate-100 group-hover:text-indigo-300 transition flex items-center gap-2">
+                            <span>{desk.name}</span>
+                            {parentZone && (
+                              <span
+                                className="px-1.5 py-0.2 rounded text-[9px] font-sans font-medium border"
+                                style={{
+                                  color: parentZone.color,
+                                  borderColor: `${parentZone.color}40`,
+                                  backgroundColor: `${parentZone.color}15`,
+                                }}
+                              >
+                                {parentZone.name}
+                              </span>
+                            )}
                           </div>
                           <div className="text-[10px] text-slate-400">
                             {desk.subType === "BENCH_QUAD"
