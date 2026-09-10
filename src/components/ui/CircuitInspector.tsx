@@ -349,9 +349,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [rackTab, setRackTab] = useState<"PATCHING" | "EQUIPMENT" | "SWITCHES" | "VLANS">("EQUIPMENT");
   const [rackVlanFilter, setRackVlanFilter] = useState<string>("ALL");
 
-  const availableRacks = useMemo(() => {
+  const availableRacks: RackDisplay[] = useMemo(() => {
     if (racks && racks.length > 0) return racks;
-    const fromNodes = allNodes
+    const fromNodes: RackDisplay[] = allNodes
       .filter((n) => n.type === "PATCH_PANEL" || n.subType === "RACK_42U" || n.subType === "RACK_18U")
       .map((n) => ({
         id: n.id,
@@ -361,11 +361,18 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         widthMm: n.widthMm ?? 800,
         depthMm: n.heightMm ?? 1000,
         uHeight: n.uHeight ?? (n.subType === "RACK_18U" ? 18 : 42),
+        devices: n.devices,
       }));
     return fromNodes.length > 0
       ? fromNodes
-      : [{ id: "rack-01", name: "BAIE-PRINCIPALE-RDC", xMm: 12000, yMm: 14000, widthMm: 800, depthMm: 1000, uHeight: 42 }];
+      : [{ id: "rack-01", name: "BAIE-PRINCIPALE-RDC", xMm: 12000, yMm: 14000, widthMm: 800, depthMm: 1000, uHeight: 42, devices: [] }];
   }, [racks, allNodes]);
+
+  const getSwitchesForRack = (rackId: string | undefined): RackDeviceItem[] => {
+    const targetRack = availableRacks.find((r) => r.id === rackId) ?? availableRacks[0];
+    const devs: RackDeviceItem[] = targetRack?.devices ?? [];
+    return devs.filter((d: RackDeviceItem) => d.deviceType === "SWITCH");
+  };
   const [rackPatches, setRackPatches] = useState<InternalRackPatch[]>(DEFAULT_RACK_PATCHES);
   const [isAddingPatch, setIsAddingPatch] = useState(false);
   const [newPatchSourcePort, setNewPatchSourcePort] = useState("Port 08");
@@ -759,6 +766,14 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       if (!curPort) return null;
       const curPortRole = curPort.outletRole;
 
+      // Résolution dynamique de la baie, du switch et du port pour ce port de colonnette
+      const curPortRackId = curPort.connectedRackId || availableRacks[0]?.id || "rack-01";
+      const curPortRack = availableRacks.find((r) => r.id === curPortRackId) ?? availableRacks[0];
+      const curPortRackSwitches = getSwitchesForRack(curPortRack?.id);
+      const curPortSwitchId = curPort.connectedSwitchId || curPortRackSwitches[0]?.id;
+      const curPortSwitch = curPortRackSwitches.find((s) => s.id === curPortSwitchId) ?? curPortRackSwitches[0];
+      const curPortSwitchPortsCount = curPortSwitch?.portsCount ?? 24;
+
       return (
         <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
           {renderModeBanner()}
@@ -815,6 +830,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     const pVlan = p.vlanId ?? 20;
                     const vColor = vlanStyles?.[pVlan]?.color ?? DEFAULT_VLAN_STYLES[pVlan]?.color ?? "#38bdf8";
                     const isOnline = p.pingStatus === "ONLINE";
+                    const pRack = availableRacks.find((r) => r.id === p.connectedRackId);
+                    const pSwitches = getSwitchesForRack(pRack?.id);
+                    const pSwitch = pSwitches.find((s) => s.id === p.connectedSwitchId) ?? pSwitches[0];
 
                     return (
                       <div
@@ -849,7 +867,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                          <span>{p.ipAddress || "10.42.20.x"}</span>
+                          <span className="truncate max-w-[140px] text-slate-300">
+                            {p.isPatched && pRack
+                              ? `🔌 ${pRack.name} > ${pSwitch ? pSwitch.name : "Switch"} [${p.connectedSwitchPort || "P1"}]`
+                              : "⚪ Non branché"}
+                          </span>
                           <span>{p.assignedPerson ? `👤 ${p.assignedPerson}` : isOnline ? "🟢 3ms" : "🔴 Déconnecté"}</span>
                         </div>
                       </div>
@@ -895,63 +917,65 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 )}
               </div>
 
-              {/* Raccordement physique au switch / Câblage manuel */}
+              {/* Raccordement physique au switch / Câblage pour le port sélectionné */}
               <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
                     <Link2 className="w-3.5 h-3.5 text-sky-400" />
-                    Câblage & Raccordement Switch
+                    Câblage : {curPort.portLabel}
                   </span>
                   <span
                     className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
-                      selectedNode.isPatched
+                      curPort.isPatched
                         ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                         : "bg-slate-950 text-slate-400 border-slate-800"
                     }`}
                   >
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${
-                        selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                        curPort.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
                       }`}
                     />
-                    {selectedNode.isPatched ? "Raccordé au Switch" : "Non branché"}
+                    {curPort.isPatched ? "Raccordé au Switch" : "Non branché"}
                   </span>
                 </div>
 
                 <p className="text-[10px] text-slate-400 leading-tight">
-                  {selectedNode.isPatched
-                    ? `Câblé vers la baie principale (${selectedNode.connectedSwitchPort || "Gi1/0/1"}). Câble tracé à 90°.`
-                    : "Non relié. Aucun câble n'encombre le plan tant que vous ne décidez pas de le brancher."}
+                  {curPort.isPatched && curPortRack
+                    ? `Câblé vers ${curPortRack.name} > ${curPortSwitch ? curPortSwitch.name : "Switch"} (${curPort.connectedSwitchPort || "P1"}). Câble Cat6A tracé à 90°.`
+                    : "Ce port RJ45 n'est pas raccordé au switch. Aucun câble n'encombre le plan pour ce port."}
                 </p>
 
                 <div className="pt-0.5">
-                  {selectedNode.isPatched ? (
+                  {curPort.isPatched ? (
                     <button
                       onClick={() => {
-                        onUpdateNodeProperties?.(selectedNode.id, {
+                        handleUpdateStackedPort(safeStackedPortIdx, {
                           isPatched: false,
                           connectedRackId: undefined,
+                          connectedSwitchId: undefined,
                           connectedSwitchPort: undefined,
                         });
                       }}
                       className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
                     >
                       <Unlink className="w-3.5 h-3.5 text-red-400" />
-                      <span>Débrancher du switch (Masquer le câble)</span>
+                      <span>Débrancher ce port (Masquer le câble)</span>
                     </button>
                   ) : (
                     <button
                       onClick={() => {
-                        onUpdateNodeProperties?.(selectedNode.id, {
+                        handleUpdateStackedPort(safeStackedPortIdx, {
                           isPatched: true,
-                          connectedRackId: selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01",
-                          connectedSwitchPort: "Gi1/0/1",
+                          connectedRackId: curPort.connectedRackId || availableRacks[0]?.id || "rack-01",
+                          connectedSwitchId: curPort.connectedSwitchId || curPortRackSwitches[0]?.id,
+                          connectedSwitchPort: curPort.connectedSwitchPort || "Gi1/0/1",
                         });
                       }}
                       className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
                     >
                       <Zap className="w-3.5 h-3.5 text-amber-300" />
-                      <span>⚡ Câbler vers la Baie (Afficher le tracé)</span>
+                      <span>⚡ Câbler ce port vers le Switch</span>
                     </button>
                   )}
                 </div>
@@ -969,506 +993,558 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
             </div>
           ) : (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {/* 1. En-tête Colonnette Multi-Ports */}
-          <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
-                <Layers className="w-4 h-4 text-sky-400 flex-shrink-0" />
-                {selectedNode.name}
-              </span>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded border bg-sky-500/20 text-sky-400 border-sky-500/30">
-                  COLONNETTE {ports.length}P
-                </span>
-                <span
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                    isLinked
-                      ? "bg-sky-500/20 text-sky-400 border-sky-500/30"
-                      : "bg-slate-800 text-slate-400 border-slate-700"
-                  }`}
-                >
-                  {isLinked ? "SOLIDAIRE" : "FIXE"}
-                </span>
-              </div>
-            </div>
-
-            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between font-mono">
-              <span>Slot multiposte ({ports.length}x RJ45 Cat6A)</span>
-              <span className="text-slate-500">
-                {(selectedNode.xMm / 1000).toFixed(1)}m, {(selectedNode.yMm / 1000).toFixed(1)}m
-              </span>
-            </div>
-
-            {/* Position du libellé de la colonnette */}
-            <div className="mt-2.5 pt-2 border-t border-slate-800">
-              <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Tag className="w-3 h-3 text-cyan-400" />
-                  Position du libellé :
-                </span>
-                <span className="text-cyan-400 font-mono text-[10px]">
-                  {(selectedNode.labelPosition || "RIGHT") === "TOP"
-                    ? "Haut"
-                    : (selectedNode.labelPosition || "RIGHT") === "BOTTOM"
-                    ? "Bas"
-                    : (selectedNode.labelPosition || "RIGHT") === "LEFT"
-                    ? "Gauche"
-                    : "Droite"}
-                </span>
-              </div>
-              <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
-                {[
-                  { id: "TOP" as const, label: "↑ Haut" },
-                  { id: "BOTTOM" as const, label: "↓ Bas" },
-                  { id: "LEFT" as const, label: "← Gauche" },
-                  { id: "RIGHT" as const, label: "→ Droite" },
-                ].map((pos) => (
-                  <button
-                    key={pos.id}
-                    onClick={() =>
-                      onUpdateNodeProperties?.(selectedNode.id, { labelPosition: pos.id })
-                    }
-                    className={`py-1 rounded border transition text-center ${
-                      (selectedNode.labelPosition || "RIGHT") === pos.id
-                        ? "bg-cyan-600/30 text-cyan-300 border-cyan-500 font-bold shadow-sm"
-                        : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                    }`}
-                  >
-                    {pos.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Sélecteur d'onglets de Ports du slot (Port 1 à 8) */}
-            <div className="mt-2.5 pt-2 border-t border-slate-800">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] text-slate-400 font-medium">
-                  Ports RJ45 du slot ({ports.length}/8 max) :
-                </span>
-                <div className="flex items-center gap-1">
-                  {ports.length < 8 && (
-                    <button
-                      onClick={handleAddStackedPort}
-                      className="px-1.5 py-0.5 bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-500/30 rounded text-[9px] font-mono flex items-center gap-1 transition"
-                      title="Ajouter un port RJ45 au slot (jusqu'à 8)"
-                    >
-                      <Plus className="w-2.5 h-2.5" />
-                      + Port
-                    </button>
-                  )}
-                  {ports.length > 1 && (
-                    <button
-                      onClick={() => handleRemoveStackedPort(safeStackedPortIdx)}
-                      className="px-1.5 py-0.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-800/40 rounded text-[9px] font-mono flex items-center gap-1 transition"
-                      title="Retirer ce port du slot"
-                    >
-                      <Trash2 className="w-2.5 h-2.5" />
-                    </button>
-                  )}
-                  <button
-                    onClick={handleUngroupColonnette}
-                    className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded text-[9px] font-mono transition"
-                    title="Dégrouper la colonnette en prise simple"
-                  >
-                    Dégrouper
-                  </button>
-                </div>
-              </div>
-
-              {/* Grille des onglets de ports (jusqu'à 8 ports) */}
-              <div className="grid grid-cols-4 gap-1">
-                {ports.map((p, pIdx) => {
-                  const isActive = pIdx === safeStackedPortIdx;
-                  const pRoleColor =
-                    p.outletRole === "VOIP"
-                      ? "border-purple-500/40 text-purple-300"
-                      : p.outletRole === "PRINTER"
-                      ? "border-amber-500/40 text-amber-300"
-                      : "border-blue-500/40 text-blue-300";
-
-                  return (
-                    <button
-                      key={`port-tab-${pIdx}`}
-                      onClick={() => setActiveStackedPortIdx(pIdx)}
-                      className={`p-1 rounded text-[10px] font-mono border text-center transition flex flex-col items-center justify-center ${
-                        isActive
-                          ? "bg-blue-600 text-white border-blue-400 font-bold shadow-sm"
-                          : `bg-slate-950 hover:bg-slate-900 ${pRoleColor}`
-                      }`}
-                    >
-                      <span>P{pIdx + 1}</span>
-                      <span className="text-[8px] opacity-80 uppercase tracking-tighter">
-                        {p.outletRole || "DATA"}
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                {/* SECTION 1 : INFORMATIONS GLOBALES MOBILIER & CHÂSSIS */}
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
+                      <Layers className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                      {selectedNode.name}
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded border bg-sky-500/20 text-sky-400 border-sky-500/30">
+                        COLONNETTE {ports.length}P
                       </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          isLinked
+                            ? "bg-sky-500/20 text-sky-400 border-sky-500/30"
+                            : "bg-slate-800 text-slate-400 border-slate-700"
+                        }`}
+                      >
+                        {isLinked ? "SOLIDAIRE" : "FIXE"}
+                      </span>
+                    </div>
+                  </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            {/* 2. Détails complets du Port Actif */}
-            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-                  <Network className="w-3.5 h-3.5 text-sky-400" />
-                  Configuration Port P{safeStackedPortIdx + 1} ({curPort.portLabel})
-                </span>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                  {curPort.vlanId ? `VLAN ${curPort.vlanId}` : "VLAN 20"}
-                </span>
-              </div>
+                  <div className="text-[11px] text-slate-400 flex items-center justify-between font-mono">
+                    <span>Slot multiposte ({ports.length}x RJ45 Cat6A)</span>
+                    <span className="text-slate-500">
+                      {(selectedNode.xMm / 1000).toFixed(1)}m, {(selectedNode.yMm / 1000).toFixed(1)}m
+                    </span>
+                  </div>
 
-              {/* Libellé du port */}
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">Désignation du port :</label>
-                <input
-                  type="text"
-                  value={curPort.portLabel}
-                  onChange={(e) =>
-                    handleUpdateStackedPort(safeStackedPortIdx, { portLabel: e.target.value })
-                  }
-                  className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded font-mono text-slate-200 text-[11px] focus:outline-none focus:border-blue-500"
-                />
-              </div>
+                  {/* Rattachement au bureau support */}
+                  <div className="pt-2 border-t border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                        <Link2 className="w-3.5 h-3.5 text-blue-400" />
+                        Liaison au Mobilier
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">Rattachement</span>
+                    </div>
 
-              {/* Attribution du VLAN pour ce port individuel */}
-              <div>
-                <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
-                  <span>Attribution du VLAN :</span>
-                  <span className="text-cyan-400 font-mono font-bold">
-                    VLAN {curPort.vlanId ?? (curPortRole === "VOIP" ? 30 : 20)}
-                  </span>
+                    <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-md border border-slate-800">
+                      <button
+                        onClick={() => onToggleAttachment(selectedNode.id, desks[0]?.id)}
+                        className={`py-1 px-2 rounded text-[11px] font-medium transition flex items-center justify-center gap-1 ${
+                          isLinked
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                        }`}
+                      >
+                        <Link2 className="w-3 h-3" />
+                        Solidaire
+                      </button>
+                      <button
+                        onClick={() => onToggleAttachment(selectedNode.id, undefined)}
+                        className={`py-1 px-2 rounded text-[11px] font-medium transition flex items-center justify-center gap-1 ${
+                          !isLinked
+                            ? "bg-slate-700 text-white shadow-sm"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                        }`}
+                      >
+                        <MapPin className="w-3 h-3" />
+                        Fixe
+                      </button>
+                    </div>
+
+                    {isLinked && linkedDesk && (
+                      <div className="text-[11px] text-slate-300 bg-blue-950/40 border border-blue-900/50 p-2 rounded space-y-1">
+                        <div className="flex justify-between font-mono text-[10px]">
+                          <span className="text-slate-400">Bureau :</span>
+                          <span className="font-semibold text-slate-100">{linkedDesk.name}</span>
+                        </div>
+                        <div className="flex justify-between font-mono text-[10px]">
+                          <span className="text-slate-400">Écart relatif :</span>
+                          <span className="text-sky-300 font-semibold">
+                            ΔX: {deltaX > 0 ? `+${deltaX}` : deltaX}mm, ΔY: {deltaY > 0 ? `+${deltaY}` : deltaY}mm
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-mono text-[10px]">
+                          <span className="text-slate-400">Distance :</span>
+                          <span className="text-slate-200">{directDistanceM} m</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Position du libellé de la colonnette */}
+                  <div className="pt-2 border-t border-slate-800">
+                    <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Tag className="w-3 h-3 text-cyan-400" />
+                        Position du libellé :
+                      </span>
+                      <span className="text-cyan-400 font-mono text-[10px]">
+                        {(selectedNode.labelPosition || "RIGHT") === "TOP"
+                          ? "Haut"
+                          : (selectedNode.labelPosition || "RIGHT") === "BOTTOM"
+                          ? "Bas"
+                          : (selectedNode.labelPosition || "RIGHT") === "LEFT"
+                          ? "Gauche"
+                          : "Droite"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                      {[
+                        { id: "TOP" as const, label: "↑ Haut" },
+                        { id: "BOTTOM" as const, label: "↓ Bas" },
+                        { id: "LEFT" as const, label: "← Gauche" },
+                        { id: "RIGHT" as const, label: "→ Droite" },
+                      ].map((pos) => (
+                        <button
+                          key={pos.id}
+                          onClick={() =>
+                            onUpdateNodeProperties?.(selectedNode.id, { labelPosition: pos.id })
+                          }
+                          className={`py-1 rounded border transition text-center ${
+                            (selectedNode.labelPosition || "RIGHT") === pos.id
+                              ? "bg-cyan-600/30 text-cyan-300 border-cyan-500 font-bold shadow-sm"
+                              : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
+                          }`}
+                        >
+                          {pos.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-1 text-[10px] font-mono">
-                  {Object.values(vlanStyles ?? DEFAULT_VLAN_STYLES)
-                    .sort((a, b) => a.vlanId - b.vlanId)
-                    .map((v) => {
-                      const isVlanSelected =
-                        curPort.vlanId !== undefined
-                          ? curPort.vlanId === v.vlanId
-                          : curPortRole === "VOIP"
-                          ? v.vlanId === 30
-                          : v.vlanId === 20;
+
+                {/* SECTION 2 : SÉLECTEUR D'ONGLETS DES PORTS RJ45 */}
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Ports RJ45 du slot ({ports.length}/8 max) :
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {ports.length < 8 && (
+                        <button
+                          onClick={handleAddStackedPort}
+                          className="px-1.5 py-0.5 bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-500/30 rounded text-[9px] font-mono flex items-center gap-1 transition"
+                          title="Ajouter un port RJ45 au slot (jusqu'à 8)"
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                          + Port
+                        </button>
+                      )}
+                      {ports.length > 1 && (
+                        <button
+                          onClick={() => handleRemoveStackedPort(safeStackedPortIdx)}
+                          className="px-1.5 py-0.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-800/40 rounded text-[9px] font-mono flex items-center gap-1 transition"
+                          title="Retirer ce port du slot"
+                        >
+                          <Trash2 className="w-2.5 h-2.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={handleUngroupColonnette}
+                        className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded text-[9px] font-mono transition"
+                        title="Dégrouper la colonnette en prise simple"
+                      >
+                        Dégrouper
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Grille des onglets de ports (jusqu'à 8 ports) */}
+                  <div className="grid grid-cols-4 gap-1">
+                    {ports.map((p, pIdx) => {
+                      const isActive = pIdx === safeStackedPortIdx;
+                      const pRoleColor =
+                        p.outletRole === "VOIP"
+                          ? "border-purple-500/40 text-purple-300"
+                          : p.outletRole === "PRINTER"
+                          ? "border-amber-500/40 text-amber-300"
+                          : "border-blue-500/40 text-blue-300";
 
                       return (
                         <button
-                          key={v.vlanId}
-                          onClick={() =>
-                            handleUpdateStackedPort(safeStackedPortIdx, {
-                              vlanId: v.vlanId,
-                              outletRole:
-                                v.vlanId === 30
-                                  ? "VOIP"
-                                  : v.vlanId === 40
-                                  ? "PRINTER"
-                                  : v.vlanId === 50
-                                  ? "WIFI"
-                                  : "DATA",
-                            })
-                          }
-                          className={`py-1 px-1 rounded border transition flex items-center justify-center gap-1.5 ${
-                            isVlanSelected
-                              ? "bg-slate-800 text-white border-cyan-500 font-bold ring-1 ring-cyan-500/50 shadow-sm"
-                              : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                          key={`port-tab-${pIdx}`}
+                          onClick={() => setActiveStackedPortIdx(pIdx)}
+                          className={`p-1 rounded text-[10px] font-mono border text-center transition flex flex-col items-center justify-center ${
+                            isActive
+                              ? "bg-blue-600 text-white border-blue-400 font-bold shadow-sm"
+                              : `bg-slate-950 hover:bg-slate-900 ${pRoleColor}`
                           }`}
                         >
-                          <span
-                            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: v.color }}
-                          />
-                          <span>V{v.vlanId}</span>
+                          <div className="flex items-center gap-1">
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                p.isPatched ? "bg-emerald-400" : "bg-slate-600"
+                              }`}
+                            />
+                            <span>P{pIdx + 1}</span>
+                          </div>
+                          <span className="text-[8px] opacity-80 uppercase tracking-tighter">
+                            {p.outletRole || "DATA"}
+                          </span>
                         </button>
                       );
                     })}
+                  </div>
                 </div>
-              </div>
 
-              {/* Alimentation PoE du port individuel */}
-              <div className="pt-1.5 border-t border-slate-800/80">
-                <div className="text-[10px] text-slate-400 mb-1 font-medium">Alimentation PoE :</div>
-                <div className="grid grid-cols-4 gap-1 text-[9px] font-mono">
-                  {[
-                    { id: "NONE" as PoeMode, label: "Non-PoE" },
-                    { id: "POE" as PoeMode, label: "PoE" },
-                    { id: "POE_PLUS" as PoeMode, label: "PoE+" },
-                    { id: "POE_PLUS_PLUS" as PoeMode, label: "PoE++" },
-                  ].map((poe) => (
-                    <button
-                      key={poe.id}
-                      onClick={() =>
-                        handleUpdateStackedPort(safeStackedPortIdx, { poeMode: poe.id })
-                      }
-                      className={`py-1 rounded border transition text-center ${
-                        (curPort.poeMode ?? "NONE") === poe.id
-                          ? "bg-amber-600/30 text-amber-300 border-amber-500 font-bold"
-                          : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                {/* SECTION 3 : RACCORDEMENT RÉSEAU HIÉRARCHIQUE DU PORT SÉLECTIONNÉ (Baie -> Switch -> Port) */}
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Link2 className="w-3.5 h-3.5 text-sky-400" />
+                      Raccordement Réseau : P{safeStackedPortIdx + 1} ({curPort.portLabel})
+                    </span>
+                    <span
+                      className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
+                        curPort.isPatched
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          : "bg-slate-950 text-slate-400 border-slate-800"
                       }`}
                     >
-                      {poe.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Attribution à une place de bureau */}
-              {linkedDesk && (
-                <div className="pt-2 border-t border-slate-800/80">
-                  <label className="text-[10px] text-slate-400 block mb-1 flex items-center gap-1">
-                    <Users className="w-3 h-3 text-blue-400" />
-                    Attribution de ce port à la place :
-                  </label>
-                  <select
-                    value={curPort.attachedSeatIndex !== undefined ? curPort.attachedSeatIndex : ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "") {
-                        handleUpdateStackedPort(safeStackedPortIdx, {
-                          attachedSeatIndex: undefined,
-                          assignedPerson: undefined,
-                        });
-                      } else {
-                        const sIdx = Number(val);
-                        const occupant = linkedDesk.seats?.find((s) => s.seatIndex === sIdx);
-                        handleUpdateStackedPort(safeStackedPortIdx, {
-                          attachedSeatIndex: sIdx,
-                          assignedPerson: occupant?.fullName || undefined,
-                        });
-                      }
-                    }}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-200 focus:outline-none focus:border-blue-500 font-sans"
-                  >
-                    <option value="">🌐 Port commun (non affecté)</option>
-                    {Array.from({ length: getDeskSeatCount(linkedDesk.subType) }).map((_, i) => {
-                      const seatOccupant = linkedDesk.seats?.find((s) => s.seatIndex === i);
-                      const labels = getDefaultSeatLabels(linkedDesk.subType);
-                      const label = seatOccupant?.seatLabel ?? labels[i] ?? `Place ${i + 1}`;
-                      const occupantDesc = seatOccupant?.fullName ? ` (${seatOccupant.fullName})` : " (Libre)";
-                      return (
-                        <option key={`opt-port-seat-${i}`} value={i}>
-                          Place {i + 1} : {label}{occupantDesc}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
-
-              {/* IPAM & Ping pour ce port individuel */}
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="text-slate-400 font-mono flex items-center gap-1">
-                    <Globe className="w-3 h-3 text-slate-500" />
-                    IP Fixe / DHCP :
-                  </span>
-                  <input
-                    type="text"
-                    value={curPort.ipAddress ?? ""}
-                    placeholder={`Ex: 10.42.${curPort.vlanId || 20}.${100 + safeStackedPortIdx}`}
-                    onChange={(e) =>
-                      handleUpdateStackedPort(safeStackedPortIdx, {
-                        ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
-                      })
-                    }
-                    className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
-                  />
-                </div>
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="text-slate-400 font-mono flex items-center gap-1">
-                    <Activity className="w-3 h-3 text-slate-500" />
-                    Adresse MAC :
-                  </span>
-                  <input
-                    type="text"
-                    value={curPort.macAddress ?? ""}
-                    placeholder="Ex: 00:1A:2B:3C:4D:5E"
-                    onChange={(e) =>
-                      handleUpdateStackedPort(safeStackedPortIdx, {
-                        macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
-                      })
-                    }
-                    className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Carte : Liaison Mobilier & Postes */}
-            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                  <Link2 className="w-3.5 h-3.5 text-blue-400" />
-                  Liaison au Mobilier
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">Solidarité</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-md border border-slate-800">
-                <button
-                  onClick={() => onToggleAttachment(selectedNode.id, desks[0]?.id)}
-                  className={`py-1 px-2 rounded text-[11px] font-medium transition flex items-center justify-center gap-1 ${
-                    isLinked
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
-                  }`}
-                >
-                  <Link2 className="w-3 h-3" />
-                  Solidaire
-                </button>
-                <button
-                  onClick={() => onToggleAttachment(selectedNode.id, undefined)}
-                  className={`py-1 px-2 rounded text-[11px] font-medium transition flex items-center justify-center gap-1 ${
-                    !isLinked
-                      ? "bg-slate-700 text-white shadow-sm"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
-                  }`}
-                >
-                  <MapPin className="w-3 h-3" />
-                  Fixe
-                </button>
-              </div>
-
-              {isLinked && linkedDesk && (
-                <div className="text-[11px] text-slate-300 bg-blue-950/40 border border-blue-900/50 p-2 rounded space-y-1">
-                  <div className="flex justify-between font-mono text-[10px]">
-                    <span className="text-slate-400">Bureau :</span>
-                    <span className="font-semibold text-slate-100">{linkedDesk.name}</span>
-                  </div>
-                  <div className="flex justify-between font-mono text-[10px]">
-                    <span className="text-slate-400">Écart relatif :</span>
-                    <span className="text-sky-300 font-semibold">
-                      ΔX: {deltaX > 0 ? `+${deltaX}` : deltaX}mm, ΔY: {deltaY > 0 ? `+${deltaY}` : deltaY}mm
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          curPort.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                        }`}
+                      />
+                      {curPort.isPatched ? "Raccordé" : "Non branché"}
                     </span>
                   </div>
-                  <div className="flex justify-between font-mono text-[10px]">
-                    <span className="text-slate-400">Distance :</span>
-                    <span className="text-slate-200">{directDistanceM} m</span>
-                  </div>
-                </div>
-              )}
-            </div>
 
-            {/* 3b. Carte : Raccordement physique au switch / Câblage manuel */}
-            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                  <Link2 className="w-3.5 h-3.5 text-sky-400" />
-                  Raccordement Switch & Câblage
-                </span>
-                <span
-                  className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
-                    selectedNode.isPatched
-                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                      : "bg-slate-950 text-slate-400 border-slate-800"
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
-                    }`}
-                  />
-                  {selectedNode.isPatched ? "Raccordé" : "Non branché"}
-                </span>
-              </div>
+                  {curPort.isPatched ? (
+                    <div className="space-y-2.5 pt-1 border-t border-slate-800 text-[10px] font-mono">
+                      {/* Étape 1 : Baie Cible */}
+                      <div className="space-y-1">
+                        <label className="text-slate-400 block flex items-center justify-between">
+                          <span>1. Baie informatique cible :</span>
+                          <span className="text-purple-400 font-bold">{curPortRack?.name ?? curPortRackId}</span>
+                        </label>
+                        {availableRacks.length > 1 ? (
+                          <select
+                            value={curPortRackId}
+                            onChange={(e) => {
+                              const newRackId = e.target.value;
+                              const newSwitches = getSwitchesForRack(newRackId);
+                              handleUpdateStackedPort(safeStackedPortIdx, {
+                                connectedRackId: newRackId,
+                                connectedSwitchId: newSwitches[0]?.id,
+                                connectedSwitchPort: "Gi1/0/1",
+                              });
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-[10px] focus:outline-none focus:border-purple-500"
+                          >
+                            {availableRacks.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.name} ({r.uHeight}U - {r.devices?.length ?? 0} équipements)
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="px-2 py-1 bg-slate-950 border border-slate-800 rounded text-purple-300 font-bold">
+                            {curPortRack?.name ?? "BAIE-PRINCIPALE-RDC"}
+                          </div>
+                        )}
+                      </div>
 
-              {selectedNode.isPatched ? (
-                <div className="space-y-2 pt-1 border-t border-slate-800 text-[10px] font-mono">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Baie de destination :</span>
-                    {availableRacks.length > 1 ? (
-                      <select
-                        value={selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01"}
-                        onChange={(e) =>
-                          onUpdateNodeProperties?.(selectedNode.id, {
-                            connectedRackId: e.target.value,
-                          })
-                        }
-                        className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-purple-300 font-bold text-[10px]"
+                      {/* Étape 2 : Commutateur (Switch) dans la baie */}
+                      <div className="space-y-1">
+                        <label className="text-slate-400 block flex items-center justify-between">
+                          <span>2. Commutateur (Switch) dans la baie :</span>
+                          <span className="text-sky-400 font-bold">{curPortSwitch?.name ?? "Switch"}</span>
+                        </label>
+                        {curPortRackSwitches.length > 0 ? (
+                          <select
+                            value={curPortSwitch?.id ?? curPortSwitchId}
+                            onChange={(e) => {
+                              const swId = e.target.value;
+                              handleUpdateStackedPort(safeStackedPortIdx, {
+                                connectedSwitchId: swId,
+                                connectedSwitchPort: "Gi1/0/1",
+                              });
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sky-300 font-bold text-[10px] focus:outline-none focus:border-sky-500"
+                          >
+                            {curPortRackSwitches.map((sw) => (
+                              <option key={sw.id} value={sw.id}>
+                                {sw.name} (Position U{sw.slotU}, {sw.portsCount ?? 24} ports)
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="px-2 py-1 bg-slate-950 border border-amber-900/50 rounded text-amber-400 text-[10px]">
+                            ⚠️ Aucun switch détecté dans cette baie (génération automatique Gi1/0/x)
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Étape 3 : Port RJ45 physique du Switch */}
+                      <div className="space-y-1">
+                        <label className="text-slate-400 block flex items-center justify-between">
+                          <span>3. Port sur le commutateur :</span>
+                          <span className="text-emerald-400 font-bold">{curPort.connectedSwitchPort || "Gi1/0/1"}</span>
+                        </label>
+                        <select
+                          value={curPort.connectedSwitchPort || "Gi1/0/1"}
+                          onChange={(e) =>
+                            handleUpdateStackedPort(safeStackedPortIdx, {
+                              connectedSwitchPort: e.target.value,
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px] focus:outline-none focus:border-blue-500"
+                        >
+                          {Array.from({ length: curPortSwitchPortsCount }).map((_, i) => (
+                            <option key={`curport-sw-port-${i}`} value={`Gi1/0/${i + 1}`}>
+                              Port Gi1/0/{i + 1}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          handleUpdateStackedPort(safeStackedPortIdx, {
+                            isPatched: false,
+                            connectedRackId: undefined,
+                            connectedSwitchId: undefined,
+                            connectedSwitchPort: undefined,
+                          });
+                        }}
+                        className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition mt-1"
                       >
-                        {availableRacks.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-purple-300 font-bold">
-                        {availableRacks.find((r) => r.id === selectedNode.connectedRackId)?.name ?? availableRacks[0]?.name ?? "BAIE-PRINCIPALE-RDC"}
-                      </span>
-                    )}
-                  </div>
+                        <Unlink className="w-3.5 h-3.5 text-red-400" />
+                        <span>Débrancher ce port (Masquer le câble)</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-1 border-t border-slate-800">
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        Ce port RJ45 n'a pas de câble tiré sur le plateau. Branchez-le pour générer le cheminement orthogonal Cat6A individuel vers le switch sélectionné.
+                      </p>
+                      <button
+                        onClick={() => {
+                          handleUpdateStackedPort(safeStackedPortIdx, {
+                            isPatched: true,
+                            connectedRackId: curPort.connectedRackId || availableRacks[0]?.id || "rack-01",
+                            connectedSwitchId: curPort.connectedSwitchId || curPortRackSwitches[0]?.id,
+                            connectedSwitchPort: curPort.connectedSwitchPort || "Gi1/0/1",
+                          });
+                        }}
+                        className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-amber-300" />
+                        <span>⚡ Câbler ce port vers le Switch (Afficher le tracé)</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* SECTION 4 : CONFIGURATION LOGIQUE DU PORT ACTIF (VLAN, Rôle, Place Bureau, IPAM) */}
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Port commutateur :</span>
-                    <select
-                      value={selectedNode.connectedSwitchPort || "Gi1/0/1"}
+                    <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Network className="w-3.5 h-3.5 text-sky-400" />
+                      Configuration Logique : P{safeStackedPortIdx + 1} ({curPort.portLabel})
+                    </span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      {curPort.vlanId ? `VLAN ${curPort.vlanId}` : "VLAN 20"}
+                    </span>
+                  </div>
+
+                  {/* Libellé du port */}
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Désignation du port :</label>
+                    <input
+                      type="text"
+                      value={curPort.portLabel}
                       onChange={(e) =>
-                        onUpdateNodeProperties?.(selectedNode.id, {
-                          connectedSwitchPort: e.target.value,
-                        })
+                        handleUpdateStackedPort(safeStackedPortIdx, { portLabel: e.target.value })
                       }
-                      className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px]"
+                      className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded font-mono text-slate-200 text-[11px] focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Attribution du VLAN pour ce port individuel */}
+                  <div>
+                    <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
+                      <span>Attribution du VLAN :</span>
+                      <span className="text-cyan-400 font-mono font-bold">
+                        VLAN {curPort.vlanId ?? (curPortRole === "VOIP" ? 30 : 20)}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 text-[10px] font-mono">
+                      {Object.values(vlanStyles ?? DEFAULT_VLAN_STYLES)
+                        .sort((a, b) => a.vlanId - b.vlanId)
+                        .map((v) => {
+                          const isVlanSelected =
+                            curPort.vlanId !== undefined
+                              ? curPort.vlanId === v.vlanId
+                              : curPortRole === "VOIP"
+                              ? v.vlanId === 30
+                              : v.vlanId === 20;
+
+                          return (
+                            <button
+                              key={v.vlanId}
+                              onClick={() =>
+                                handleUpdateStackedPort(safeStackedPortIdx, {
+                                  vlanId: v.vlanId,
+                                  outletRole:
+                                    v.vlanId === 30
+                                      ? "VOIP"
+                                      : v.vlanId === 40
+                                      ? "PRINTER"
+                                      : v.vlanId === 50
+                                      ? "WIFI"
+                                      : "DATA",
+                                })
+                              }
+                              className={`py-1 px-1.5 rounded border text-[10px] flex items-center justify-between transition ${
+                                isVlanSelected
+                                  ? "bg-slate-800 text-white font-bold shadow-sm"
+                                  : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                              }`}
+                              style={{
+                                borderColor: isVlanSelected ? v.color : undefined,
+                              }}
+                            >
+                              <span className="truncate">{v.vlanName}</span>
+                              <span
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: v.color }}
+                              />
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Rôle métier / Usage du port */}
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">Rôle métier du port :</label>
+                    <select
+                      value={curPort.outletRole || "DATA"}
+                      onChange={(e) => {
+                        const newRole = e.target.value as "DATA" | "VOIP" | "PRINTER" | "WIFI";
+                        const autoVlan =
+                          newRole === "VOIP" ? 30 : newRole === "PRINTER" ? 40 : newRole === "WIFI" ? 50 : 20;
+                        handleUpdateStackedPort(safeStackedPortIdx, {
+                          outletRole: newRole,
+                          vlanId: autoVlan,
+                        });
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px] focus:outline-none focus:border-blue-500 font-mono"
                     >
-                      {Array.from({ length: 24 }).map((_, i) => (
-                        <option key={`sw-port-${i}`} value={`Gi1/0/${i + 1}`}>
-                          Gi1/0/{i + 1}
-                        </option>
-                      ))}
+                      <option value="DATA">DATA - Poste informatique standard (VLAN 20)</option>
+                      <option value="VOIP">VOIP - Téléphonie IP / Visioconférence (VLAN 30)</option>
+                      <option value="PRINTER">PRINTER - Imprimante / Copieur réseau (VLAN 40)</option>
+                      <option value="WIFI">WIFI - Borne Wi-Fi plafond / murale (VLAN 50)</option>
                     </select>
                   </div>
-                  <button
-                    onClick={() => {
-                      onUpdateNodeProperties?.(selectedNode.id, {
-                        isPatched: false,
-                        connectedRackId: undefined,
-                        connectedSwitchPort: undefined,
-                      });
-                    }}
-                    className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition mt-1"
-                  >
-                    <Unlink className="w-3.5 h-3.5 text-red-400" />
-                    <span>Débrancher du switch (Masquer le câble)</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2 pt-1 border-t border-slate-800">
-                  <p className="text-[10px] text-slate-400 leading-tight">
-                    L'équipement n'a pas de câble tiré sur le plateau. Branchez-le pour générer le cheminement orthogonal Cat6A vers la baie.
-                  </p>
-                  <button
-                    onClick={() => {
-                      onUpdateNodeProperties?.(selectedNode.id, {
-                        isPatched: true,
-                        connectedRackId: selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01",
-                        connectedSwitchPort: "Gi1/0/1",
-                      });
-                    }}
-                    className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-amber-300" />
-                    <span>⚡ Câbler vers la Baie (Afficher le tracé)</span>
-                  </button>
-                </div>
-              )}
-            </div>
 
-            {/* 4. Bouton Traçage CTE */}
-            {onTriggerTrace && (
-              <button
-                onClick={() => onTriggerTrace(selectedNode)}
-                className="w-full py-2 px-3 bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-medium rounded-lg shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition"
-              >
-                <Zap className="w-4 h-4" />
-                Tracer le circuit CTE récursif
-              </button>
-            )}
-          </div>
+                  {/* Place assise associée au port (si rattaché à un bureau) */}
+                  {isLinked && linkedDesk && (
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">
+                        Affectation à une place du bureau ({linkedDesk.name}) :
+                      </label>
+                      <select
+                        value={
+                          curPort.assignedPerson
+                            ? linkedDesk.seats?.findIndex((s) => s.fullName === curPort.assignedPerson) ?? ""
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "") {
+                            handleUpdateStackedPort(safeStackedPortIdx, { assignedPerson: undefined });
+                          } else {
+                            const seatIdx = parseInt(val, 10);
+                            const seatOccupant = linkedDesk.seats?.find((s) => s.seatIndex === seatIdx);
+                            handleUpdateStackedPort(safeStackedPortIdx, {
+                              assignedPerson: seatOccupant?.fullName ?? `Place ${seatIdx + 1}`,
+                            });
+                          }
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-200 focus:outline-none focus:border-blue-500 font-sans"
+                      >
+                        <option value="">🌐 Port commun (non affecté)</option>
+                        {Array.from({ length: getDeskSeatCount(linkedDesk.subType) }).map((_, i) => {
+                          const seatOccupant = linkedDesk.seats?.find((s) => s.seatIndex === i);
+                          const labels = getDefaultSeatLabels(linkedDesk.subType);
+                          const label = seatOccupant?.seatLabel ?? labels[i] ?? `Place ${i + 1}`;
+                          const occupantDesc = seatOccupant?.fullName ? ` (${seatOccupant.fullName})` : " (Libre)";
+                          return (
+                            <option key={`opt-port-seat-${i}`} value={i}>
+                              Place {i + 1} : {label}{occupantDesc}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* IPAM & Ping pour ce port individuel */}
+                  <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-400 font-mono flex items-center gap-1">
+                        <Globe className="w-3 3 text-slate-500" />
+                        IP Fixe / DHCP :
+                      </span>
+                      <input
+                        type="text"
+                        value={curPort.ipAddress ?? ""}
+                        placeholder={`Ex: 10.42.${curPort.vlanId || 20}.${100 + safeStackedPortIdx}`}
+                        onChange={(e) =>
+                          handleUpdateStackedPort(safeStackedPortIdx, {
+                            ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                          })
+                        }
+                        className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-400 font-mono flex items-center gap-1">
+                        <Activity className="w-3 3 text-slate-500" />
+                        Adresse MAC :
+                      </span>
+                      <input
+                        type="text"
+                        value={curPort.macAddress ?? ""}
+                        placeholder="Ex: 00:1A:2B:3C:4D:5E"
+                        onChange={(e) =>
+                          handleUpdateStackedPort(safeStackedPortIdx, {
+                            macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
+                          })
+                        }
+                        className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Bouton Traçage CTE */}
+                {onTriggerTrace && (
+                  <button
+                    onClick={() => onTriggerTrace(selectedNode)}
+                    className="w-full py-2 px-3 bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-medium rounded-lg shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Tracer le circuit CTE récursif
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
-  );
-}
+      );
+    }
 
     return (
       <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
@@ -2111,88 +2187,156 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
           )}
         </div>
 
-        {/* 2b. Carte : Raccordement physique au switch / Câblage manuel */}
-        <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-              <Link2 className="w-3.5 h-3.5 text-sky-400" />
-              Raccordement Switch & Câblage
-            </span>
-            <span
-              className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
-                selectedNode.isPatched
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                  : "bg-slate-950 text-slate-400 border-slate-800"
-              }`}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
-                }`}
-              />
-              {selectedNode.isPatched ? "Raccordé" : "Non branché"}
-            </span>
-          </div>
+                {/* 2b. Carte : Raccordement physique au switch / Câblage manuel */}
+        {(() => {
+          const singleRackId = selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01";
+          const singleRack = availableRacks.find((r) => r.id === singleRackId) ?? availableRacks[0];
+          const singleSwitches = getSwitchesForRack(singleRack?.id);
+          const singleSwitchId = selectedNode.connectedSwitchId || singleSwitches[0]?.id;
+          const singleSwitch = singleSwitches.find((s) => s.id === singleSwitchId) ?? singleSwitches[0];
+          const singlePortsCount = singleSwitch?.portsCount ?? 24;
 
-          {selectedNode.isPatched ? (
-            <div className="space-y-2 pt-1 border-t border-slate-800 text-[10px] font-mono">
+          return (
+            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Baie de destination :</span>
-                <span className="text-purple-300 font-bold">BAIE-PRINCIPALE-RDC</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Port commutateur :</span>
-                <select
-                  value={selectedNode.connectedSwitchPort || "Gi1/0/1"}
-                  onChange={(e) =>
-                    onUpdateNodeProperties?.(selectedNode.id, {
-                      connectedSwitchPort: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px]"
+                <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-sky-400" />
+                  Raccordement Réseau (Baie → Switch → Port)
+                </span>
+                <span
+                  className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
+                    selectedNode.isPatched
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                      : "bg-slate-950 text-slate-400 border-slate-800"
+                  }`}
                 >
-                  {Array.from({ length: 24 }).map((_, i) => (
-                    <option key={`sw-port-single-${i}`} value={`Gi1/0/${i + 1}`}>
-                      Gi1/0/{i + 1}
-                    </option>
-                  ))}
-                </select>
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                    }`}
+                  />
+                  {selectedNode.isPatched ? "Raccordé" : "Non branché"}
+                </span>
               </div>
-              <button
-                onClick={() => {
-                  onUpdateNodeProperties?.(selectedNode.id, {
-                    isPatched: false,
-                    connectedRackId: undefined,
-                    connectedSwitchPort: undefined,
-                  });
-                }}
-                className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition mt-1"
-              >
-                <Unlink className="w-3.5 h-3.5 text-red-400" />
-                <span>Débrancher du switch (Masquer le câble)</span>
-              </button>
+
+              {selectedNode.isPatched ? (
+                <div className="space-y-2 pt-1 border-t border-slate-800 text-[10px] font-mono">
+                  {/* 1. Baie */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">1. Baie cible :</span>
+                    {availableRacks.length > 1 ? (
+                      <select
+                        value={singleRackId}
+                        onChange={(e) => {
+                          const newRackId = e.target.value;
+                          const newSwitches = getSwitchesForRack(newRackId);
+                          onUpdateNodeProperties?.(selectedNode.id, {
+                            connectedRackId: newRackId,
+                            connectedSwitchId: newSwitches[0]?.id,
+                            connectedSwitchPort: "Gi1/0/1",
+                          });
+                        }}
+                        className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-purple-300 font-bold text-[10px]"
+                      >
+                        {availableRacks.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-purple-300 font-bold">
+                        {singleRack?.name ?? "BAIE-PRINCIPALE-RDC"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 2. Switch dans la baie */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">2. Switch dans la baie :</span>
+                    {singleSwitches.length > 0 ? (
+                      <select
+                        value={singleSwitchId}
+                        onChange={(e) => {
+                          onUpdateNodeProperties?.(selectedNode.id, {
+                            connectedSwitchId: e.target.value,
+                            connectedSwitchPort: "Gi1/0/1",
+                          });
+                        }}
+                        className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-sky-300 font-bold text-[10px] max-w-[190px] truncate"
+                      >
+                        {singleSwitches.map((sw) => (
+                          <option key={sw.id} value={sw.id}>
+                            {sw.name} (U{sw.slotU})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-slate-500 italic">Aucun switch raqué</span>
+                    )}
+                  </div>
+
+                  {/* 3. Port */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">3. Port commutateur :</span>
+                    <select
+                      value={selectedNode.connectedSwitchPort || "Gi1/0/1"}
+                      onChange={(e) =>
+                        onUpdateNodeProperties?.(selectedNode.id, {
+                          connectedSwitchPort: e.target.value,
+                        })
+                      }
+                      className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-slate-200 text-[10px] font-bold"
+                    >
+                      {Array.from({ length: singlePortsCount }).map((_, i) => (
+                        <option key={`sw-port-${i}`} value={`Gi1/0/${i + 1}`}>
+                          Gi1/0/{i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        isPatched: false,
+                        connectedRackId: undefined,
+                        connectedSwitchId: undefined,
+                        connectedSwitchPort: undefined,
+                      });
+                    }}
+                    className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition mt-1"
+                  >
+                    <Unlink className="w-3.5 h-3.5 text-red-400" />
+                    <span>Débrancher du switch (Masquer le câble)</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1 border-t border-slate-800">
+                  <p className="text-[10px] text-slate-400 leading-tight">
+                    L'équipement n'a pas de câble tiré sur le plateau. Branchez-le pour générer le cheminement Cat6A vers la baie et le switch choisis.
+                  </p>
+                  <button
+                    onClick={() => {
+                      const defRackId = availableRacks[0]?.id || "rack-01";
+                      const defSwitches = getSwitchesForRack(defRackId);
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        isPatched: true,
+                        connectedRackId: defRackId,
+                        connectedSwitchId: defSwitches[0]?.id,
+                        connectedSwitchPort: "Gi1/0/1",
+                      });
+                    }}
+                    className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-300" />
+                    <span>⚡ Câbler vers la Baie (Afficher le tracé)</span>
+                  </button>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="space-y-2 pt-1 border-t border-slate-800">
-              <p className="text-[10px] text-slate-400 leading-tight">
-                L'équipement n'a pas de câble tiré sur le plateau. Branchez-le pour générer le cheminement orthogonal Cat6A vers la baie.
-              </p>
-              <button
-                onClick={() => {
-                  onUpdateNodeProperties?.(selectedNode.id, {
-                    isPatched: true,
-                    connectedRackId: selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01",
-                    connectedSwitchPort: "Gi1/0/1",
-                  });
-                }}
-                className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-300" />
-                <span>⚡ Câbler vers la Baie (Afficher le tracé)</span>
-              </button>
-            </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* 3. Traçage CTE & Circuit Physique */}
         <div className="flex-1 flex flex-col min-h-0">

@@ -101,6 +101,7 @@ export interface StackedPortItem {
   poeMode?: PoeMode | undefined;
   isPatched?: boolean | undefined;
   connectedRackId?: string | undefined;
+  connectedSwitchId?: string | undefined;
   connectedSwitchPort?: string | undefined;
 }
 
@@ -136,6 +137,7 @@ export interface NodeDisplay {
   labelPosition?: "TOP" | "BOTTOM" | "LEFT" | "RIGHT" | undefined;
   isPatched?: boolean | undefined;
   connectedRackId?: string | undefined;
+  connectedSwitchId?: string | undefined;
   connectedSwitchPort?: string | undefined;
   devices?: RackDeviceItem[] | undefined;
   uHeight?: number | undefined;

@@ -602,63 +602,119 @@ export default function NetFloorApp() {
     return null;
   }, [nodes, racks, selectedNodeId]);
 
-  // Calcul dynamique des câbles : uniquement pour les prises explicitement raccordées à la baie
-    const cables: CableData[] = useMemo(() => {
+  // Calcul dynamique des câbles : raccordement individuel par port pour les colonnettes et par prise pour les simples
+  const cables: CableData[] = useMemo(() => {
     if (activeViewMode === "HR") return [];
     if (racks.length === 0) return [];
 
     const list: CableData[] = [];
+    let globalIndex = 0;
 
-    // Câbles horizontaux pour chaque prise murale raccordée au switch
     const wallOutlets = nodes.filter(
       (n) => n.type === "WALL_OUTLET" && (n.isPatched || n.stackedPorts?.some((p) => p.isPatched))
     );
-    wallOutlets.forEach((outlet, index) => {
-      const rack = racks.find((r) => r.id === outlet.connectedRackId) ?? racks.find((r) => r.id === "rack-01") ?? racks[0];
-      if (!rack) return;
-      const isVoip = outlet.outletRole === "VOIP";
-      const isPrinter = outlet.outletRole === "PRINTER";
-      const isWifi = outlet.outletRole === "WIFI";
 
-      const vlanId = outlet.vlanId ?? (isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20);
+    wallOutlets.forEach((outlet) => {
+      const isStacked = outlet.subType === "FLOOR_BOX" || (outlet.stackedPorts && outlet.stackedPorts.length > 0);
 
-      const customColor = vlanStyles[vlanId]?.color;
-      const baseAlpha = "0.85";
+      if (isStacked && outlet.stackedPorts && outlet.stackedPorts.length > 0) {
+        // Traitement individuel par port RJ45 raccordé
+        outlet.stackedPorts.forEach((sp, pIdx) => {
+          if (!sp.isPatched) return;
 
-      const cableColor = customColor
-        ? customColor
-        : isVoip
-        ? `rgba(168, 85, 247, ${baseAlpha})`
-        : isPrinter
-        ? `rgba(245, 158, 11, ${baseAlpha})`
-        : isWifi
-        ? `rgba(99, 102, 241, ${baseAlpha})`
-        : `rgba(59, 130, 246, ${baseAlpha})`;
+          const targetRackId = sp.connectedRackId || outlet.connectedRackId || "rack-01";
+          const rack = racks.find((r) => r.id === targetRackId) ?? racks[0];
+          if (!rack) return;
 
-      const cableId = `cable-run-${outlet.id}`;
-      const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + index * 35 };
+          const isVoip = sp.outletRole === "VOIP";
+          const isPrinter = sp.outletRole === "PRINTER";
+          const isWifi = sp.outletRole === "WIFI";
+          const vlanId = sp.vlanId ?? (isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20);
 
-      // 1. Source de Vérité Unique : Pivot absolu { x, y }
-      // Par défaut : pivot à (outlet.xMm, targetPos.y) pour une montée verticale directe puis filage horizontal
-      const customPivot = customPivots[cableId];
-      const pivot = customPivot ?? {
-        x: outlet.xMm,
-        y: targetPos.y,
-      };
+          const customColor = vlanStyles[vlanId]?.color;
+          const baseAlpha = "0.85";
+          const cableColor = customColor
+            ? customColor
+            : isVoip
+            ? `rgba(168, 85, 247, ${baseAlpha})`
+            : isPrinter
+            ? `rgba(245, 158, 11, ${baseAlpha})`
+            : isWifi
+            ? `rgba(99, 102, 241, ${baseAlpha})`
+            : `rgba(59, 130, 246, ${baseAlpha})`;
 
-      list.push({
-        id: cableId,
-        cableType: "HORIZONTAL_RUN",
-        category: "CAT6A",
-        lengthMm: 44200 + index * 400,
-        colorCode: cableColor,
-        sourcePos: { x: outlet.xMm, y: outlet.yMm },
-        targetPos,
-        vlanId,
-        sourceNodeId: outlet.id,
-        targetNodeId: rack.id,
-        pivot,
-      });
+          const cableId = `cable-run-${outlet.id}-p${pIdx}`;
+          // Léger décalage sur la source et la cible pour que les câbles d'une même colonnette ne se superposent pas
+          const portOffsetMm = (pIdx - (outlet.stackedPorts!.length - 1) / 2) * 30;
+          const sourcePos = { x: outlet.xMm + portOffsetMm, y: outlet.yMm };
+          const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + globalIndex * 25 };
+
+          const customPivot = customPivots[cableId];
+          const pivot = customPivot ?? {
+            x: sourcePos.x,
+            y: targetPos.y,
+          };
+
+          list.push({
+            id: cableId,
+            cableType: "HORIZONTAL_RUN",
+            category: "CAT6A",
+            lengthMm: 44200 + globalIndex * 300,
+            colorCode: cableColor,
+            sourcePos,
+            targetPos,
+            vlanId,
+            sourceNodeId: outlet.id,
+            targetNodeId: rack.id,
+            pivot,
+          });
+          globalIndex++;
+        });
+      } else if (outlet.isPatched) {
+        // Prise simple standard
+        const rack = racks.find((r) => r.id === outlet.connectedRackId) ?? racks.find((r) => r.id === "rack-01") ?? racks[0];
+        if (!rack) return;
+        const isVoip = outlet.outletRole === "VOIP";
+        const isPrinter = outlet.outletRole === "PRINTER";
+        const isWifi = outlet.outletRole === "WIFI";
+        const vlanId = outlet.vlanId ?? (isVoip ? 30 : isPrinter ? 40 : isWifi ? 50 : 20);
+
+        const customColor = vlanStyles[vlanId]?.color;
+        const baseAlpha = "0.85";
+        const cableColor = customColor
+          ? customColor
+          : isVoip
+          ? `rgba(168, 85, 247, ${baseAlpha})`
+          : isPrinter
+          ? `rgba(245, 158, 11, ${baseAlpha})`
+          : isWifi
+          ? `rgba(99, 102, 241, ${baseAlpha})`
+          : `rgba(59, 130, 246, ${baseAlpha})`;
+
+        const cableId = `cable-run-${outlet.id}`;
+        const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + globalIndex * 25 };
+
+        const customPivot = customPivots[cableId];
+        const pivot = customPivot ?? {
+          x: outlet.xMm,
+          y: targetPos.y,
+        };
+
+        list.push({
+          id: cableId,
+          cableType: "HORIZONTAL_RUN",
+          category: "CAT6A",
+          lengthMm: 44200 + globalIndex * 400,
+          colorCode: cableColor,
+          sourcePos: { x: outlet.xMm, y: outlet.yMm },
+          targetPos,
+          vlanId,
+          sourceNodeId: outlet.id,
+          targetNodeId: rack.id,
+          pivot,
+        });
+        globalIndex++;
+      }
     });
 
     return list;
