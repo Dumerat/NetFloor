@@ -1,14 +1,17 @@
-"use client";
+import { useState, type FC } from "react";
+import { X, Sparkles, Check, Building2 } from "lucide-react";
+import type { FloorSite } from "@/engine/storage/planStorage";
 
-import { useState, FC } from "react";
-import { X, Ruler, Sparkles, Check } from "lucide-react";
-
-interface FloorDimensionsModalProps {
+export interface FloorDimensionsModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentWidthMm: number;
   currentHeightMm: number;
   onApplyDimensions: (widthMm: number, heightMm: number) => void;
+  siteName?: string | undefined;
+  sites?: FloorSite[] | undefined;
+  activeSiteId?: string | undefined;
+  onSelectSite?: ((siteId: string) => void) | undefined;
 }
 
 const PRESET_SIZES = [
@@ -25,6 +28,10 @@ export const FloorDimensionsModal: FC<FloorDimensionsModalProps> = ({
   currentWidthMm,
   currentHeightMm,
   onApplyDimensions,
+  siteName,
+  sites = [],
+  activeSiteId,
+  onSelectSite,
 }) => {
   const [widthM, setWidthM] = useState<number>(Math.round(currentWidthMm / 1000));
   const [heightM, setHeightM] = useState<number>(Math.round(currentHeightMm / 1000));
@@ -44,15 +51,15 @@ export const FloorDimensionsModal: FC<FloorDimensionsModalProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-[520px] max-w-[95vw] flex flex-col overflow-hidden text-slate-200">
         <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
-              <Ruler className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-amber-600/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Building2 className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                Dimensions du Plan de Base
+                Taille de la Zone • {siteName ?? "Site Principal"}
               </h3>
               <p className="text-[11px] text-slate-400">
-                Échelle métrique réelle de l'étage en mètres
+                Dimensions métriques réelles du plateau en mètres
               </p>
             </div>
           </div>
@@ -65,6 +72,27 @@ export const FloorDimensionsModal: FC<FloorDimensionsModalProps> = ({
         </div>
 
         <div className="p-5 space-y-4 text-xs">
+          {/* Sélecteur de Site si plusieurs sites */}
+          {sites.length > 1 && onSelectSite && (
+            <div className="p-2.5 bg-slate-950/60 rounded-lg border border-slate-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-slate-300">
+                <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="font-semibold text-xs">Site concerné :</span>
+              </div>
+              <select
+                value={activeSiteId}
+                onChange={(e) => onSelectSite(e.target.value)}
+                className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-100 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+              >
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    🏢 {s.name} {s.code ? `(${s.code})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="text-[11px] font-semibold text-slate-300 block mb-2">
               Préréglages d'aménagement standard :

@@ -14,6 +14,15 @@ import {
 } from "../snapping";
 import { useCameraStore } from "../useCameraStore";
 import { Viewport, BoundingBox } from "../types";
+import { generateBatchDesks } from "../batchSpawner";
+import { autoRoutePortsToRack, getRackPortAvailability } from "../autoRoute";
+import { parseAndAuditMatrixCsv, applyMatrixImport } from "../../ingestion/matrixCsvParser";
+import { NodeDisplay, RackDisplay } from "../../../components/canvas/EquipmentLayer";
+import {
+  resolveEffectiveOutletNetwork,
+  getSwitchPortProfile,
+  isSwitchPortOccupied,
+} from "../networkProfiles";
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -269,6 +278,336 @@ async function runSpatialTests() {
   assertClose(noSnapResult.snappedPoint.y, 25000, 1e-6, "Position Y d'origine préservée");
 
   console.log("   ✅ Accrochage automatique (Clip auto) et docking de jonctions certifiés.");
+
+  // ---------------------------------------------------------------------------
+  // Test 9 : Étalonnage d'Échelle 2-Points & Synchronisation pixelsPerMeter
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 9. Test d'étalonnage d'échelle et synchronisation pixelsPerMeter...");
+  const initialScale = useCameraStore.getState().viewport.scale;
+  useCameraStore.getState().setPixelsPerMeter(50); // 50 px = 1 mètre => scale = 0.05 px/mm
+  const updatedPpm = useCameraStore.getState().pixelsPerMeter;
+  const updatedScale = useCameraStore.getState().viewport.scale;
+  assertClose(updatedPpm, 50, 1e-6, "PPM synchronisé à 50 px/m");
+  assertClose(updatedScale, 0.05, 1e-6, "Échelle Konva mise à jour à 0.05 px/mm");
+
+  // Vérifier qu'une distance mesurée en pixels de 250px correspond exactement à 5.0m
+  const measuredPx = 250;
+  const computedMeters = measuredPx / updatedPpm;
+  assertClose(computedMeters, 5.0, 1e-6, "Conversion 250px / 50ppm = 5.0m");
+
+  // Rétablissement
+  useCameraStore.getState().setPixelsPerMeter(initialScale * 1000);
+  console.log("   ✅ Étalonnage d'échelle métrique et synchronisation Zustand certifiés.");
+
+  // ---------------------------------------------------------------------------
+  // Test 10 : Générateur d'Îlots Matriciels en Masse (generateBatchDesks)
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 10. Test de génération d'îlots matriciels en masse (Batch Desk Spawner)...");
+  const batchResult = generateBatchDesks({
+    deskType: "quad_4",
+    rows: 2,
+    columns: 2,
+    spacingXMeters: 1.5,
+    spacingYMeters: 2.0,
+    originX: 10000,
+    originY: 10000,
+    defaultRackId: "rack-01",
+    startDeskNumber: 101,
+  });
+
+  assert(batchResult.desks.length === 4, "4 bureaux quad_4 générés");
+  assert(batchResult.totalSeats === 16, "16 sièges/postes de travail créés (4 par quad)");
+  assert(batchResult.outlets.length === 32, "32 prises RJ45 solidaires créées (8 par quad: 4 Data + 4 VoIP)");
+  assert(batchResult.totalOutlets === 32, "Total de 32 prises conformes");
+
+  const firstDesk = batchResult.desks[0]!;
+  assertClose(firstDesk.xMm, 10000, 1e-6, "Coordonnée X d'origine respectée");
+  assertClose(firstDesk.yMm, 10000, 1e-6, "Coordonnée Y d'origine respectée");
+  assert(firstDesk.subType === "BENCH_QUAD", "Type de meuble BENCH_QUAD conforme");
+  assert(firstDesk.seats?.length === 4, "4 sièges assignés au meuble");
+
+  console.log("   ✅ Génération matricielle de 16 postes avec 32 ports RJ45 solidaires certifiée.");
+
+  // ---------------------------------------------------------------------------
+  // Test 11 : Auto-Câblage Orthogonal vers Baie (autoRoutePortsToRack)
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 11. Test du câblage automatique orthogonal vers la baie (Auto-Route)...");
+  const mockRacks: RackDisplay[] = [
+    {
+      id: "rack-auto",
+      name: "BAIE-TEST",
+      xMm: 20000,
+      yMm: 5000,
+      widthMm: 800,
+      depthMm: 1000,
+      uHeight: 42,
+      devices: [
+        {
+          id: "sw-test",
+          name: "SWITCH-RDC-01",
+          slotU: 24,
+          deviceType: "SWITCH",
+          brand: "CISCO",
+          model: "Catalyst 9300-24P",
+          status: "ONLINE",
+          portsCount: 24,
+        },
+      ],
+    },
+  ];
+
+  const outletsToRoute: NodeDisplay[] = Array.from({ length: 10 }, (_, i) => ({
+    id: `outlet-test-${i + 1}`,
+    name: `Prise Test ${i + 1}`,
+    type: "WALL_OUTLET",
+    xMm: 10000 + i * 500,
+    yMm: 15000,
+    subType: "WALL_OUTLET",
+    isPatched: false,
+  }));
+
+  const availBefore = getRackPortAvailability(mockRacks, outletsToRoute);
+  assert(availBefore[0]!.freePorts === 24, "24 ports disponibles avant routage");
+
+  const routeResult = autoRoutePortsToRack({
+    portIds: outletsToRoute.map((o) => o.id),
+    rackId: "rack-auto",
+    allNodes: outletsToRoute,
+    racks: mockRacks,
+  });
+
+  assert(routeResult.routedCount === 10, "10 prises raccordées avec succès");
+  assert(routeResult.assignments.length === 10, "10 affectations détaillées produites");
+  assert(Object.keys(routeResult.updatedCustomPivots).length > 0, "Pivot orthogonal 90° calculé pour le ruban");
+
+  routeResult.updatedNodes.forEach((node, idx) => {
+    assert(node.isPatched === true, `Nœud ${node.id} est maintenant brassé`);
+    assert(node.connectedRackId === "rack-auto", "Baie cible correcte");
+    assert(node.connectedSwitchPort === `Gi1/0/${idx + 1}`, `Port switch Gi1/0/${idx + 1} assigné`);
+  });
+
+  const availAfter = getRackPortAvailability(mockRacks, routeResult.updatedNodes);
+  assert(availAfter[0]!.freePorts === 14, "14 ports disponibles après routage des 10 prises");
+  console.log("   ✅ Auto-routage orthogonal 90°, allocation switch et décalage ruban validés.");
+
+  // ---------------------------------------------------------------------------
+  // Test 12 : Ingestion et Audit de Matrice CSV DSI (parseAndAuditMatrixCsv & applyMatrixImport)
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 12. Test d'audit et d'application de matrice CSV DSI...");
+  const validCsv = `
+Prise_ID;Bureau_ID;Utilisateur;IP_Machine;MAC;VLAN_ID;Baie;Switch_Nom;Port_Switch
+PRISE-A101;DESK-101;Alice Dupont;10.42.20.101;00:1A:2B:3C:4D:5E;20;BAIE-01;SW-01;Gi1/0/1
+PRISE-A102;DESK-102;Bob Martin;10.42.30.102;00:1A:2B:3C:4D:5F;30;BAIE-01;SW-01;Gi1/0/2
+PRISE-A103;DESK-103;Clara Bernard;10.42.20.103;00:1A:2B:3C:4D:60;20;BAIE-01;SW-01;Gi1/0/3
+`.trim();
+
+  const auditValid = parseAndAuditMatrixCsv(validCsv);
+  assert(auditValid.isValid === true, "Matrice valide approuvée");
+  assert(auditValid.validRows.length === 3, "3 lignes valides extraites");
+  assert(auditValid.summary.distinctUsers === 3, "3 utilisateurs distincts");
+  assert(auditValid.summary.distinctVlans === 2, "2 VLANs distincts (20 et 30)");
+
+  const invalidCsv = `
+Prise_ID;Bureau_ID;Utilisateur;IP_Machine;MAC;VLAN_ID;Baie;Switch_Nom;Port_Switch
+PRISE-ERR1;DESK-999;User Erreur 1;999.999.999.999;00:1A:2B:3C:4D:5E;20;BAIE-01;SW-01;Gi1/0/1
+PRISE-ERR2;DESK-999;User Erreur 2;10.42.20.50;INVALID_MAC_ADDR;20;BAIE-01;SW-01;Gi1/0/2
+`.trim();
+
+  const auditInvalid = parseAndAuditMatrixCsv(invalidCsv);
+  assert(auditInvalid.isValid === false, "Fichier avec erreurs rejeté");
+  assert(auditInvalid.errors.length >= 2, "Au moins 2 erreurs détectées");
+  const ipError = auditInvalid.errors.find((e) => e.column === "IP_Machine");
+  const macError = auditInvalid.errors.find((e) => e.column === "MAC");
+  assert(ipError !== undefined, "Erreur IP détectée");
+  assert(macError !== undefined, "Erreur MAC détectée");
+
+  const applyResult = applyMatrixImport(auditValid.validRows, []);
+  assert(applyResult.unpositionedNodes.length > 0, "Éléments non positionnés créés pour le tiroir");
+  const unplacedDesk = applyResult.unpositionedNodes.find((n) => n.id === "unpositioned-desk-DESK-101");
+  assert(unplacedDesk !== undefined, "Bureau non positionné présent");
+  assert(unplacedDesk?.assignedPerson === "Alice Dupont", "Utilisateur Alice Dupont rattaché au bureau");
+
+  console.log("   ✅ Audit CSV matriciel DSI, validation IPv4/MAC et génération de tiroir d'éléments certifiés.");
+
+  // ---------------------------------------------------------------------------
+  // Test 13 : Architecture Cuivre Passif & Héritage Dynamique de Profil Switch
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 13. Test de la vision cuivre passif et héritage dynamique du profil switch...");
+  const mockRackWithSwitches: RackDisplay = {
+    id: "rack-heritage-01",
+    name: "BAIE-HERITAGE",
+    xMm: 10000,
+    yMm: 10000,
+    widthMm: 800,
+    depthMm: 1000,
+    uHeight: 42,
+    devices: [
+      {
+        id: "sw-heritage-01",
+        name: "SW-HERITAGE-POE-24P",
+        slotU: 24,
+        uSize: 1,
+        deviceType: "SWITCH",
+        brand: "CISCO",
+        model: "Cisco Catalyst 24-Port PoE+",
+        status: "ONLINE",
+        portsCount: 24,
+        poeBudgetW: 370,
+      },
+    ],
+  };
+
+  const port1Profile = getSwitchPortProfile(mockRackWithSwitches.devices?.[0], "Gi1/0/1");
+  assert(port1Profile.vlanId === 20, "Port 1 assigné au VLAN 20 par défaut");
+
+  // Prise débranchée / passive
+  const unpatchedOutlet: NodeDisplay = {
+    id: "outlet-passive-01",
+    type: "WALL_OUTLET",
+    name: "Prise Brute",
+    xMm: 2000,
+    yMm: 2000,
+  };
+
+  const passiveNet = resolveEffectiveOutletNetwork(unpatchedOutlet, [mockRackWithSwitches]);
+  assert(passiveNet.isPatched === false, "Prise non raccordée marquée passive");
+  assert(passiveNet.role === "GENERIC", "Rôle générique par défaut");
+  assert(passiveNet.poeEnabled === false, "Aucun PoE actif sur prise brute");
+  assert(passiveNet.vlanId === undefined, "Aucun VLAN attribué sur cuivre passif");
+
+  // Raccordement sur port Gi1/0/18 (réservé VoIP par profil)
+  const patchedVoipOutlet: NodeDisplay = {
+    ...unpatchedOutlet,
+    isPatched: true,
+    connectedRackId: "rack-heritage-01",
+    connectedSwitchId: "sw-heritage-01",
+    connectedSwitchPort: "Gi1/0/18",
+  };
+  const voipNet = resolveEffectiveOutletNetwork(patchedVoipOutlet, [mockRackWithSwitches]);
+  assert(voipNet.isPatched === true, "Prise raccordée active");
+  assert(voipNet.vlanId === 30, "Hérite du VLAN 30 VoIP");
+  assert(voipNet.role === "VOIP", "Hérite du rôle VOIP");
+  assert(voipNet.poeEnabled === true, "Hérite de l'alimentation PoE pour le téléphone IP");
+
+  // Raccordement sur port Gi1/0/22 (réservé Wi-Fi par profil)
+  const patchedWifiOutlet: NodeDisplay = {
+    ...unpatchedOutlet,
+    isPatched: true,
+    connectedRackId: "rack-heritage-01",
+    connectedSwitchId: "sw-heritage-01",
+    connectedSwitchPort: "Gi1/0/22",
+  };
+  const wifiNet = resolveEffectiveOutletNetwork(patchedWifiOutlet, [mockRackWithSwitches]);
+  assert(wifiNet.vlanId === 50, "Hérite du VLAN 50 Wi-Fi");
+  assert(wifiNet.role === "WIFI", "Hérite du rôle WIFI");
+  assert(wifiNet.poePowerW === 30, "Hérite du PoE+ 30W");
+  console.log("   ✅ Héritage dynamique du port de commutateur certifié (VLAN, PoE, Rôle).");
+
+  // ---------------------------------------------------------------------------
+  // Test 14 : Anti-Collision Stricte des Ports Commutateur (1:1 exclusif)
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 14. Test d'anti-collision stricte sur les ports de switch...");
+  const isOccupied = isSwitchPortOccupied(
+    "rack-heritage-01",
+    "sw-heritage-01",
+    "Gi1/0/18",
+    [patchedVoipOutlet]
+  );
+  assert(isOccupied === true, "Le port Gi1/0/18 est correctement détecté comme occupé");
+
+  const isFree = isSwitchPortOccupied(
+    "rack-heritage-01",
+    "sw-heritage-01",
+    "Gi1/0/1",
+    [patchedVoipOutlet]
+  );
+  assert(isFree === false, "Le port Gi1/0/1 est disponible");
+  console.log("   ✅ Exclusivité 1:1 stricte validée contre tout doublon de port.");
+
+  // ---------------------------------------------------------------------------
+  // Test 15 : Auto-Route avec Sélection Ciblée de Switch
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 15. Test d'Auto-Route avec switch cible explicite...");
+  const rackWithTwoSwitches: RackDisplay = {
+    id: "rack-multi-sw",
+    name: "BAIE-MULTI-SW",
+    xMm: 20000,
+    yMm: 20000,
+    widthMm: 800,
+    depthMm: 1000,
+    uHeight: 42,
+    devices: [
+      {
+        id: "sw-cisco-primary",
+        name: "SW-CISCO-PRIMARY",
+        slotU: 24,
+        uSize: 1,
+        deviceType: "SWITCH",
+        brand: "CISCO",
+        status: "ONLINE",
+        portsCount: 24,
+      },
+      {
+        id: "sw-aruba-secondary",
+        name: "SW-ARUBA-SECONDARY",
+        slotU: 22,
+        uSize: 1,
+        deviceType: "SWITCH",
+        brand: "ARUBA",
+        status: "ONLINE",
+        portsCount: 24,
+      },
+    ],
+  };
+
+  const testOutletsToRoute: NodeDisplay[] = [
+    { id: "outlet-multi-1", type: "WALL_OUTLET", name: "Prise M1", xMm: 5000, yMm: 5000 },
+    { id: "outlet-multi-2", type: "WALL_OUTLET", name: "Prise M2", xMm: 6000, yMm: 5000 },
+  ];
+
+  const routedToSecondary = autoRoutePortsToRack({
+    portIds: ["outlet-multi-1", "outlet-multi-2"],
+    rackId: "rack-multi-sw",
+    switchId: "sw-aruba-secondary",
+    allNodes: testOutletsToRoute,
+    racks: [rackWithTwoSwitches],
+    customPivots: {},
+  });
+
+  routedToSecondary.updatedNodes.forEach((node) => {
+    assert(node.connectedSwitchId === "sw-aruba-secondary", "Raccordé spécifiquement au switch Aruba secondaire");
+    assert(node.connectedRackId === "rack-multi-sw", "Baie cible correcte");
+  });
+  console.log("   ✅ Auto-Route avec sélection de commutateur spécifique validé.");
+
+  // ---------------------------------------------------------------------------
+  // Test 16 : Cadrage et Dézoom Profond pour Très Grands Campus Multi-Bâtiments
+  // ---------------------------------------------------------------------------
+  console.log("\n🧪 16. Test de dézoom profond pour très grand campus multi-bâtiments (2km × 1.5km)...");
+  const megaCampusBounds: BoundingBox = {
+    minX: 0,
+    minY: 0,
+    maxX: 2000000,  // 2 kilomètres (2 000 m)
+    maxY: 1500000,  // 1.5 kilomètres (1 500 m)
+    width: 2000000,
+    height: 1500000,
+  };
+
+  const megaFit = fitToBounds(megaCampusBounds, 1920, 1080, 50);
+  assert(megaFit.scale >= 0.0002, "L'échelle reste au-dessus ou égale à la borne minimale de sécurité (0.0002)");
+  assert(megaFit.scale < 0.001, "L'échelle descend en-dessous de 0.001 pour afficher l'intégralité du site");
+
+  const megaTopLeft = worldToScreen({ x: megaCampusBounds.minX, y: megaCampusBounds.minY }, megaFit);
+  const megaBottomRight = worldToScreen({ x: megaCampusBounds.maxX, y: megaCampusBounds.maxY }, megaFit);
+
+  assert(megaTopLeft.x >= 49, "Campus TopLeft visible dans l'écran");
+  assert(megaBottomRight.x <= 1920 - 49, "Campus BottomRight visible dans l'écran");
+  assert(megaBottomRight.y <= 1080 - 49, "Campus Bottom visible dans l'écran");
+
+  // Vérification que le zoom arrière manuel peut descendre jusqu'à la limite 0.0002
+  const maxDezoomViewport = zoomAtPointer({ x: 960, y: 540 }, megaFit, 0.0001);
+  assert(maxDezoomViewport.scale === 0.0002, "Le zoom arrière manuel atteint exactement la borne minScale de 0.0002");
+  console.log("   ✅ Dézoom macro 0.0002 certifié : vision globale jusqu'à 5 km multi-bâtiments validée.");
 
   console.log("\n🎉 TOUS LES TESTS DU MOTEUR SPATIAL 2D SONT VALIDÉS AVEC SUCCÈS !");
 }

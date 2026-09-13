@@ -10,6 +10,8 @@ export interface CameraState {
   readonly gridConfig: GridConfig;
 
   // Actions
+  readonly pixelsPerMeter: number;
+  readonly setPixelsPerMeter: (ppm: number) => void;
   readonly setViewport: (update: Partial<Viewport>) => void;
   readonly panBy: (dx: number, dy: number) => void;
   readonly zoomAt: (pointerScreen: Point2D, scaleFactor: number) => void;
@@ -41,15 +43,30 @@ const DEFAULT_GRID: GridConfig = {
 
 export const useCameraStore = create<CameraState>()((set, get) => ({
   viewport: DEFAULT_VIEWPORT,
-  minScale: 0.005, // 1m = 5px (vision globale bâtiment entier)
+  minScale: 0.0002, // 1m = 0.2px (vision globale très grands sites / campus multi-bâtiments)
   maxScale: 2.0,   // 1mm = 2px (zoom chirurgical sur baie/connecteurs)
   isPanning: false,
   gridConfig: DEFAULT_GRID,
+  pixelsPerMeter: DEFAULT_VIEWPORT.scale * 1000,
+
+  setPixelsPerMeter: (ppm: number) => {
+    const { minScale, maxScale, viewport } = get();
+    // ppm = pixels / meter. Since world is in mm (1000mm = 1m), scale = px/mm = ppm / 1000
+    const nextScale = Math.min(Math.max(ppm / 1000, minScale), maxScale);
+    set({
+      pixelsPerMeter: nextScale * 1000,
+      viewport: { ...viewport, scale: nextScale },
+    });
+  },
 
   setViewport: (update) =>
-    set((state) => ({
-      viewport: { ...state.viewport, ...update },
-    })),
+    set((state) => {
+      const nextViewport = { ...state.viewport, ...update };
+      return {
+        viewport: nextViewport,
+        pixelsPerMeter: nextViewport.scale * 1000,
+      };
+    }),
 
   panBy: (dx, dy) =>
     set((state) => ({
@@ -64,7 +81,10 @@ export const useCameraStore = create<CameraState>()((set, get) => ({
     const { viewport, minScale, maxScale } = get();
     const newScale = viewport.scale * scaleFactor;
     const nextViewport = zoomAtPointer(pointerScreen, viewport, newScale, minScale, maxScale);
-    set({ viewport: nextViewport });
+    set({
+      viewport: nextViewport,
+      pixelsPerMeter: nextViewport.scale * 1000,
+    });
   },
 
   zoomIn: (centerScreen = { x: 800, y: 500 }) => {
@@ -93,10 +113,17 @@ export const useCameraStore = create<CameraState>()((set, get) => ({
       minScale,
       maxScale
     );
-    set({ viewport: fittedViewport });
+    set({
+      viewport: fittedViewport,
+      pixelsPerMeter: fittedViewport.scale * 1000,
+    });
   },
 
-  resetCamera: () => set({ viewport: DEFAULT_VIEWPORT }),
+  resetCamera: () =>
+    set({
+      viewport: DEFAULT_VIEWPORT,
+      pixelsPerMeter: DEFAULT_VIEWPORT.scale * 1000,
+    }),
 
   setIsPanning: (isPanning) => set({ isPanning }),
 

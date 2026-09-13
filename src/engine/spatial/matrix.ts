@@ -42,8 +42,8 @@ export function zoomAtPointer(
   pointerScreenPos: Point2D,
   currentViewport: Viewport,
   newScale: number,
-  minScale = 0.005, // 1m = 5px (vue d'ensemble grand campus)
-  maxScale = 2.0    // 1mm = 2px (vue ultra détaillée port RJ45)
+  minScale = 0.0002, // 1m = 0.2px (vue d'ensemble très grand campus multi-bâtiments)
+  maxScale = 2.0     // 1mm = 2px (vue ultra détaillée port RJ45)
 ): Viewport {
   const clampedScale = Math.min(Math.max(newScale, minScale), maxScale);
 
@@ -101,7 +101,7 @@ export function fitToBounds(
   screenWidth: number,
   screenHeight: number,
   paddingPx = 40,
-  minScale = 0.005,
+  minScale = 0.0002,
   maxScale = 2.0
 ): Viewport {
   const availableWidth = Math.max(screenWidth - paddingPx * 2, 100);

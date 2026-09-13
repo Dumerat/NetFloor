@@ -14,9 +14,20 @@ export const GridLayer: FC<GridLayerProps> = ({
   floorHeightMm,
   scale,
 }) => {
-  // Ajustement dynamique du pas de grille selon le zoom
-  // Si zoom très arrière : pas de 5000mm (5m), sinon 2000mm (2m) ou 1000mm (1m)
-  const stepMm = scale < 0.01 ? 5000 : scale < 0.03 ? 2000 : 1000;
+  // Ajustement dynamique du pas de grille selon le zoom :
+  // De 50m pour les vues macro très dézoomées à 1m en vue rapprochée
+  const stepMm =
+    scale < 0.001
+      ? 50000 // 50m (très grand campus multi-bâtiments)
+      : scale < 0.003
+      ? 20000 // 20m
+      : scale < 0.006
+      ? 10000 // 10m
+      : scale < 0.01
+      ? 5000  // 5m
+      : scale < 0.03
+      ? 2000  // 2m
+      : 1000; // 1m
 
   const verticalLines: number[] = [];
   for (let x = 0; x <= floorWidthMm; x += stepMm) {
