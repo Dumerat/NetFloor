@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { MOCK_DISCOVERED_DEVICES, DeviceTelemetry } from "@/data/settingsStore";
+import { DeviceTelemetry } from "@/data/settingsStore";
 import snmp from "net-snmp";
 
 function snmpGetPromise(session: any, oids: string[]): Promise<any[]> {
@@ -223,16 +223,8 @@ export async function POST(req: Request) {
 
       isLiveSnmp = true;
     } catch {
-      // Si le simulateur local n'est pas démarré, fallback avec jitter
-      liveDevices = MOCK_DISCOVERED_DEVICES.map((dev) => {
-        const cpuJitter = Math.floor(Math.random() * 6) - 3;
-        const memJitter = Math.floor(Math.random() * 4) - 2;
-        return {
-          ...dev,
-          cpuLoadPercent: Math.max(5, Math.min(99, dev.cpuLoadPercent + cpuJitter)),
-          memoryUsagePercent: Math.max(10, Math.min(95, dev.memoryUsagePercent + memJitter)),
-        };
-      });
+      // Si l'hôte SNMP est injoignable, renvoyer une liste vide (zéro équipement résiduel factice)
+      liveDevices = [];
       isLiveSnmp = false;
     }
 
@@ -243,8 +235,8 @@ export async function POST(req: Request) {
       offline: liveDevices.filter((d) => d.status === "OFFLINE").length,
       isLiveSnmp,
       source: isLiveSnmp
-        ? "Lab Docker SNMPsim (127.0.0.1:161/udp)"
-        : "Télémétrie de secours simulée",
+        ? "Agent SNMP Réel / Lab Docker (161/udp)"
+        : "Aucun agent SNMP détecté",
     };
 
     return NextResponse.json({

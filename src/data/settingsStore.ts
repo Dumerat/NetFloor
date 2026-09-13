@@ -134,6 +134,121 @@ export const LAB_SNMP_CONFIG: SnmpSettings = {
 export const INITIAL_SETTINGS: SystemSettings = {
   sso: {
     provider: "ACTIVE_DIRECTORY_LDAP",
+    activeDirectory: {
+      serverHost: "",
+      port: 389,
+      encryption: "NONE",
+      domainFqdn: "",
+      netbiosDomain: "",
+      baseDn: "",
+      bindDn: "",
+      bindPassword: "",
+      userSearchFilter: "(&(objectCategory=person)(objectClass=user)(sAMAccountName={0}))",
+      adminGroupDn: "",
+      rhGroupDn: "",
+      techGroupDn: "",
+      syncIntervalMinutes: 30,
+    },
+    tenantId: "",
+    clientId: "",
+    clientSecret: "",
+    corporateDomain: "",
+    syncEnabled: false,
+    lastSyncIso: "",
+    status: "DISCONNECTED",
+    tokenExpiryIso: "",
+  },
+  snmp: {
+    version: "v2c",
+    targetSubnet: "10.42.0.0/24",
+    community: "public",
+    v3User: "",
+    v3AuthProtocol: "SHA",
+    v3PrivProtocol: "AES",
+    v3AuthPass: "",
+    v3PrivPass: "",
+    pollIntervalSeconds: 60,
+    lastScanIso: "",
+  },
+  subnets: [
+    {
+      vlanId: 1,
+      vlanName: "VLAN_ADMIN_INFRA",
+      cidr: "10.42.0.0/24",
+      gateway: "10.42.0.254",
+      dhcpRange: "10.42.0.50 - 10.42.0.99",
+      usedIps: 0,
+      totalIps: 254,
+    },
+    {
+      vlanId: 20,
+      vlanName: "VLAN_CORP_DATA",
+      cidr: "10.42.20.0/24",
+      gateway: "10.42.20.254",
+      dhcpRange: "10.42.20.10 - 10.42.20.200",
+      usedIps: 0,
+      totalIps: 254,
+    },
+    {
+      vlanId: 30,
+      vlanName: "VLAN_VOIP",
+      cidr: "10.42.30.0/24",
+      gateway: "10.42.30.254",
+      dhcpRange: "10.42.30.10 - 10.42.30.150",
+      usedIps: 0,
+      totalIps: 254,
+    },
+    {
+      vlanId: 40,
+      vlanName: "VLAN_PRINT",
+      cidr: "10.42.40.0/24",
+      gateway: "10.42.40.254",
+      dhcpRange: "10.42.40.10 - 10.42.40.50",
+      usedIps: 0,
+      totalIps: 254,
+    },
+    {
+      vlanId: 50,
+      vlanName: "VLAN_WIFI_INFRA",
+      cidr: "10.42.50.0/24",
+      gateway: "10.42.50.254",
+      dhcpRange: "10.42.50.10 - 10.42.50.220",
+      usedIps: 0,
+      totalIps: 254,
+    },
+  ],
+  integrations: {
+    netbox: {
+      enabled: false,
+      url: "",
+      apiToken: "",
+      lastSyncIso: "",
+      autoSyncOnSave: false,
+    },
+    glpi: {
+      enabled: false,
+      url: "",
+      appToken: "",
+      userToken: "",
+      ticketOnCableFault: false,
+    },
+    intune: {
+      enabled: false,
+      complianceCheck: false,
+      mapMacToUser: false,
+    },
+    webhooks: {
+      enabled: false,
+      webhookUrl: "",
+      notifyOnPortDown: false,
+      notifyOnHighTemp: false,
+    },
+  },
+};
+
+export const DEMO_SETTINGS: SystemSettings = {
+  sso: {
+    provider: "ACTIVE_DIRECTORY_LDAP",
     activeDirectory: { ...LAB_ACTIVE_DIRECTORY_CONFIG },
     tenantId: "8f7a91bc-4e2a-4389-9a71-d0b8f0418c99",
     clientId: "netfloor-enterprise-sso-app",
@@ -287,7 +402,9 @@ export function resetStoredSettings(): SystemSettings {
   return INITIAL_SETTINGS;
 }
 
-export const MOCK_DISCOVERED_DEVICES: DeviceTelemetry[] = [
+export const MOCK_DISCOVERED_DEVICES: DeviceTelemetry[] = [];
+
+export const DEMO_DISCOVERED_DEVICES: DeviceTelemetry[] = [
   {
     id: "dev-sw-01",
     name: "SW-ACCESS-4A-U22",

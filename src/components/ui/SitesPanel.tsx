@@ -187,7 +187,7 @@ export const SitesPanel: FC<SitesPanelProps> = ({
                   type="text"
                   value={formCode}
                   onChange={(e) => setFormCode(e.target.value.toUpperCase())}
-                  placeholder="ex: PARIS-HQ"
+                  placeholder="ex: SITE-01"
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -323,7 +323,7 @@ export const SitesPanel: FC<SitesPanelProps> = ({
                     <Edit2 className="w-3 h-3" />
                   </button>
 
-                  {site.id !== DEFAULT_SITE_ID && (
+                  {sites.length > 1 && (
                     <button
                       type="button"
                       onClick={(e) => {

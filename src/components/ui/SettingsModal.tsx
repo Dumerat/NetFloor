@@ -33,7 +33,6 @@ import { NodeDisplay } from "@/components/canvas/EquipmentLayer";
 import {
   SystemSettings,
   INITIAL_SETTINGS,
-  MOCK_DISCOVERED_DEVICES,
   DeviceTelemetry,
   SubnetDefinition,
   LAB_ACTIVE_DIRECTORY_CONFIG,
@@ -71,8 +70,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>("sso");
   const [dsiMode, setDsiMode] = useState<"SUPERVISION" | "CONFIGURATION">("SUPERVISION");
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
-  const [discoveredDevices, setDiscoveredDevices] =
-    useState<DeviceTelemetry[]>(MOCK_DISCOVERED_DEVICES);
+  const [discoveredDevices, setDiscoveredDevices] = useState<DeviceTelemetry[]>([]);
 
   // Chargement des paramètres depuis le localStorage au montage
   useEffect(() => {
@@ -1593,20 +1591,40 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                           <span className="text-[10px] font-mono text-cyan-400">{sub.cidr}</span>
                         </div>
                         <div className="text-[11px] text-slate-400 truncate">{sub.vlanName}</div>
-                        <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
-                          <div
-                            className="bg-cyan-500 h-full rounded-full transition-all"
-                            style={{
-                              width: `${Math.min(100, (sub.usedIps / sub.totalIps) * 100)}%`,
-                            }}
-                          />
-                        </div>
-                        <div className="text-[10px] font-mono text-slate-500 flex justify-between pt-1">
-                          <span>GW: {sub.gateway}</span>
-                          <span>
-                            {sub.usedIps}/{sub.totalIps} IP
-                          </span>
-                        </div>
+                        {(() => {
+                          const usedCount =
+                            nodes.reduce((acc, n) => {
+                              let count = 0;
+                              if (n.vlanId === sub.vlanId && n.ipAddress) count++;
+                              if (n.stackedPorts) {
+                                count += n.stackedPorts.filter(
+                                  (p) => p.vlanId === sub.vlanId && p.ipAddress
+                                ).length;
+                              }
+                              return acc + count;
+                            }, 0) ||
+                            sub.usedIps ||
+                            0;
+
+                          return (
+                            <>
+                              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
+                                <div
+                                  className="bg-cyan-500 h-full rounded-full transition-all"
+                                  style={{
+                                    width: `${Math.min(100, (usedCount / sub.totalIps) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                              <div className="text-[10px] font-mono text-slate-500 flex justify-between pt-1">
+                                <span>GW: {sub.gateway}</span>
+                                <span>
+                                  {usedCount}/{sub.totalIps} IP
+                                </span>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -1619,6 +1637,20 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                   settings.subnets.find((s) => s.vlanId === selectedIpamVlanId) ??
                   settings.subnets[0];
                 if (!activeSubnet) return null;
+
+                const activeUsedCount =
+                  nodes.reduce((acc, n) => {
+                    let count = 0;
+                    if (n.vlanId === activeSubnet.vlanId && n.ipAddress) count++;
+                    if (n.stackedPorts) {
+                      count += n.stackedPorts.filter(
+                        (p) => p.vlanId === activeSubnet.vlanId && p.ipAddress
+                      ).length;
+                    }
+                    return acc + count;
+                  }, 0) ||
+                  activeSubnet.usedIps ||
+                  0;
 
                 return (
                   <div className="p-3.5 bg-slate-950 border border-cyan-500/40 rounded-lg space-y-3.5 shadow-md">
@@ -1643,7 +1675,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         </h4>
                       </div>
                       <span className="text-[10px] font-mono text-slate-400">
-                        {activeSubnet.usedIps} / {activeSubnet.totalIps} adresses allouées
+                        {activeUsedCount} / {activeSubnet.totalIps} adresses allouées
                       </span>
                     </div>
 

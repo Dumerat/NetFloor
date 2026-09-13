@@ -633,9 +633,17 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     if (selectedNode.assignedPerson) {
       const match = selectedNode.assignedPerson
         .replace(/\s*\(.*\)/, "")
-        .trim()
-        .toLowerCase();
-      return ENTERPRISE_DIRECTORY.find((u) => u.fullName.toLowerCase().includes(match)) ?? null;
+        .trim();
+      const found = ENTERPRISE_DIRECTORY.find((u) => u.fullName.toLowerCase().includes(match.toLowerCase()));
+      if (found) return found;
+      return {
+        id: selectedNode.assignedUserId || "custom-user",
+        fullName: match,
+        jobTitle: "Collaborateur",
+        department: selectedNode.department || "Plateau",
+        email: `${match.toLowerCase().replace(/\s+/g, ".")}@corp.local`,
+        avatarColor: "bg-blue-600",
+      };
     }
     return null;
   }, [selectedNode]);

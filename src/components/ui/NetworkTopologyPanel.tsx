@@ -174,37 +174,50 @@ export const NetworkTopologyPanel: React.FC<NetworkTopologyPanelProps> = ({
         {/* NIVEAU 1 : Passerelle Internet & Coeur (WAN / FTTO / Firewall) */}
         <div className="space-y-1.5">
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            1. Entree Operateur & Securite (Core)
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                firewalls.length > 0 ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+              }`}
+            />
+            1. Entree Operateur & Securite (Core) ({firewalls.length})
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <Shield className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-semibold text-slate-200 text-xs">
-                    {firewalls[0]?.device?.name ?? "Arrivee Fibre FTTO 10G & Firewall Fortinet"}
+          {firewalls.length > 0 ? (
+            firewalls.map((fw, idx) => (
+              <div
+                key={fw.device.id || idx}
+                className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-slate-200 text-xs">{fw.device.name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        {fw.device.model} • {fw.rack.name} (U{fw.device.slotU})
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-slate-400 font-mono">
-                    {firewalls[0]?.device?.model ?? "FortiGate 100F HA Cluster"}
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {fw.device.status ?? "ONLINE"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-1 border-t border-slate-800/80 text-slate-400">
+                  <div>IP : {fw.device.ipAddress || "Non assignée"}</div>
+                  <div className="text-right text-emerald-400 font-semibold">
+                    {fw.device.portsCount ? `${fw.device.portsCount} ports` : "Passerelle"}
                   </div>
                 </div>
               </div>
-              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Liaison WAN UP
-              </span>
+            ))
+          ) : (
+            <div className="p-2.5 rounded-lg bg-slate-900/40 border border-slate-800/60 text-slate-500 text-xs text-center">
+              Aucun équipement pare-feu ou arrivée opérateur configuré
             </div>
-
-            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-1 border-t border-slate-800/80 text-slate-400">
-              <div>IP WAN : 195.154.42.1</div>
-              <div className="text-right text-emerald-400 font-semibold">
-                Debit : 10 Gbps symetrique
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* NIVEAU 2 : Baies Informatiques et Commutateurs de Distribution */}

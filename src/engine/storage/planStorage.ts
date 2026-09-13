@@ -42,13 +42,13 @@ export const DEFAULT_SITE_ID = "site-principal";
 export const DEFAULT_SITE: FloorSite = {
   id: DEFAULT_SITE_ID,
   name: "Site Principal",
-  code: "PARIS-HQ",
-  address: "Siège Principal - Paris",
-  description: "Bâtiment principal et infrastructures centrales",
-  surfaceM2: 1250,
+  code: "SITE-01",
+  address: "",
+  description: "",
+  surfaceM2: 0,
   color: "#3b82f6",
-  createdAtIso: new Date("2026-01-01").toISOString(),
-  updatedAtIso: new Date("2026-01-01").toISOString(),
+  createdAtIso: "2026-01-01T00:00:00.000Z",
+  updatedAtIso: "2026-01-01T00:00:00.000Z",
 };
 
 export function generatePlanId(): string {
@@ -265,11 +265,9 @@ export async function saveSite(site: FloorSite): Promise<void> {
 }
 
 /**
- * Supprime un site (le site principal ne peut pas être supprimé)
+ * Supprime un site
  */
 export async function deleteSite(siteId: string): Promise<void> {
-  if (siteId === DEFAULT_SITE_ID) return;
-
   try {
     const db = await openPlanDb();
     const tx = db.transaction(STORE_SITES, "readwrite");
@@ -295,3 +293,29 @@ export async function deleteSite(siteId: string): Promise<void> {
     } catch {}
   }
 }
+
+/**
+ * Supprime l'intégralité des sites enregistrés (pour remise à zéro complète)
+ */
+export async function clearAllSites(): Promise<void> {
+  try {
+    const db = await openPlanDb();
+    const tx = db.transaction(STORE_SITES, "readwrite");
+    const store = tx.objectStore(STORE_SITES);
+
+    await new Promise<void>((resolve, reject) => {
+      const req = store.clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+
+    db.close();
+  } catch {}
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(LOCALSTORAGE_SITES_KEY);
+    } catch {}
+  }
+}
+

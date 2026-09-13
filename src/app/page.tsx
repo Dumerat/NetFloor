@@ -37,6 +37,7 @@ import {
   loadAllSites,
   saveSite,
   deleteSite,
+  clearAllSites,
   DEFAULT_SITE_ID,
   DEFAULT_SITE,
 } from "@/engine/storage/planStorage";
@@ -1977,16 +1978,15 @@ export default function NetFloorApp() {
       setCustomPivots({});
       setSelectedNodeId(null);
       setSelectedNodeIds([]);
-      setSites([DEFAULT_SITE]);
-      setActiveSiteId(DEFAULT_SITE_ID);
       setFloorData({ widthMm: 60000, heightMm: 35000 });
       setUnpositionedNodes([]);
-
-      // Nettoyer tous les plans de fond stockés dans IndexedDB et réinitialiser l'état
-      for (const p of allBackgroundPlans) {
-        await deleteBackgroundPlan(p.id).catch(() => {});
-      }
+      // Nettoyer tous les plans de fond et sites stockés dans IndexedDB et réinitialiser
+      await deleteBackgroundPlan().catch(() => {});
+      await clearAllSites().catch(() => {});
+      await saveSite(DEFAULT_SITE).catch(() => {});
       setAllBackgroundPlans([]);
+      setSites([DEFAULT_SITE]);
+      setActiveSiteId(DEFAULT_SITE_ID);
       setBackgroundPlan({
         imageUrl: null,
         name: "",
@@ -2052,9 +2052,13 @@ export default function NetFloorApp() {
         if (cfg.site) {
           setSites([cfg.site]);
           setActiveSiteId(cfg.site.id);
+          await saveSite(cfg.site).catch(() => {});
         } else if (cfg.sites && cfg.sites.length > 0) {
           setSites(cfg.sites);
           setActiveSiteId(cfg.sites[0].id);
+          for (const s of cfg.sites) {
+            await saveSite(s).catch(() => {});
+          }
         }
         if (cfg.floor) {
           setFloorData({

@@ -147,16 +147,16 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
   const [activeTab, setActiveTab] = useState<DiscoveryTab>("ARUBA");
 
   // Configuration Aruba Central
-  const [arubaToken, setArubaToken] = useState("Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...");
+  const [arubaToken, setArubaToken] = useState("");
   const [arubaCluster, setArubaCluster] = useState("eu-central-1.central.arubanetworks.com");
   const [isSyncingAruba, setIsSyncingAruba] = useState(false);
-  const [arubaSwitches] = useState(MOCK_ARUBA_SWITCHES);
+  const [arubaSwitches, setArubaSwitches] = useState<typeof MOCK_ARUBA_SWITCHES>([]);
 
   // Configuration Zyxel Nebula
-  const [nebulaOrg, setNebulaOrg] = useState("Corporate-NetFloor-HQ");
-  const [nebulaApiKey, setNebulaApiKey] = useState("nebula_live_sk_89f0293fa0184b");
+  const [nebulaOrg, setNebulaOrg] = useState("");
+  const [nebulaApiKey, setNebulaApiKey] = useState("");
   const [isSyncingNebula, setIsSyncingNebula] = useState(false);
-  const [nebulaSwitches] = useState(MOCK_NEBULA_SWITCHES);
+  const [nebulaSwitches, setNebulaSwitches] = useState<typeof MOCK_NEBULA_SWITCHES>([]);
 
   // Configuration SNMP Local
   const [snmpSubnet, setSnmpSubnet] = useState("10.42.0.0/24");
@@ -173,26 +173,7 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
       macAddress: string;
       status: "ONLINE" | "SYNCED";
     }>
-  >([
-    {
-      name: "SW-CISCO-C9300-24P",
-      model: "Cisco Catalyst 9300-24P PoE+ 445W (SNMP Agent)",
-      brand: "CISCO",
-      portsCount: 24,
-      ipAddress: "10.42.0.12",
-      macAddress: "00:0A:41:88:99:A2",
-      status: "ONLINE",
-    },
-    {
-      name: "SW-CISCO-C3850-48T",
-      model: "Cisco Catalyst 3850-48T Gigabit Ethernet Switch",
-      brand: "CISCO",
-      portsCount: 48,
-      ipAddress: "10.42.0.14",
-      macAddress: "00:0A:41:77:88:B4",
-      status: "ONLINE",
-    },
-  ]);
+  >([]);
 
   // Toast de notification local
   const [addedToast, setAddedToast] = useState<string | null>(null);
@@ -279,6 +260,7 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
     setIsSyncingAruba(true);
     setTimeout(() => {
       setIsSyncingAruba(false);
+      setArubaSwitches(MOCK_ARUBA_SWITCHES);
       setAddedToast("🔄 Liaison Aruba Central synchronisée (4 commutateurs interrogés)");
       setTimeout(() => setAddedToast(null), 3000);
     }, 800);
@@ -289,6 +271,7 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
     setIsSyncingNebula(true);
     setTimeout(() => {
       setIsSyncingNebula(false);
+      setNebulaSwitches(MOCK_NEBULA_SWITCHES);
       setAddedToast("🔄 Zyxel Nebula Cloud synchronisé (Organisation à jour)");
       setTimeout(() => setAddedToast(null), 3000);
     }, 800);
@@ -307,27 +290,31 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.devices)) {
         const discovered = data.devices
-          .filter((d: any) => d.type === "SWITCH" || d.name?.includes("SW-"))
+          .filter((d: any) => d.type === "SWITCH" || d.deviceType === "SWITCH" || d.name?.includes("SW-"))
           .map((d: any) => ({
             name: d.name || "SW-DETECTED-SNMP",
             model: d.model || "Commutateur SNMP MIB-II",
             brand: "CISCO" as RackDeviceBrand,
-            portsCount: 24,
-            ipAddress: d.ip || "10.42.0.15",
-            macAddress: d.mac || "00:0A:41:66:77:88",
+            portsCount: d.totalPorts || d.portsCount || 24,
+            ipAddress: d.ip || d.ipAddress || "10.42.0.15",
+            macAddress: d.mac || d.macAddress || "00:0A:41:66:77:88",
             status: "ONLINE" as const,
           }));
+        setSnmpDiscoveredSwitches(discovered);
         if (discovered.length > 0) {
-          setSnmpDiscoveredSwitches(discovered);
+          setSnmpResultMsg(
+            `Scan SNMP terminé sur ${snmpSubnet} (${discovered.length} commutateur(s) en ligne).`
+          );
+        } else {
+          setSnmpResultMsg(`Scan SNMP terminé sur ${snmpSubnet} : aucun commutateur détecté.`);
         }
-        setSnmpResultMsg(
-          `Scan SNMP terminé sur ${snmpSubnet} (${data.summary?.online ?? 2} switchs en ligne).`
-        );
       } else {
-        setSnmpResultMsg(`Scan SNMP terminé sur ${snmpSubnet} (2 commutateurs détectés).`);
+        setSnmpDiscoveredSwitches([]);
+        setSnmpResultMsg(`Scan SNMP terminé sur ${snmpSubnet} : aucun commutateur détecté.`);
       }
     } catch {
-      setSnmpResultMsg("Scan terminé avec les commutateurs du Lab local.");
+      setSnmpDiscoveredSwitches([]);
+      setSnmpResultMsg("Échec de la communication SNMP (hôte ou réseau injoignable).");
     } finally {
       setIsScanningSnmp(false);
     }
@@ -460,48 +447,51 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
                     1 clic pour intégrer dans la baie
                   </span>
                 </div>
-                <div className="space-y-2">
-                  {arubaSwitches.map((sw) => (
-                    <div
-                      key={sw.serial}
-                      className="p-3 bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-xl transition flex items-center justify-between gap-3 group"
-                    >
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-100 group-hover:text-amber-300 transition">
-                            {sw.name}
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            Aruba CX / OS-S
-                          </span>
-                          <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            Cloud Synced
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate">{sw.model}</div>
-                        <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                          <span>IP: {sw.ipAddress}</span>
-                          <span>•</span>
-                          <span>MAC: {sw.macAddress}</span>
-                          <span>•</span>
-                          <span>{sw.portsCount} Ports</span>
-                          {sw.poeBudgetW > 0 && <span>• PoE {sw.poeBudgetW}W</span>}
-                          <span>•</span>
-                          <span>OS: {sw.firmware}</span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleAddArubaSwitch(sw)}
-                        className="px-3 py-1.5 bg-amber-600/30 hover:bg-amber-600 text-amber-200 hover:text-white border border-amber-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 shadow"
+                {arubaSwitches.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-slate-500 bg-slate-900/30 rounded-xl border border-slate-800/60 px-4">
+                    Aucun commutateur Aruba Central synchronisé. Renseignez votre token API et cliquez sur "Actualiser".
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {arubaSwitches.map((sw) => (
+                      <div
+                        key={sw.serial}
+                        className="p-3 bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-xl transition flex items-center justify-between gap-3 group"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Ajouter à la Baie</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-100 group-hover:text-amber-300 transition">
+                              {sw.name}
+                            </span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              Aruba CX / OS-S
+                            </span>
+                            <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              Cloud Synced
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate">{sw.model}</div>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                            <span>IP: {sw.ipAddress}</span>
+                            <span>•</span>
+                            <span>MAC: {sw.macAddress}</span>
+                            <span>•</span>
+                            <span>{sw.portsCount} Ports</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleAddArubaSwitch(sw)}
+                          className="px-3 py-1.5 bg-amber-600/30 hover:bg-amber-600 text-amber-200 hover:text-white border border-amber-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 shadow"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Ajouter à la Baie</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -553,48 +543,54 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
                   <span>Commutateurs NebulaFlex découverts ({nebulaSwitches.length}) :</span>
                   <span className="text-slate-500 text-[10px]">Intégration directe au châssis</span>
                 </div>
-                <div className="space-y-2">
-                  {nebulaSwitches.map((sw) => (
-                    <div
-                      key={sw.serial}
-                      className="p-3 bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-xl transition flex items-center justify-between gap-3 group"
-                    >
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-100 group-hover:text-emerald-300 transition">
-                            {sw.name}
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            {sw.nebulaPack}
-                          </span>
-                          <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            Nebula Cloud
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate">{sw.model}</div>
-                        <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                          <span>IP: {sw.ipAddress}</span>
-                          <span>•</span>
-                          <span>MAC: {sw.macAddress}</span>
-                          <span>•</span>
-                          <span>{sw.portsCount} Ports GbE</span>
-                          {sw.poeBudgetW > 0 && <span>• PoE+ {sw.poeBudgetW}W</span>}
-                          <span>•</span>
-                          <span>Firmware: {sw.firmware}</span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleAddNebulaSwitch(sw)}
-                        className="px-3 py-1.5 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-200 hover:text-white border border-emerald-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 shadow"
+                {nebulaSwitches.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-slate-500 bg-slate-900/30 rounded-xl border border-slate-800/60 px-4">
+                    Aucun commutateur Nebula synchronisé. Renseignez vos identifiants d'organisation et cliquez sur "Actualiser".
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {nebulaSwitches.map((sw) => (
+                      <div
+                        key={sw.serial}
+                        className="p-3 bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-xl transition flex items-center justify-between gap-3 group"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Ajouter à la Baie</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-100 group-hover:text-emerald-300 transition">
+                              {sw.name}
+                            </span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              {sw.nebulaPack}
+                            </span>
+                            <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              Nebula Cloud
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate">{sw.model}</div>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                            <span>IP: {sw.ipAddress}</span>
+                            <span>•</span>
+                            <span>MAC: {sw.macAddress}</span>
+                            <span>•</span>
+                            <span>{sw.portsCount} Ports GbE</span>
+                            {sw.poeBudgetW > 0 && <span>• PoE+ {sw.poeBudgetW}W</span>}
+                            <span>•</span>
+                            <span>Firmware: {sw.firmware}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleAddNebulaSwitch(sw)}
+                          className="px-3 py-1.5 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-200 hover:text-white border border-emerald-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 shadow"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Ajouter à la Baie</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -657,45 +653,51 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
                 <div className="text-[11px] font-semibold text-slate-300 mb-2">
                   Commutateurs détectés via SNMP ({snmpDiscoveredSwitches.length}) :
                 </div>
-                <div className="space-y-2">
-                  {snmpDiscoveredSwitches.map((sw) => (
-                    <div
-                      key={sw.ipAddress}
-                      className="p-3 bg-slate-900 border border-slate-800 hover:border-sky-500/50 rounded-xl transition flex items-center justify-between gap-3 group"
-                    >
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-100 group-hover:text-sky-300 transition">
-                            {sw.name}
-                          </span>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                            SNMP v2c/v3
-                          </span>
-                          <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            Réponse OK
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 truncate">{sw.model}</div>
-                        <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                          <span>IP: {sw.ipAddress}</span>
-                          <span>•</span>
-                          <span>MAC: {sw.macAddress}</span>
-                          <span>•</span>
-                          <span>{sw.portsCount} Ports</span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleAddSnmpSwitch(sw)}
-                        className="px-3 py-1.5 bg-sky-600/30 hover:bg-sky-600 text-sky-200 hover:text-white border border-sky-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 shadow"
+                {snmpDiscoveredSwitches.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-slate-500 bg-slate-900/30 rounded-xl border border-slate-800/60 px-4">
+                    Aucun commutateur SNMP détecté. Lancez un scan sur une IP ou un sous-réseau joignable.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {snmpDiscoveredSwitches.map((sw) => (
+                      <div
+                        key={sw.ipAddress}
+                        className="p-3 bg-slate-900 border border-slate-800 hover:border-sky-500/50 rounded-xl transition flex items-center justify-between gap-3 group"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Ajouter à la Baie</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-100 group-hover:text-sky-300 transition">
+                              {sw.name}
+                            </span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                              SNMP v2c/v3
+                            </span>
+                            <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              Réponse OK
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate">{sw.model}</div>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                            <span>IP: {sw.ipAddress}</span>
+                            <span>•</span>
+                            <span>MAC: {sw.macAddress}</span>
+                            <span>•</span>
+                            <span>{sw.portsCount} Ports</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleAddSnmpSwitch(sw)}
+                          className="px-3 py-1.5 bg-sky-600/30 hover:bg-sky-600 text-sky-200 hover:text-white border border-sky-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 shadow"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Ajouter à la Baie</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

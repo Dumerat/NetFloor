@@ -21,7 +21,7 @@ import {
   Laptop,
 } from "lucide-react";
 import { NodeDisplay, RackDisplay } from "@/components/canvas/EquipmentLayer";
-import { ENTERPRISE_DIRECTORY } from "@/data/directory";
+import { ENTERPRISE_DIRECTORY, DirectoryUser } from "@/data/directory";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 import { FloorZone } from "@/types/zones";
 
@@ -65,9 +65,76 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
     return nodes.filter((n) => n.type === "WALL_OUTLET");
   }, [nodes]);
 
+  // Consolidation de l'annuaire (SAML/AD) et des collaborateurs assignés sur le plateau
+  const allUsers: DirectoryUser[] = useMemo(() => {
+    const userMap = new Map<string, DirectoryUser>();
+    for (const u of ENTERPRISE_DIRECTORY) {
+      userMap.set(u.fullName.toLowerCase(), u);
+    }
+    // Détecter les occupants assignés sur les bureaux et postes
+    for (const desk of deskNodes) {
+      if (desk.assignedPerson && !userMap.has(desk.assignedPerson.toLowerCase())) {
+        const name = desk.assignedPerson.trim();
+        userMap.set(name.toLowerCase(), {
+          id: desk.assignedUserId || `custom-${name.toLowerCase().replace(/\s+/g, "-")}`,
+          fullName: name,
+          jobTitle: "Collaborateur",
+          department: desk.department || "Plateau",
+          email: `${name.toLowerCase().replace(/\s+/g, ".")}@corp.local`,
+          avatarColor: "bg-blue-600",
+        });
+      }
+      if (desk.seats) {
+        for (const s of desk.seats) {
+          if (s.fullName && !userMap.has(s.fullName.toLowerCase())) {
+            const name = s.fullName.trim();
+            userMap.set(name.toLowerCase(), {
+              id: s.userId || `custom-${name.toLowerCase().replace(/\s+/g, "-")}`,
+              fullName: name,
+              jobTitle: s.seatLabel || "Collaborateur",
+              department: desk.department || "Plateau",
+              email: `${name.toLowerCase().replace(/\s+/g, ".")}@corp.local`,
+              avatarColor: "bg-purple-600",
+            });
+          }
+        }
+      }
+    }
+    // Détecter les occupants assignés sur les prises RJ45
+    for (const outlet of outletNodes) {
+      if (outlet.assignedPerson && !userMap.has(outlet.assignedPerson.toLowerCase())) {
+        const name = outlet.assignedPerson.trim();
+        userMap.set(name.toLowerCase(), {
+          id: outlet.assignedUserId || `custom-${name.toLowerCase().replace(/\s+/g, "-")}`,
+          fullName: name,
+          jobTitle: "Collaborateur",
+          department: outlet.department || "Plateau",
+          email: `${name.toLowerCase().replace(/\s+/g, ".")}@corp.local`,
+          avatarColor: "bg-emerald-600",
+        });
+      }
+      if (outlet.stackedPorts) {
+        for (const sp of outlet.stackedPorts) {
+          if (sp.assignedPerson && !userMap.has(sp.assignedPerson.toLowerCase())) {
+            const name = sp.assignedPerson.trim();
+            userMap.set(name.toLowerCase(), {
+              id: `custom-${name.toLowerCase().replace(/\s+/g, "-")}`,
+              fullName: name,
+              jobTitle: sp.outletRole || "Collaborateur",
+              department: outlet.department || "Plateau",
+              email: `${name.toLowerCase().replace(/\s+/g, ".")}@corp.local`,
+              avatarColor: "bg-indigo-600",
+            });
+          }
+        }
+      }
+    }
+    return Array.from(userMap.values());
+  }, [deskNodes, outletNodes]);
+
   // Correspondance Utilisateur -> Bureaux multiples, Prises multiples & Téléphone IP
   const usersWithAssignments = useMemo(() => {
-    return ENTERPRISE_DIRECTORY.map((user) => {
+    return allUsers.map((user) => {
       // 1. Trouver TOUS les meubles assignés à cet utilisateur
       interface UserDeskAssignment {
         desk: NodeDisplay;
@@ -655,8 +722,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
             </div>
 
             {filteredUsers.length === 0 ? (
-              <div className="text-center py-8 text-xs text-slate-500">
-                Aucun utilisateur trouvé pour cette recherche.
+              <div className="text-center py-8 text-xs text-slate-500 px-4">
+                {query
+                  ? "Aucun utilisateur trouvé pour cette recherche."
+                  : "Aucun utilisateur recensé. Connectez un annuaire d'entreprise (SAML/AD) ou assignez des collaborateurs aux bureaux et prises."}
               </div>
             ) : (
               filteredUsers.map(

@@ -8,7 +8,9 @@ export interface DirectoryUser {
   avatarColor?: string;
 }
 
-export const ENTERPRISE_DIRECTORY: DirectoryUser[] = [
+export const ENTERPRISE_DIRECTORY: DirectoryUser[] = [];
+
+export const DEMO_DIRECTORY: DirectoryUser[] = [
   {
     id: "usr-001",
     fullName: "Alexandre Martin",
