@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
-import { CircuitInspector, DEFAULT_RACK_DEVICES } from "@/components/ui/CircuitInspector";
+import { CircuitInspector } from "@/components/ui/CircuitInspector";
 import { EquipmentPalette, PaletteItem } from "@/components/ui/EquipmentPalette";
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { SettingsModal } from "@/components/ui/SettingsModal";
@@ -21,7 +21,7 @@ import {
 } from "@/components/canvas/EquipmentLayer";
 import { CableData, CableFilterMode } from "@/components/canvas/CableLayer";
 import { FloorDimensionsModal } from "@/components/ui/FloorDimensionsModal";
-import { FloorZone, DEFAULT_ZONES } from "@/types/zones";
+import { FloorZone } from "@/types/zones";
 import { BatchDeskSpawnerModal } from "@/components/ui/BatchDeskSpawnerModal";
 import { BatchSpawnResult } from "@/engine/spatial/batchSpawner";
 import { UnpositionedElementsDrawer } from "@/components/ui/UnpositionedElementsDrawer";
@@ -162,8 +162,8 @@ export default function NetFloorApp() {
   const zoomIn = useCameraStore((s) => s.zoomIn);
   const zoomOut = useCameraStore((s) => s.zoomOut);
   const fitFloor = useCameraStore((s) => s.fitFloor);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>("outlet-408-a");
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>(["outlet-408-a"]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [isRulerActive, setIsRulerActive] = useState<boolean>(false);
   const [isPlanManagerOpen, setIsPlanManagerOpen] = useState<boolean>(false);
   const [allBackgroundPlans, setAllBackgroundPlans] = useState<StoredBackgroundPlan[]>([]);
@@ -424,894 +424,122 @@ export default function NetFloorApp() {
     []
   );
 
-  // Zones de services / pôles d'aménagement
-  const [zones, setZones] = useState<FloorZone[]>(DEFAULT_ZONES);
+  // État de synchronisation temps réel avec la base de données PostgreSQL
+  const [dbSyncStatus, setDbSyncStatus] = useState<"SAVED" | "SAVING" | "OFFLINE" | "ERROR">(
+    "SAVED"
+  );
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const isInitialLoadedRef = useRef<boolean>(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Baies informatiques (Local Technique DSI, Répartiteur Est & Répartiteur Ouest R&D)
-  const [racks, setRacks] = useState<RackDisplay[]>([
-    {
-      id: "rack-01",
-      name: "BAIE-PRINCIPALE-RDC",
-      xMm: 12000,
-      yMm: 14000,
-      widthMm: 800,
-      depthMm: 1000,
-      uHeight: 42,
-      devices: DEFAULT_RACK_DEVICES,
-      siteId: DEFAULT_SITE_ID,
-    },
-    {
-      id: "rack-02",
-      name: "BAIE-SECONDAIRE-EST",
-      xMm: 45000,
-      yMm: 13000,
-      widthMm: 800,
-      depthMm: 800,
-      uHeight: 18,
-      devices: createDefaultRackDevices("rack-02", "BAIE-EST"),
-      siteId: DEFAULT_SITE_ID,
-    },
-    {
-      id: "rack-03",
-      name: "BAIE-OUEST-R&D",
-      xMm: 21500,
-      yMm: 10800,
-      widthMm: 800,
-      depthMm: 800,
-      uHeight: 24,
-      devices: createDefaultRackDevices("rack-03", "BAIE-RND"),
-      siteId: DEFAULT_SITE_ID,
-    },
-  ]);
+  // Zones de services / pôles d'aménagement (initialisé vierge)
+  const [zones, setZones] = useState<FloorZone[]>([]);
 
-  // Nœuds du plateau (Bureaux multi-places RH, Prises Réseau, Boîtes de Sol, Wi-Fi, Baies DSI)
-  const [nodes, setNodes] = useState<NodeDisplay[]>([
-    // 0. Baie informatique principale (Local Technique)
-    {
-      id: "rack-01",
-      type: "PATCH_PANEL",
-      name: "BAIE-PRINCIPALE-RDC",
-      xMm: 12000,
-      yMm: 14000,
-      widthMm: 800,
-      heightMm: 1000,
-      subType: "RACK_42U",
-      description:
-        "Baie principale de brassage & serveurs 42U avec commutateur Cisco Catalyst 9300 et bandeau Cat6A.",
-      ipAddress: "10.42.0.10",
-      macAddress: "00:0A:41:88:99:A1",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 1,
-      devices: DEFAULT_RACK_DEVICES,
-    },
-    // 1. Îlot Bench 4 Postes (4 collaborateurs distincts assignés)
-    {
-      id: "bench-402",
-      type: "DESK",
-      name: "Bureau 402",
-      xMm: 23000,
-      yMm: 15000,
-      widthMm: 3200,
-      heightMm: 1600,
-      subType: "BENCH_QUAD",
-      assignedPerson: "Thomas Roux, Sarah Benali, Lucas Vidal, Sophie Mercier",
-      department: "Pôle Collaboratif Tech & RH",
-      description:
-        "Îlot central 4 postes avec cloisonnettes acoustiques croisées et colonnes de câblage intégrées.",
-      chairPosition: "BOTTOM",
-      seats: [
-        {
-          seatIndex: 0,
-          seatLabel: "Place 1 (Haut-Gauche)",
-          userId: "usr-005",
-          fullName: "Thomas Roux",
-          department: "Tech Lab",
-        },
-        {
-          seatIndex: 1,
-          seatLabel: "Place 2 (Haut-Droite)",
-          userId: "usr-002",
-          fullName: "Sarah Benali",
-          department: "Ressources Humaines",
-        },
-        {
-          seatIndex: 2,
-          seatLabel: "Place 3 (Bas-Gauche)",
-          userId: "usr-006",
-          fullName: "Lucas Vidal",
-          department: "Support & Réseaux",
-        },
-        {
-          seatIndex: 3,
-          seatLabel: "Place 4 (Bas-Droite)",
-          userId: "usr-007",
-          fullName: "Sophie Mercier",
-          department: "Ressources Humaines",
-        },
-      ],
-    },
-    // 2. Bench Double Face-à-Face (2 collaborateurs distincts)
-    {
-      id: "bench-401",
-      type: "DESK",
-      name: "Bureau 401",
-      xMm: 29000,
-      yMm: 15000,
-      widthMm: 1600,
-      heightMm: 1600,
-      subType: "BENCH_DOUBLE",
-      assignedPerson: "Julie Dupont, Marc Lefebvre",
-      department: "Direction & Infra",
-      description: "Bench 2 postes face-à-face avec cloisonnette acoustique centrale.",
-      chairPosition: "BOTTOM",
-      seats: [
-        {
-          seatIndex: 0,
-          seatLabel: "Place 1 (Face Nord)",
-          userId: "usr-003",
-          fullName: "Julie Dupont",
-          department: "Direction Digitale",
-        },
-        {
-          seatIndex: 1,
-          seatLabel: "Place 2 (Face Sud)",
-          userId: "usr-004",
-          fullName: "Marc Lefebvre",
-          department: "Infrastructure IT",
-        },
-      ],
-    },
-    // 3. Bureau Solo Standard
-    {
-      id: "desk-408",
-      type: "DESK",
-      name: "Bureau 408",
-      xMm: 37000,
-      yMm: 15000,
-      widthMm: 1600,
-      heightMm: 800,
-      subType: "DESK_SOLO",
-      assignedPerson: "Alexandre Martin",
-      assignedUserId: "usr-001",
-      department: "Tech Lab",
-      description:
-        "Station de développement double écran 27\", station d'accueil Thunderbolt USB-C.",
-      chairPosition: "BOTTOM",
-      seats: [
-        {
-          seatIndex: 0,
-          seatLabel: "Place Unique",
-          userId: "usr-001",
-          fullName: "Alexandre Martin",
-          department: "Tech Lab",
-        },
-      ],
-    },
-    // 4. Prises réseau solidaires du Bureau 408
-    {
-      id: "outlet-408-a",
-      type: "WALL_OUTLET",
-      name: "Prise 408-A",
-      xMm: 38800,
-      yMm: 15200,
-      portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
-      attachedToDeskId: "desk-408",
-      outletRole: "DATA",
-      assignedPerson: "Alexandre Martin",
-      ipAddress: "10.42.20.108",
-      macAddress: "B4:2E:99:41:0A:12",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 4,
-      isPatched: true,
-      connectedRackId: "rack-01",
-      connectedSwitchPort: "Gi1/0/1",
-    },
-    {
-      id: "outlet-408-b",
-      type: "WALL_OUTLET",
-      name: "Prise 408-B",
-      xMm: 38800,
-      yMm: 15650,
-      portId: "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d",
-      attachedToDeskId: "desk-408",
-      outletRole: "VOIP",
-      assignedPerson: "Alexandre Martin",
-      ipAddress: "10.42.30.108",
-      macAddress: "00:08:5D:8A:22:9C",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 3,
-    },
-    // 5. Prises réseau pour l'îlot 402 (affectées aux collaborateurs des places 1 et 2)
-    {
-      id: "outlet-402-a",
-      type: "WALL_OUTLET",
-      name: "Prise 402-A",
-      xMm: 26400,
-      yMm: 15200,
-      portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
-      attachedToDeskId: "bench-402",
-      attachedSeatIndex: 0,
-      assignedPerson: "Thomas Roux",
-      outletRole: "DATA",
-      ipAddress: "10.42.20.102",
-      macAddress: "7C:10:C9:22:54:F1",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 5,
-    },
-    {
-      id: "outlet-402-b",
-      type: "WALL_OUTLET",
-      name: "Prise 402-B",
-      xMm: 26400,
-      yMm: 15650,
-      portId: "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d",
-      attachedToDeskId: "bench-402",
-      attachedSeatIndex: 1,
-      assignedPerson: "Sarah Benali",
-      outletRole: "VOIP",
-      ipAddress: "10.42.30.102",
-      macAddress: "00:08:5D:9B:31:0D",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 2,
-    },
-    // 5b. Colonnette Multi-Ports RJ45 intégrée au centre de l'îlot 402 (1 slot groupé 4 ports)
-    {
-      id: "colonnette-402",
-      type: "WALL_OUTLET",
-      name: "Colonnette 402",
-      xMm: 23600,
-      yMm: 14800,
-      attachedToDeskId: "bench-402",
-      outletRole: "DATA",
-      stackedPorts: [
-        {
-          portIndex: 0,
-          portLabel: "RJ45-1",
-          outletRole: "DATA",
-          vlanId: 20,
-          attachedSeatIndex: 0,
-          assignedPerson: "Thomas Roux",
-          ipAddress: "10.42.20.101",
-          macAddress: "7C:10:C9:22:54:F1",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 4,
-        },
-        {
-          portIndex: 1,
-          portLabel: "RJ45-2",
-          outletRole: "VOIP",
-          vlanId: 30,
-          attachedSeatIndex: 0,
-          assignedPerson: "Thomas Roux",
-          ipAddress: "10.42.30.101",
-          macAddress: "00:08:5D:9B:31:0D",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 2,
-        },
-        {
-          portIndex: 2,
-          portLabel: "RJ45-3",
-          outletRole: "DATA",
-          vlanId: 20,
-          attachedSeatIndex: 1,
-          assignedPerson: "Sarah Benali",
-          ipAddress: "10.42.20.102",
-          macAddress: "7C:10:C9:22:54:F2",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 3,
-        },
-        {
-          portIndex: 3,
-          portLabel: "RJ45-4",
-          outletRole: "VOIP",
-          vlanId: 30,
-          attachedSeatIndex: 1,
-          assignedPerson: "Sarah Benali",
-          ipAddress: "10.42.30.102",
-          macAddress: "00:08:5D:9B:31:0E",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 2,
-        },
-      ],
-    },
-    // 6. Boîte de Sol Centrale
-    {
-      id: "floorbox-01",
-      type: "WALL_OUTLET",
-      name: "Boîte Sol 1",
-      xMm: 33000,
-      yMm: 20000,
-      widthMm: 300,
-      heightMm: 300,
-      subType: "FLOOR_BOX",
-      portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
-      outletRole: "DATA",
-      ipAddress: "10.42.20.50",
-      macAddress: "00:1B:44:11:22:33",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 4,
-    },
-    // 7. Borne Wi-Fi Plafond
-    {
-      id: "wifi-01",
-      type: "WALL_OUTLET",
-      name: "Wi-Fi 04",
-      xMm: 28000,
-      yMm: 11000,
-      widthMm: 350,
-      heightMm: 350,
-      subType: "WIFI_AP",
-      outletRole: "WIFI",
-      portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
-      ipAddress: "10.42.50.4",
-      macAddress: "70:69:79:AA:BB:CC",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 6,
-    },
-    // 8. Copieur Multifonction Départemental
-    {
-      id: "printer-01",
-      type: "WALL_OUTLET",
-      name: "Copieur RH",
-      xMm: 22000,
-      yMm: 21000,
-      widthMm: 800,
-      heightMm: 700,
-      subType: "PRINTER_STATION",
-      outletRole: "PRINTER",
-      portId: "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
-      ipAddress: "10.42.40.2",
-      macAddress: "00:1E:8F:77:88:99",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 8,
-      isPatched: true,
-      connectedRackId: "rack-01",
-      connectedSwitchPort: "Gi1/0/24",
-    },
-    // 9. Nœud Baie Secondaire Est (enregistré également dans nodes pour synchronisation de l'inspecteur)
-    {
-      id: "rack-02",
-      type: "PATCH_PANEL",
-      name: "BAIE-SECONDAIRE-EST",
-      xMm: 45000,
-      yMm: 13000,
-      widthMm: 800,
-      heightMm: 800,
-      subType: "RACK_18U",
-      description: "Baie murale de répartition intermédiaire 18U pour le pôle Direction et RH Est.",
-      ipAddress: "10.42.0.12",
-      macAddress: "00:0A:41:88:99:B2",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 2,
-      devices: createDefaultRackDevices("rack-02", "BAIE-EST"),
-    },
-    // 10. Bureau Direction RH (Bureau solo de Léa Bernard)
-    {
-      id: "desk-501",
-      type: "DESK",
-      name: "Bureau 501",
-      xMm: 48000,
-      yMm: 15000,
-      widthMm: 1800,
-      heightMm: 900,
-      subType: "DESK_EXECUTIVE",
-      assignedPerson: "Léa Bernard",
-      assignedUserId: "usr-008",
-      department: "Direction Juridique",
-      description:
-        "Bureau de direction spacieux avec retour d'angle et station d'accueil double moniteur.",
-      chairPosition: "BOTTOM",
-      seats: [
-        {
-          seatIndex: 0,
-          seatLabel: "Place Direction",
-          userId: "usr-008",
-          fullName: "Léa Bernard",
-          department: "Direction Juridique",
-        },
-      ],
-    },
-    // Prises rattachées au Bureau 501 branchées sur la BAIE-SECONDAIRE-EST (rack-02)
-    {
-      id: "outlet-501-a",
-      type: "WALL_OUTLET",
-      name: "Prise 501-A",
-      xMm: 50000,
-      yMm: 15200,
-      portId: "3cc9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9e",
-      attachedToDeskId: "desk-501",
-      attachedSeatIndex: 0,
-      outletRole: "DATA",
-      assignedPerson: "Léa Bernard",
-      ipAddress: "10.42.20.121",
-      macAddress: "A0:36:BC:54:11:02",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 3,
-      isPatched: true,
-      connectedRackId: "rack-02",
-      connectedSwitchPort: "Gi1/0/5",
-    },
-    {
-      id: "outlet-501-b",
-      type: "WALL_OUTLET",
-      name: "Prise 501-B",
-      xMm: 50000,
-      yMm: 15650,
-      portId: "4dd9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9f",
-      attachedToDeskId: "desk-501",
-      attachedSeatIndex: 0,
-      outletRole: "VOIP",
-      assignedPerson: "Léa Bernard",
-      ipAddress: "10.42.30.121",
-      macAddress: "00:08:5D:8A:77:21",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 2,
-      isPatched: true,
-      connectedRackId: "rack-02",
-      connectedSwitchPort: "Gi1/0/6",
-    },
-    // 11. Bureau Double RH (Chloé Rousseau & Julie Moreau)
-    {
-      id: "bench-502",
-      type: "DESK",
-      name: "Bureau 502",
-      xMm: 48000,
-      yMm: 19000,
-      widthMm: 1600,
-      heightMm: 1600,
-      subType: "BENCH_DOUBLE",
-      assignedPerson: "Chloé Rousseau, Julie Moreau",
-      department: "Ressources Humaines",
-      description: "Bench double face-à-face pôle recrutement et communication interne.",
-      chairPosition: "BOTTOM",
-      seats: [
-        {
-          seatIndex: 0,
-          seatLabel: "Place 1 (Nord)",
-          userId: "usr-010",
-          fullName: "Chloé Rousseau",
-          department: "Ressources Humaines",
-        },
-        {
-          seatIndex: 1,
-          seatLabel: "Place 2 (Sud)",
-          userId: "usr-004",
-          fullName: "Julie Moreau",
-          department: "Moyens Généraux / RH",
-        },
-      ],
-    },
-    // Colonnette multi-ports pour le Bureau 502 branchée sur la BAIE-SECONDAIRE-EST (rack-02)
-    {
-      id: "colonnette-502",
-      type: "WALL_OUTLET",
-      name: "Colonnette 502",
-      xMm: 48600,
-      yMm: 18800,
-      attachedToDeskId: "bench-502",
-      outletRole: "DATA",
-      connectedRackId: "rack-02",
-      stackedPorts: [
-        {
-          portIndex: 0,
-          portLabel: "RJ45-1",
-          outletRole: "DATA",
-          vlanId: 20,
-          isPatched: true,
-          connectedRackId: "rack-02",
-          attachedSeatIndex: 0,
-          assignedPerson: "Chloé Rousseau",
-          ipAddress: "10.42.20.125",
-          macAddress: "7C:10:C9:44:88:11",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 3,
-        },
-        {
-          portIndex: 1,
-          portLabel: "RJ45-2",
-          outletRole: "VOIP",
-          vlanId: 30,
-          isPatched: true,
-          connectedRackId: "rack-02",
-          attachedSeatIndex: 0,
-          assignedPerson: "Chloé Rousseau",
-          ipAddress: "10.42.30.125",
-          macAddress: "00:08:5D:AA:11:33",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 2,
-        },
-        {
-          portIndex: 2,
-          portLabel: "RJ45-3",
-          outletRole: "DATA",
-          vlanId: 20,
-          isPatched: true,
-          connectedRackId: "rack-02",
-          attachedSeatIndex: 1,
-          assignedPerson: "Julie Moreau",
-          ipAddress: "10.42.20.126",
-          macAddress: "7C:10:C9:44:88:22",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 4,
-        },
-        {
-          portIndex: 3,
-          portLabel: "RJ45-4",
-          outletRole: "VOIP",
-          vlanId: 30,
-          isPatched: true,
-          connectedRackId: "rack-02",
-          attachedSeatIndex: 1,
-          assignedPerson: "Julie Moreau",
-          ipAddress: "10.42.30.126",
-          macAddress: "00:08:5D:AA:11:44",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 2,
-        },
-      ],
-    },
-    // 12. Deuxième Borne Wi-Fi Haute Densité (Pôle Est)
-    {
-      id: "wifi-02",
-      type: "WALL_OUTLET",
-      name: "Wi-Fi 05 (Est)",
-      xMm: 46000,
-      yMm: 10500,
-      widthMm: 350,
-      heightMm: 350,
-      subType: "WIFI_AP",
-      outletRole: "WIFI",
-      portId: "5ee9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc01",
-      ipAddress: "10.42.50.5",
-      macAddress: "70:69:79:DD:EE:FF",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 5,
-      isPatched: true,
-      connectedRackId: "rack-02",
-      connectedSwitchPort: "Gi1/0/12",
-    },
-    // 13. Caméra de Sécurité IP (Entrée Local Technique)
-    {
-      id: "cam-01",
-      type: "WALL_OUTLET",
-      name: "Caméra IP Sas",
-      xMm: 17000,
-      yMm: 10200,
-      widthMm: 300,
-      heightMm: 300,
-      subType: "CAMERA_IP",
-      outletRole: "CAMERA",
-      portId: "6ff9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc02",
-      ipAddress: "10.42.60.10",
-      macAddress: "AC:CC:8E:12:34:56",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 7,
-      isPatched: true,
-      connectedRackId: "rack-01",
-      connectedSwitchPort: "Gi1/0/18",
-    },
-    // 14. Nœud Baie Ouest R&D (synchronisé pour l'inspecteur)
-    {
-      id: "rack-03",
-      type: "PATCH_PANEL",
-      name: "BAIE-OUEST-R&D",
-      xMm: 21500,
-      yMm: 10800,
-      widthMm: 800,
-      heightMm: 800,
-      subType: "RACK_18U",
-      description:
-        "Baie de sous-répartition 24U dédiée au banc d'essais et aux développeurs du Tech Lab.",
-      ipAddress: "10.42.0.13",
-      macAddress: "00:0A:41:88:99:C3",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 1,
-      devices: createDefaultRackDevices("rack-03", "BAIE-RND"),
-    },
-    // 15. Nouveau Bench Double R&D (Bureau 403 - Emma Petit & Maxime Girard)
-    {
-      id: "bench-403",
-      type: "DESK",
-      name: "Bureau 403",
-      xMm: 23000,
-      yMm: 19000,
-      widthMm: 1600,
-      heightMm: 1600,
-      subType: "BENCH_DOUBLE",
-      assignedPerson: "Emma Petit, Maxime Girard",
-      department: "Tech Lab",
-      description: "Bench double face-à-face pôle Frontend UI/UX et Architecture Cloud DevOps.",
-      chairPosition: "BOTTOM",
-      seats: [
-        {
-          seatIndex: 0,
-          seatLabel: "Place 1 (Nord)",
-          userId: "usr-005",
-          fullName: "Emma Petit",
-          department: "Tech Lab",
-        },
-        {
-          seatIndex: 1,
-          seatLabel: "Place 2 (Sud)",
-          userId: "usr-009",
-          fullName: "Maxime Girard",
-          department: "Tech Lab",
-        },
-      ],
-    },
-    // Colonnette RJ45 4 ports du Bureau 403 reliée à la BAIE-OUEST-R&D (rack-03)
-    {
-      id: "colonnette-403",
-      type: "WALL_OUTLET",
-      name: "Colonnette 403",
-      xMm: 23600,
-      yMm: 18800,
-      attachedToDeskId: "bench-403",
-      outletRole: "DATA",
-      connectedRackId: "rack-03",
-      stackedPorts: [
-        {
-          portIndex: 0,
-          portLabel: "RJ45-1",
-          outletRole: "DATA",
-          vlanId: 20,
-          isPatched: true,
-          connectedRackId: "rack-03",
-          attachedSeatIndex: 0,
-          assignedPerson: "Emma Petit",
-          ipAddress: "10.42.20.105",
-          macAddress: "7C:10:C9:33:44:11",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 3,
-        },
-        {
-          portIndex: 1,
-          portLabel: "RJ45-2",
-          outletRole: "VOIP",
-          vlanId: 30,
-          isPatched: true,
-          connectedRackId: "rack-03",
-          attachedSeatIndex: 0,
-          assignedPerson: "Emma Petit",
-          ipAddress: "10.42.30.105",
-          macAddress: "00:08:5D:8A:33:11",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 2,
-        },
-        {
-          portIndex: 2,
-          portLabel: "RJ45-3",
-          outletRole: "DATA",
-          vlanId: 20,
-          isPatched: true,
-          connectedRackId: "rack-03",
-          attachedSeatIndex: 1,
-          assignedPerson: "Maxime Girard",
-          ipAddress: "10.42.20.109",
-          macAddress: "7C:10:C9:33:44:22",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 4,
-        },
-        {
-          portIndex: 3,
-          portLabel: "RJ45-4",
-          outletRole: "VOIP",
-          vlanId: 30,
-          isPatched: true,
-          connectedRackId: "rack-03",
-          attachedSeatIndex: 1,
-          assignedPerson: "Maxime Girard",
-          ipAddress: "10.42.30.109",
-          macAddress: "00:08:5D:8A:33:22",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 2,
-        },
-      ],
-    },
-    // 16. Nouveau Bureau Solo Support & Réseaux (Bureau 409 - Antoine Roux)
-    {
-      id: "desk-409",
-      type: "DESK",
-      name: "Bureau 409",
-      xMm: 29000,
-      yMm: 19000,
-      widthMm: 1600,
-      heightMm: 800,
-      subType: "DESK_SOLO",
-      assignedPerson: "Antoine Roux",
-      assignedUserId: "usr-007",
-      department: "Maintenance & IT",
-      description: "Poste technique de câblage, supervision et banc de diagnostic.",
-      chairPosition: "BOTTOM",
-      seats: [
-        {
-          seatIndex: 0,
-          seatLabel: "Place Diagnostic",
-          userId: "usr-007",
-          fullName: "Antoine Roux",
-          department: "Maintenance & IT",
-        },
-      ],
-    },
-    // Prises reliées du Bureau 409 vers la BAIE-OUEST-R&D (rack-03)
-    {
-      id: "outlet-409-a",
-      type: "WALL_OUTLET",
-      name: "Prise 409-A",
-      xMm: 30800,
-      yMm: 19200,
-      portId: "7aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc03",
-      attachedToDeskId: "desk-409",
-      attachedSeatIndex: 0,
-      outletRole: "DATA",
-      assignedPerson: "Antoine Roux",
-      ipAddress: "10.42.20.117",
-      macAddress: "B4:2E:99:41:0A:77",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 3,
-      isPatched: true,
-      connectedRackId: "rack-03",
-      connectedSwitchPort: "Gi1/0/3",
-    },
-    {
-      id: "outlet-409-b",
-      type: "WALL_OUTLET",
-      name: "Prise 409-B",
-      xMm: 30800,
-      yMm: 19650,
-      portId: "8bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc04",
-      attachedToDeskId: "desk-409",
-      attachedSeatIndex: 0,
-      outletRole: "VOIP",
-      assignedPerson: "Antoine Roux",
-      ipAddress: "10.42.30.117",
-      macAddress: "00:08:5D:8A:22:77",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 2,
-      isPatched: true,
-      connectedRackId: "rack-03",
-      connectedSwitchPort: "Gi1/0/4",
-    },
-    // 17. Bureau Direction Financière (Bureau 601 - Marc Lefebvre)
-    {
-      id: "desk-601",
-      type: "DESK",
-      name: "Bureau 601",
-      xMm: 37000,
-      yMm: 19000,
-      widthMm: 1800,
-      heightMm: 900,
-      subType: "DESK_EXECUTIVE",
-      assignedPerson: "Marc Lefebvre",
-      assignedUserId: "usr-006",
-      department: "Direction Financière",
-      description: "Bureau exécutif direction financière, double écran avec ligne sécurisée.",
-      chairPosition: "BOTTOM",
-      seats: [
-        {
-          seatIndex: 0,
-          seatLabel: "Place DAF",
-          userId: "usr-006",
-          fullName: "Marc Lefebvre",
-          department: "Direction Financière",
-        },
-      ],
-    },
-    // Prises reliées du Bureau 601 vers la BAIE-SECONDAIRE-EST (rack-02)
-    {
-      id: "outlet-601-a",
-      type: "WALL_OUTLET",
-      name: "Prise 601-A",
-      xMm: 39000,
-      yMm: 19200,
-      portId: "9cc9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc05",
-      attachedToDeskId: "desk-601",
-      attachedSeatIndex: 0,
-      outletRole: "DATA",
-      assignedPerson: "Marc Lefebvre",
-      ipAddress: "10.42.20.160",
-      macAddress: "A0:36:BC:54:66:01",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 3,
-      isPatched: true,
-      connectedRackId: "rack-02",
-      connectedSwitchPort: "Gi1/0/9",
-    },
-    {
-      id: "outlet-601-b",
-      type: "WALL_OUTLET",
-      name: "Prise 601-B",
-      xMm: 39000,
-      yMm: 19650,
-      portId: "add9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc06",
-      attachedToDeskId: "desk-601",
-      attachedSeatIndex: 0,
-      outletRole: "VOIP",
-      assignedPerson: "Marc Lefebvre",
-      ipAddress: "10.42.30.160",
-      macAddress: "00:08:5D:8A:66:01",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 2,
-      isPatched: true,
-      connectedRackId: "rack-02",
-      connectedSwitchPort: "Gi1/0/10",
-    },
-    // 18. Table de Réunion Connectée (Salle Visio R&D)
-    {
-      id: "meeting-rnd",
-      type: "DESK",
-      name: "Table Visio R&D",
-      xMm: 33000,
-      yMm: 10500,
-      widthMm: 3000,
-      heightMm: 1400,
-      subType: "MEETING_TABLE",
-      department: "Tech Lab",
-      description:
-        "Table de réunion 8 personnes équipée d'un boîtier de sol HDMI/RJ45 et pieuvre audio.",
-      chairPosition: "NONE",
-    },
-    // Boîte de sol pour la table de réunion reliée à BAIE-OUEST-R&D (rack-03)
-    {
-      id: "floorbox-rnd",
-      type: "WALL_OUTLET",
-      name: "Boîte Sol Visio",
-      xMm: 34500,
-      yMm: 11200,
-      widthMm: 400,
-      heightMm: 400,
-      subType: "FLOOR_BOX",
-      attachedToDeskId: "meeting-rnd",
-      outletRole: "DATA",
-      connectedRackId: "rack-03",
-      stackedPorts: [
-        {
-          portIndex: 0,
-          portLabel: "DATA-VISIO",
-          outletRole: "DATA",
-          vlanId: 20,
-          isPatched: true,
-          connectedRackId: "rack-03",
-          ipAddress: "10.42.20.70",
-          macAddress: "00:1B:44:88:99:01",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 2,
-        },
-        {
-          portIndex: 1,
-          portLabel: "CODEC-IP",
-          outletRole: "VOIP",
-          vlanId: 30,
-          isPatched: true,
-          connectedRackId: "rack-03",
-          ipAddress: "10.42.30.70",
-          macAddress: "00:08:5D:CC:DD:01",
-          pingStatus: "ONLINE",
-          pingLatencyMs: 1,
-        },
-      ],
-    },
-    // 19. Deuxième Imprimante / Traceur R&D
-    {
-      id: "printer-rnd",
-      type: "WALL_OUTLET",
-      name: "Traceur R&D",
-      xMm: 29000,
-      yMm: 10500,
-      widthMm: 800,
-      heightMm: 700,
-      subType: "PRINTER_STATION",
-      outletRole: "PRINTER",
-      portId: "bee9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc07",
-      ipAddress: "10.42.40.5",
-      macAddress: "00:1E:8F:99:AA:01",
-      pingStatus: "ONLINE",
-      pingLatencyMs: 6,
-      isPatched: true,
-      connectedRackId: "rack-03",
-      connectedSwitchPort: "Gi1/0/16",
-    },
-  ]);
+  // Baies informatiques (initialisé vierge)
+  const [racks, setRacks] = useState<RackDisplay[]>([]);
+
+  // Nœuds du plateau (Bureaux multi-places RH, Prises Réseau, Boîtes de Sol, Wi-Fi) (initialisé vierge)
+  const [nodes, setNodes] = useState<NodeDisplay[]>([]);
+
+  // Chargement initial depuis la base de données PostgreSQL
+  useEffect(() => {
+    let isMounted = true;
+    async function loadTopology() {
+      try {
+        setDbSyncStatus("SAVING");
+        const res = await fetch("/api/topology");
+        if (!res.ok) {
+          if (isMounted) setDbSyncStatus("OFFLINE");
+          return;
+        }
+        const data = await res.json();
+        if (!isMounted) return;
+
+        if (data.success && !data.isEmpty) {
+          if (data.racks) setRacks(data.racks);
+          if (data.nodes) setNodes(data.nodes);
+          if (data.zones && data.zones.length > 0) setZones(data.zones);
+          if (data.sites && data.sites.length > 0) setSites(data.sites);
+          if (data.customPivots) setCustomPivots(data.customPivots);
+          if (data.floor) {
+            setFloorData({
+              widthMm: data.floor.widthMm || 60000,
+              heightMm: data.floor.heightMm || 35000,
+            });
+          }
+        }
+        setDbSyncStatus("SAVED");
+      } catch {
+        if (isMounted) setDbSyncStatus("OFFLINE");
+      } finally {
+        if (isMounted) isInitialLoadedRef.current = true;
+      }
+    }
+
+    loadTopology();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Déclencheur d'auto-sauvegarde debouncé (800ms) vers PostgreSQL
+  const triggerAutoSave = useCallback(() => {
+    if (!isInitialLoadedRef.current) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    setDbSyncStatus("SAVING");
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/topology", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            floor: {
+              id: "floor-rdc",
+              name: "Plateau Principal - RDC",
+              building: "Bâtiment Principal",
+              floorNumber: 1,
+              widthMm: floorData.widthMm,
+              heightMm: floorData.heightMm,
+              scaleRatio: 1.0,
+            },
+            racks,
+            nodes,
+            zones,
+            sites,
+            customPivots,
+          }),
+        });
+
+        if (res.ok) {
+          setDbSyncStatus("SAVED");
+          setLastSavedAt(
+            new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })
+          );
+        } else {
+          setDbSyncStatus("ERROR");
+        }
+      } catch {
+        setDbSyncStatus("OFFLINE");
+      }
+    }, 800);
+  }, [floorData, racks, nodes, zones, sites, customPivots]);
+
+  // Surveillance des modifications du plateau pour la persistance automatique en BDD
+  useEffect(() => {
+    if (isInitialLoadedRef.current) {
+      triggerAutoSave();
+    }
+  }, [nodes, racks, zones, floorData, customPivots, triggerAutoSave]);
 
   // Filtrage des éléments par site actif
   const visibleRacks = useMemo(
@@ -2685,6 +1913,167 @@ export default function NetFloorApp() {
     URL.revokeObjectURL(url);
   };
 
+  // Chargement de la configuration d'exemple complète (Démo Campus Horizon)
+  const handleLoadDemoConfig = async () => {
+    setIsFileMenuOpen(false);
+    try {
+      setDbSyncStatus("SAVING");
+      const res = await fetch("/api/topology/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "demo" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const cfg = data.importedConfig;
+        if (cfg) {
+          if (cfg.racks) setRacks(cfg.racks);
+          if (cfg.nodes) setNodes(cfg.nodes);
+          if (cfg.zones) setZones(cfg.zones);
+          if (cfg.site) setSites([cfg.site]);
+          else if (cfg.sites) setSites(cfg.sites);
+          if (cfg.floor) {
+            setFloorData({
+              widthMm: cfg.floor.widthMm || 60000,
+              heightMm: cfg.floor.heightMm || 35000,
+            });
+          }
+          if (cfg.customPivots) setCustomPivots(cfg.customPivots);
+        }
+        setDbSyncStatus("SAVED");
+        setLastSavedAt(
+          new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+        );
+      } else {
+        setDbSyncStatus("ERROR");
+      }
+    } catch {
+      setDbSyncStatus("OFFLINE");
+    }
+  };
+
+  // Réinitialisation complète du plateau à l'état vierge
+  const handleResetFloorPlan = async () => {
+    setIsFileMenuOpen(false);
+    if (
+      !window.confirm(
+        "Êtes-vous sûr de vouloir vider l'ensemble du plateau et repartir sur un projet vierge ?"
+      )
+    ) {
+      return;
+    }
+    try {
+      setDbSyncStatus("SAVING");
+      await fetch("/api/topology", { method: "DELETE" });
+      setNodes([]);
+      setRacks([]);
+      setZones([]);
+      setCustomPivots({});
+      setSelectedNodeId(null);
+      setSelectedNodeIds([]);
+      setDbSyncStatus("SAVED");
+      setLastSavedAt(
+        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      );
+    } catch {
+      setDbSyncStatus("ERROR");
+    }
+  };
+
+  // Export du plan complet au format JSON
+  const handleExportJsonConfig = () => {
+    setIsFileMenuOpen(false);
+    const payload = {
+      version: "1.0.0",
+      exportedAt: new Date().toISOString(),
+      floor: {
+        id: "floor-rdc",
+        name: "Plateau Principal - RDC",
+        building: "Bâtiment Principal",
+        floorNumber: 1,
+        widthMm: floorData.widthMm,
+        heightMm: floorData.heightMm,
+        scaleRatio: 1.0,
+      },
+      racks,
+      nodes,
+      zones,
+      sites,
+      customPivots,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `netfloor-config-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import d'un fichier JSON personnalisé
+  const handleImportJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsFileMenuOpen(false);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const cfg = JSON.parse(evt.target?.result as string);
+        if (cfg.racks) setRacks(cfg.racks);
+        if (cfg.nodes) setNodes(cfg.nodes);
+        if (cfg.zones) setZones(cfg.zones);
+        if (cfg.site) setSites([cfg.site]);
+        else if (cfg.sites) setSites(cfg.sites);
+        if (cfg.floor) {
+          setFloorData({
+            widthMm: cfg.floor.widthMm || 60000,
+            heightMm: cfg.floor.heightMm || 35000,
+          });
+        }
+        if (cfg.customPivots) setCustomPivots(cfg.customPivots);
+
+        // Sauvegarde en BDD
+        await fetch("/api/topology", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            floor: cfg.floor || {
+              id: "floor-rdc",
+              name: "Plateau Principal - RDC",
+              building: "Bâtiment Principal",
+              floorNumber: 1,
+              widthMm: floorData.widthMm,
+              heightMm: floorData.heightMm,
+              scaleRatio: 1.0,
+            },
+            racks: cfg.racks || [],
+            nodes: cfg.nodes || [],
+            zones: cfg.zones || [],
+            sites: cfg.site ? [cfg.site] : cfg.sites || sites,
+            customPivots: cfg.customPivots || {},
+          }),
+        });
+        setDbSyncStatus("SAVED");
+        setLastSavedAt(
+          new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+        );
+      } catch (err) {
+        console.error("Erreur import JSON :", err);
+        alert("Format de fichier JSON invalide.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 font-sans overflow-hidden">
       {/* 1. Header Toolbar Multi-Métiers */}
@@ -2834,13 +2223,62 @@ export default function NetFloorApp() {
             <span>Règle</span>
           </button>
 
+          {/* Badge de synchronisation BDD temps réel */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 border border-slate-700/80 rounded-lg text-[11px] font-sans">
+            {dbSyncStatus === "SAVED" && (
+              <span
+                className="flex items-center gap-1.5 text-emerald-400"
+                title="Plateau synchronisé avec PostgreSQL"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+                <span className="hidden sm:inline font-medium">BDD Synchronisée</span>
+                {lastSavedAt && <span className="text-[9px] text-slate-500">({lastSavedAt})</span>}
+              </span>
+            )}
+            {dbSyncStatus === "SAVING" && (
+              <span className="flex items-center gap-1.5 text-amber-400">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                <span className="hidden sm:inline font-medium">Sauvegarde BDD...</span>
+              </span>
+            )}
+            {dbSyncStatus === "OFFLINE" && (
+              <span
+                className="flex items-center gap-1.5 text-slate-400"
+                title="PostgreSQL non connecté (démarrage via ./run.sh)"
+              >
+                <span className="w-2 h-2 rounded-full bg-slate-500" />
+                <span className="hidden sm:inline">BDD Hors Ligne</span>
+              </span>
+            )}
+            {dbSyncStatus === "ERROR" && (
+              <button
+                type="button"
+                onClick={triggerAutoSave}
+                className="flex items-center gap-1.5 text-rose-400 hover:text-rose-300 cursor-pointer"
+                title="Erreur de sauvegarde. Cliquez pour réessayer"
+              >
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                <span>Erreur BDD (Réessayer)</span>
+              </button>
+            )}
+          </div>
+
+          {/* Input fichier caché pour import JSON */}
+          <input
+            type="file"
+            ref={jsonFileInputRef}
+            accept=".json"
+            className="hidden"
+            onChange={handleImportJsonFile}
+          />
+
           {/* Menu Déroulant Compact : Échanges & Fichiers */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setIsFileMenuOpen((prev) => !prev)}
               className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-sans font-medium rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-1 transition text-[11px] cursor-pointer"
-              title="Importer ou Exporter les données CSV"
+              title="Importer ou Exporter les données"
             >
               <UploadCloud className="w-3 h-3" />
               <span>⇄ Fichiers</span>
@@ -2857,7 +2295,59 @@ export default function NetFloorApp() {
                 />
                 <div className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 text-xs text-slate-200 animate-in fade-in slide-in-from-top-1 font-sans">
                   <div className="px-2.5 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-                    Gestion des données
+                    Configuration & Démo
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleLoadDemoConfig}
+                    className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-slate-200 hover:text-white transition cursor-pointer"
+                  >
+                    <Network className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs text-blue-300">
+                        Charger la Démo d'Exemple
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Campus Horizon (3 baies, bureaux, VLANs)
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsFileMenuOpen(false);
+                      jsonFileInputRef.current?.click();
+                    }}
+                    className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-slate-200 hover:text-white transition cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Importer Projet (JSON)</div>
+                      <div className="text-[10px] text-slate-400">
+                        Restaurer une configuration sauvegardée
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportJsonConfig}
+                    className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-slate-200 hover:text-white transition cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Exporter Projet (JSON)</div>
+                      <div className="text-[10px] text-slate-400">
+                        Sauvegarde complète du plateau
+                      </div>
+                    </div>
+                  </button>
+
+                  <div className="my-1 border-t border-slate-800" />
+                  <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Carnets CSV DSI
                   </div>
 
                   <button
@@ -2890,6 +2380,22 @@ export default function NetFloorApp() {
                       <div className="font-semibold text-xs">Exporter Carnet CSV</div>
                       <div className="text-[10px] text-slate-400">
                         Inventaire et raccordements complets
+                      </div>
+                    </div>
+                  </button>
+
+                  <div className="my-1 border-t border-slate-800" />
+
+                  <button
+                    type="button"
+                    onClick={handleResetFloorPlan}
+                    className="w-full text-left px-2.5 py-2 hover:bg-rose-950/40 rounded-lg flex items-center gap-2 text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Vider le plateau</div>
+                      <div className="text-[10px] text-rose-400/70">
+                        Remettre à zéro (Projet vierge)
                       </div>
                     </div>
                   </button>
@@ -3297,6 +2803,34 @@ export default function NetFloorApp() {
             isRulerActive={isRulerActive}
             onCloseRuler={() => setIsRulerActive(false)}
           />
+
+          {/* Bannière d'accueil si plateau vierge */}
+          {nodes.length === 0 && racks.length === 0 && (
+            <div className="absolute inset-x-0 bottom-16 flex justify-center pointer-events-none z-10 animate-in fade-in slide-in-from-bottom-3">
+              <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-5 pointer-events-auto">
+                <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+                  <Network className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-semibold text-sm text-slate-100">
+                    Plateau vierge prêt à l&apos;emploi
+                  </div>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    Glissez des baies ou bureaux depuis la palette à gauche, ou chargez
+                    l&apos;environnement de démo.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLoadDemoConfig}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium text-xs shadow-lg shadow-blue-600/25 transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>Charger la démo</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Tiroir des Éléments Non Positionnés (importés par CSV) */}
           <UnpositionedElementsDrawer

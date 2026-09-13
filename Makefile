@@ -41,7 +41,7 @@ install: ## Installe les dépendances avec pnpm
 	@$(PNPM) install
 
 ##@ 🚀 Développement & Exécution
-dev: ## Démarre le serveur de développement Next.js (PORT=3000 par défaut)
+dev: db-up ## Démarre le conteneur PostgreSQL et le serveur Next.js en mode DEV
 	@echo -e "$(CYAN)🚀 Démarrage du serveur Next.js en mode DEV sur http://$(HOST):$(PORT)...$(RESET)"
 	@$(PNPM) dev -p $(PORT) -H $(HOST)
 
@@ -108,6 +108,26 @@ test-all: ## Exécute l'intégralité des bancs d'essais du projet
 	@echo -e "$(GREEN)🎉 Tous les tests et contrôles sont validés avec succès !$(RESET)"
 
 ##@ 🗄️ Base de données & Drizzle ORM
+db-up: ## Démarre le conteneur Docker PostgreSQL et applique les tables si nécessaire
+	@echo -e "$(CYAN)🐘 Démarrage de PostgreSQL (Docker)...$(RESET)"
+	@docker compose up -d postgres
+	@until docker compose exec -T postgres pg_isready -q 2>/dev/null; do sleep 0.5; done
+	@if [ "$$(docker compose exec -T postgres psql -U postgres -d netfloor -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d '[:space:]')" = "0" ]; then \
+		echo -e "$(CYAN)📜 Application de la migration initiale DDL...$(RESET)"; \
+		docker compose exec -T postgres psql -U postgres -d netfloor < drizzle/0000_conscious_naoko.sql >/dev/null 2>&1 || true; \
+	fi
+	@echo -e "$(GREEN)✅ PostgreSQL est prêt.$(RESET)"
+
+db-down: ## Arrête le conteneur PostgreSQL
+	@echo -e "$(YELLOW)🛑 Arrêt de PostgreSQL...$(RESET)"
+	@docker compose stop postgres
+
+db-reset: ## Réinitialise la base de données à un état vierge
+	@echo -e "$(YELLOW)🧹 Réinitialisation de la base PostgreSQL...$(RESET)"
+	@docker compose exec -T postgres psql -U postgres -d netfloor -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1 || true
+	@docker compose exec -T postgres psql -U postgres -d netfloor < drizzle/0000_conscious_naoko.sql >/dev/null 2>&1 || true
+	@echo -e "$(GREEN)✅ Base de données vierge réinitialisée.$(RESET)"
+
 db-generate: ## Génère les migrations Drizzle SQL à partir du schéma
 	@echo -e "$(CYAN)🗄️ Génération des migrations Drizzle...$(RESET)"
 	@$(PNPM) db:generate

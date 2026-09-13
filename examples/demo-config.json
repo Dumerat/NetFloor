@@ -1,0 +1,1072 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "title": "NetFloor Enterprise Demo - Campus Horizon",
+    "description": "Environnement d'exemple complet avec 3 baies, îlots de bureaux, prises RJ45, Wi-Fi et VLANs",
+    "createdAtIso": "2026-09-13T00:00:00.000Z"
+  },
+  "site": {
+    "id": "site-principal",
+    "name": "Site Principal",
+    "code": "PARIS-HQ",
+    "address": "Siège Principal - Paris",
+    "description": "Bâtiment principal et infrastructures centrales",
+    "surfaceM2": 1250,
+    "color": "#3b82f6",
+    "createdAtIso": "2026-01-01T00:00:00.000Z",
+    "updatedAtIso": "2026-01-01T00:00:00.000Z"
+  },
+  "floor": {
+    "id": "floor-rdc-horizon",
+    "name": "Étage 4 - Plateau Open Space & Tech Lab",
+    "building": "Campus Horizon",
+    "floorNumber": 4,
+    "widthMm": 60000,
+    "heightMm": 35000,
+    "scaleRatio": 1,
+    "siteId": "site-principal"
+  },
+  "zones": [
+    {
+      "id": "zone-tech-lab",
+      "name": "Pôle Tech Lab & R&D",
+      "serviceCode": "TECH",
+      "department": "Tech Lab",
+      "color": "#0284c7",
+      "xMm": 21000,
+      "yMm": 10000,
+      "widthMm": 20000,
+      "heightMm": 14000,
+      "opacity": 0.12,
+      "description": "Espace ouvert dédié aux équipes ingénierie logicielle, R&D et bancs essais.",
+      "siteId": "site-principal"
+    },
+    {
+      "id": "zone-dsi-noc",
+      "name": "Local Technique & Baie DSI",
+      "serviceCode": "DSI",
+      "department": "Infrastructure IT",
+      "color": "#7c3aed",
+      "xMm": 8000,
+      "yMm": 10000,
+      "widthMm": 10000,
+      "heightMm": 12000,
+      "opacity": 0.16,
+      "description": "Local sécurisé climatisé abritant les répartiteurs étage, commutateurs cœur et arrivée fibre.",
+      "siteId": "site-principal"
+    },
+    {
+      "id": "zone-rh-direction",
+      "name": "Direction & Ressources Humaines",
+      "serviceCode": "RH",
+      "department": "Ressources Humaines",
+      "color": "#059669",
+      "xMm": 43000,
+      "yMm": 10000,
+      "widthMm": 14000,
+      "heightMm": 14000,
+      "opacity": 0.12,
+      "description": "Bureaux de direction et pôle de gestion des ressources humaines.",
+      "siteId": "site-principal"
+    }
+  ],
+  "racks": [
+    {
+      "id": "rack-01",
+      "name": "BAIE-PRINCIPALE-RDC",
+      "xMm": 12000,
+      "yMm": 14000,
+      "widthMm": 800,
+      "depthMm": 1000,
+      "uHeight": 42,
+      "devices": [
+        {
+          "uPosition": 42,
+          "type": "PDU",
+          "brand": "APC",
+          "model": "AP7921B",
+          "portCount": 8,
+          "name": "PDU-A"
+        },
+        {
+          "uPosition": 24,
+          "type": "PATCH_PANEL",
+          "brand": "LEGRAND",
+          "model": "LCS3 24P Cat6A",
+          "portCount": 24,
+          "name": "PP-R01-01"
+        },
+        {
+          "uPosition": 22,
+          "type": "SWITCH",
+          "brand": "CISCO",
+          "model": "Catalyst C9300-48P",
+          "portCount": 48,
+          "name": "SW-R01-01"
+        }
+      ],
+      "siteId": "site-principal"
+    },
+    {
+      "id": "rack-02",
+      "name": "BAIE-SECONDAIRE-EST",
+      "xMm": 45000,
+      "yMm": 13000,
+      "widthMm": 800,
+      "depthMm": 800,
+      "uHeight": 18,
+      "devices": [
+        {
+          "uPosition": 42,
+          "type": "PDU",
+          "brand": "APC",
+          "model": "AP7921B",
+          "portCount": 8,
+          "name": "PDU-A"
+        },
+        {
+          "uPosition": 24,
+          "type": "PATCH_PANEL",
+          "brand": "LEGRAND",
+          "model": "LCS3 24P Cat6A",
+          "portCount": 24,
+          "name": "BAIE-EST-PP01"
+        },
+        {
+          "uPosition": 22,
+          "type": "SWITCH",
+          "brand": "CISCO",
+          "model": "Catalyst C9300-48P",
+          "portCount": 48,
+          "name": "BAIE-EST-SW01"
+        }
+      ],
+      "siteId": "site-principal"
+    },
+    {
+      "id": "rack-03",
+      "name": "BAIE-OUEST-R&D",
+      "xMm": 21500,
+      "yMm": 10800,
+      "widthMm": 800,
+      "depthMm": 800,
+      "uHeight": 24,
+      "devices": [
+        {
+          "uPosition": 42,
+          "type": "PDU",
+          "brand": "APC",
+          "model": "AP7921B",
+          "portCount": 8,
+          "name": "PDU-A"
+        },
+        {
+          "uPosition": 24,
+          "type": "PATCH_PANEL",
+          "brand": "LEGRAND",
+          "model": "LCS3 24P Cat6A",
+          "portCount": 24,
+          "name": "BAIE-RND-PP01"
+        },
+        {
+          "uPosition": 22,
+          "type": "SWITCH",
+          "brand": "CISCO",
+          "model": "Catalyst C9300-48P",
+          "portCount": 48,
+          "name": "BAIE-RND-SW01"
+        }
+      ],
+      "siteId": "site-principal"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "rack-01",
+      "type": "PATCH_PANEL",
+      "name": "BAIE-PRINCIPALE-RDC",
+      "xMm": 12000,
+      "yMm": 14000,
+      "widthMm": 800,
+      "heightMm": 1000,
+      "subType": "RACK_42U",
+      "description": "Baie principale de brassage & serveurs 42U avec commutateur Cisco Catalyst 9300 et bandeau Cat6A.",
+      "ipAddress": "10.42.0.10",
+      "macAddress": "00:0A:41:88:99:A1",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 1,
+      "devices": [
+        {
+          "uPosition": 42,
+          "type": "PDU",
+          "brand": "APC",
+          "model": "AP7921B",
+          "portCount": 8,
+          "name": "PDU-A"
+        },
+        {
+          "uPosition": 24,
+          "type": "PATCH_PANEL",
+          "brand": "LEGRAND",
+          "model": "LCS3 24P Cat6A",
+          "portCount": 24,
+          "name": "PP-R01-01"
+        },
+        {
+          "uPosition": 22,
+          "type": "SWITCH",
+          "brand": "CISCO",
+          "model": "Catalyst C9300-48P",
+          "portCount": 48,
+          "name": "SW-R01-01"
+        }
+      ]
+    },
+    {
+      "id": "bench-402",
+      "type": "DESK",
+      "name": "Bureau 402",
+      "xMm": 23000,
+      "yMm": 15000,
+      "widthMm": 3200,
+      "heightMm": 1600,
+      "subType": "BENCH_QUAD",
+      "assignedPerson": "Thomas Roux, Sarah Benali, Lucas Vidal, Sophie Mercier",
+      "department": "Pôle Collaboratif Tech & RH",
+      "description": "Îlot central 4 postes avec cloisonnettes acoustiques croisées et colonnes de câblage intégrées.",
+      "chairPosition": "BOTTOM",
+      "seats": [
+        {
+          "seatIndex": 0,
+          "seatLabel": "Place 1 (Haut-Gauche)",
+          "userId": "usr-005",
+          "fullName": "Thomas Roux",
+          "department": "Tech Lab"
+        },
+        {
+          "seatIndex": 1,
+          "seatLabel": "Place 2 (Haut-Droite)",
+          "userId": "usr-002",
+          "fullName": "Sarah Benali",
+          "department": "Ressources Humaines"
+        },
+        {
+          "seatIndex": 2,
+          "seatLabel": "Place 3 (Bas-Gauche)",
+          "userId": "usr-006",
+          "fullName": "Lucas Vidal",
+          "department": "Support & Réseaux"
+        },
+        {
+          "seatIndex": 3,
+          "seatLabel": "Place 4 (Bas-Droite)",
+          "userId": "usr-007",
+          "fullName": "Sophie Mercier",
+          "department": "Ressources Humaines"
+        }
+      ]
+    },
+    {
+      "id": "bench-401",
+      "type": "DESK",
+      "name": "Bureau 401",
+      "xMm": 29000,
+      "yMm": 15000,
+      "widthMm": 1600,
+      "heightMm": 1600,
+      "subType": "BENCH_DOUBLE",
+      "assignedPerson": "Julie Dupont, Marc Lefebvre",
+      "department": "Direction & Infra",
+      "description": "Bench 2 postes face-à-face avec cloisonnette acoustique centrale.",
+      "chairPosition": "BOTTOM",
+      "seats": [
+        {
+          "seatIndex": 0,
+          "seatLabel": "Place 1 (Face Nord)",
+          "userId": "usr-003",
+          "fullName": "Julie Dupont",
+          "department": "Direction Digitale"
+        },
+        {
+          "seatIndex": 1,
+          "seatLabel": "Place 2 (Face Sud)",
+          "userId": "usr-004",
+          "fullName": "Marc Lefebvre",
+          "department": "Infrastructure IT"
+        }
+      ]
+    },
+    {
+      "id": "desk-408",
+      "type": "DESK",
+      "name": "Bureau 408",
+      "xMm": 37000,
+      "yMm": 15000,
+      "widthMm": 1600,
+      "heightMm": 800,
+      "subType": "DESK_SOLO",
+      "assignedPerson": "Alexandre Martin",
+      "assignedUserId": "usr-001",
+      "department": "Tech Lab",
+      "description": "Station de développement double écran 27\", station d'accueil Thunderbolt USB-C.",
+      "chairPosition": "BOTTOM",
+      "seats": [
+        {
+          "seatIndex": 0,
+          "seatLabel": "Place Unique",
+          "userId": "usr-001",
+          "fullName": "Alexandre Martin",
+          "department": "Tech Lab"
+        }
+      ]
+    },
+    {
+      "id": "outlet-408-a",
+      "type": "WALL_OUTLET",
+      "name": "Prise 408-A",
+      "xMm": 38800,
+      "yMm": 15200,
+      "portId": "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
+      "attachedToDeskId": "desk-408",
+      "outletRole": "DATA",
+      "assignedPerson": "Alexandre Martin",
+      "ipAddress": "10.42.20.108",
+      "macAddress": "B4:2E:99:41:0A:12",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 4,
+      "isPatched": true,
+      "connectedRackId": "rack-01",
+      "connectedSwitchPort": "Gi1/0/1"
+    },
+    {
+      "id": "outlet-408-b",
+      "type": "WALL_OUTLET",
+      "name": "Prise 408-B",
+      "xMm": 38800,
+      "yMm": 15650,
+      "portId": "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d",
+      "attachedToDeskId": "desk-408",
+      "outletRole": "VOIP",
+      "assignedPerson": "Alexandre Martin",
+      "ipAddress": "10.42.30.108",
+      "macAddress": "00:08:5D:8A:22:9C",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 3
+    },
+    {
+      "id": "outlet-402-a",
+      "type": "WALL_OUTLET",
+      "name": "Prise 402-A",
+      "xMm": 26400,
+      "yMm": 15200,
+      "portId": "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
+      "attachedToDeskId": "bench-402",
+      "attachedSeatIndex": 0,
+      "assignedPerson": "Thomas Roux",
+      "outletRole": "DATA",
+      "ipAddress": "10.42.20.102",
+      "macAddress": "7C:10:C9:22:54:F1",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 5
+    },
+    {
+      "id": "outlet-402-b",
+      "type": "WALL_OUTLET",
+      "name": "Prise 402-B",
+      "xMm": 26400,
+      "yMm": 15650,
+      "portId": "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d",
+      "attachedToDeskId": "bench-402",
+      "attachedSeatIndex": 1,
+      "assignedPerson": "Sarah Benali",
+      "outletRole": "VOIP",
+      "ipAddress": "10.42.30.102",
+      "macAddress": "00:08:5D:9B:31:0D",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 2
+    },
+    {
+      "id": "colonnette-402",
+      "type": "WALL_OUTLET",
+      "name": "Colonnette 402",
+      "xMm": 23600,
+      "yMm": 14800,
+      "attachedToDeskId": "bench-402",
+      "outletRole": "DATA",
+      "stackedPorts": [
+        {
+          "portIndex": 0,
+          "portLabel": "RJ45-1",
+          "outletRole": "DATA",
+          "vlanId": 20,
+          "attachedSeatIndex": 0,
+          "assignedPerson": "Thomas Roux",
+          "ipAddress": "10.42.20.101",
+          "macAddress": "7C:10:C9:22:54:F1",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 4
+        },
+        {
+          "portIndex": 1,
+          "portLabel": "RJ45-2",
+          "outletRole": "VOIP",
+          "vlanId": 30,
+          "attachedSeatIndex": 0,
+          "assignedPerson": "Thomas Roux",
+          "ipAddress": "10.42.30.101",
+          "macAddress": "00:08:5D:9B:31:0D",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 2
+        },
+        {
+          "portIndex": 2,
+          "portLabel": "RJ45-3",
+          "outletRole": "DATA",
+          "vlanId": 20,
+          "attachedSeatIndex": 1,
+          "assignedPerson": "Sarah Benali",
+          "ipAddress": "10.42.20.102",
+          "macAddress": "7C:10:C9:22:54:F2",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 3
+        },
+        {
+          "portIndex": 3,
+          "portLabel": "RJ45-4",
+          "outletRole": "VOIP",
+          "vlanId": 30,
+          "attachedSeatIndex": 1,
+          "assignedPerson": "Sarah Benali",
+          "ipAddress": "10.42.30.102",
+          "macAddress": "00:08:5D:9B:31:0E",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 2
+        }
+      ]
+    },
+    {
+      "id": "floorbox-01",
+      "type": "WALL_OUTLET",
+      "name": "Boîte Sol 1",
+      "xMm": 33000,
+      "yMm": 20000,
+      "widthMm": 300,
+      "heightMm": 300,
+      "subType": "FLOOR_BOX",
+      "portId": "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
+      "outletRole": "DATA",
+      "ipAddress": "10.42.20.50",
+      "macAddress": "00:1B:44:11:22:33",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 4
+    },
+    {
+      "id": "wifi-01",
+      "type": "WALL_OUTLET",
+      "name": "Wi-Fi 04",
+      "xMm": 28000,
+      "yMm": 11000,
+      "widthMm": 350,
+      "heightMm": 350,
+      "subType": "WIFI_AP",
+      "outletRole": "WIFI",
+      "portId": "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
+      "ipAddress": "10.42.50.4",
+      "macAddress": "70:69:79:AA:BB:CC",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 6
+    },
+    {
+      "id": "printer-01",
+      "type": "WALL_OUTLET",
+      "name": "Copieur RH",
+      "xMm": 22000,
+      "yMm": 21000,
+      "widthMm": 800,
+      "heightMm": 700,
+      "subType": "PRINTER_STATION",
+      "outletRole": "PRINTER",
+      "portId": "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c",
+      "ipAddress": "10.42.40.2",
+      "macAddress": "00:1E:8F:77:88:99",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 8,
+      "isPatched": true,
+      "connectedRackId": "rack-01",
+      "connectedSwitchPort": "Gi1/0/24"
+    },
+    {
+      "id": "rack-02",
+      "type": "PATCH_PANEL",
+      "name": "BAIE-SECONDAIRE-EST",
+      "xMm": 45000,
+      "yMm": 13000,
+      "widthMm": 800,
+      "heightMm": 800,
+      "subType": "RACK_18U",
+      "description": "Baie murale de répartition intermédiaire 18U pour le pôle Direction et RH Est.",
+      "ipAddress": "10.42.0.12",
+      "macAddress": "00:0A:41:88:99:B2",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 2,
+      "devices": [
+        {
+          "uPosition": 42,
+          "type": "PDU",
+          "brand": "APC",
+          "model": "AP7921B",
+          "portCount": 8,
+          "name": "PDU-A"
+        },
+        {
+          "uPosition": 24,
+          "type": "PATCH_PANEL",
+          "brand": "LEGRAND",
+          "model": "LCS3 24P Cat6A",
+          "portCount": 24,
+          "name": "BAIE-EST-PP01"
+        },
+        {
+          "uPosition": 22,
+          "type": "SWITCH",
+          "brand": "CISCO",
+          "model": "Catalyst C9300-48P",
+          "portCount": 48,
+          "name": "BAIE-EST-SW01"
+        }
+      ]
+    },
+    {
+      "id": "desk-501",
+      "type": "DESK",
+      "name": "Bureau 501",
+      "xMm": 48000,
+      "yMm": 15000,
+      "widthMm": 1800,
+      "heightMm": 900,
+      "subType": "DESK_EXECUTIVE",
+      "assignedPerson": "Léa Bernard",
+      "assignedUserId": "usr-008",
+      "department": "Direction Juridique",
+      "description": "Bureau de direction spacieux avec retour d'angle et station d'accueil double moniteur.",
+      "chairPosition": "BOTTOM",
+      "seats": [
+        {
+          "seatIndex": 0,
+          "seatLabel": "Place Direction",
+          "userId": "usr-008",
+          "fullName": "Léa Bernard",
+          "department": "Direction Juridique"
+        }
+      ]
+    },
+    {
+      "id": "outlet-501-a",
+      "type": "WALL_OUTLET",
+      "name": "Prise 501-A",
+      "xMm": 50000,
+      "yMm": 15200,
+      "portId": "3cc9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9e",
+      "attachedToDeskId": "desk-501",
+      "attachedSeatIndex": 0,
+      "outletRole": "DATA",
+      "assignedPerson": "Léa Bernard",
+      "ipAddress": "10.42.20.121",
+      "macAddress": "A0:36:BC:54:11:02",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 3,
+      "isPatched": true,
+      "connectedRackId": "rack-02",
+      "connectedSwitchPort": "Gi1/0/5"
+    },
+    {
+      "id": "outlet-501-b",
+      "type": "WALL_OUTLET",
+      "name": "Prise 501-B",
+      "xMm": 50000,
+      "yMm": 15650,
+      "portId": "4dd9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9f",
+      "attachedToDeskId": "desk-501",
+      "attachedSeatIndex": 0,
+      "outletRole": "VOIP",
+      "assignedPerson": "Léa Bernard",
+      "ipAddress": "10.42.30.121",
+      "macAddress": "00:08:5D:8A:77:21",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 2,
+      "isPatched": true,
+      "connectedRackId": "rack-02",
+      "connectedSwitchPort": "Gi1/0/6"
+    },
+    {
+      "id": "bench-502",
+      "type": "DESK",
+      "name": "Bureau 502",
+      "xMm": 48000,
+      "yMm": 19000,
+      "widthMm": 1600,
+      "heightMm": 1600,
+      "subType": "BENCH_DOUBLE",
+      "assignedPerson": "Chloé Rousseau, Julie Moreau",
+      "department": "Ressources Humaines",
+      "description": "Bench double face-à-face pôle recrutement et communication interne.",
+      "chairPosition": "BOTTOM",
+      "seats": [
+        {
+          "seatIndex": 0,
+          "seatLabel": "Place 1 (Nord)",
+          "userId": "usr-010",
+          "fullName": "Chloé Rousseau",
+          "department": "Ressources Humaines"
+        },
+        {
+          "seatIndex": 1,
+          "seatLabel": "Place 2 (Sud)",
+          "userId": "usr-004",
+          "fullName": "Julie Moreau",
+          "department": "Moyens Généraux / RH"
+        }
+      ]
+    },
+    {
+      "id": "colonnette-502",
+      "type": "WALL_OUTLET",
+      "name": "Colonnette 502",
+      "xMm": 48600,
+      "yMm": 18800,
+      "attachedToDeskId": "bench-502",
+      "outletRole": "DATA",
+      "connectedRackId": "rack-02",
+      "stackedPorts": [
+        {
+          "portIndex": 0,
+          "portLabel": "RJ45-1",
+          "outletRole": "DATA",
+          "vlanId": 20,
+          "isPatched": true,
+          "connectedRackId": "rack-02",
+          "attachedSeatIndex": 0,
+          "assignedPerson": "Chloé Rousseau",
+          "ipAddress": "10.42.20.125",
+          "macAddress": "7C:10:C9:44:88:11",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 3
+        },
+        {
+          "portIndex": 1,
+          "portLabel": "RJ45-2",
+          "outletRole": "VOIP",
+          "vlanId": 30,
+          "isPatched": true,
+          "connectedRackId": "rack-02",
+          "attachedSeatIndex": 0,
+          "assignedPerson": "Chloé Rousseau",
+          "ipAddress": "10.42.30.125",
+          "macAddress": "00:08:5D:AA:11:33",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 2
+        },
+        {
+          "portIndex": 2,
+          "portLabel": "RJ45-3",
+          "outletRole": "DATA",
+          "vlanId": 20,
+          "isPatched": true,
+          "connectedRackId": "rack-02",
+          "attachedSeatIndex": 1,
+          "assignedPerson": "Julie Moreau",
+          "ipAddress": "10.42.20.126",
+          "macAddress": "7C:10:C9:44:88:22",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 4
+        },
+        {
+          "portIndex": 3,
+          "portLabel": "RJ45-4",
+          "outletRole": "VOIP",
+          "vlanId": 30,
+          "isPatched": true,
+          "connectedRackId": "rack-02",
+          "attachedSeatIndex": 1,
+          "assignedPerson": "Julie Moreau",
+          "ipAddress": "10.42.30.126",
+          "macAddress": "00:08:5D:AA:11:44",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 2
+        }
+      ]
+    },
+    {
+      "id": "wifi-02",
+      "type": "WALL_OUTLET",
+      "name": "Wi-Fi 05 (Est)",
+      "xMm": 46000,
+      "yMm": 10500,
+      "widthMm": 350,
+      "heightMm": 350,
+      "subType": "WIFI_AP",
+      "outletRole": "WIFI",
+      "portId": "5ee9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc01",
+      "ipAddress": "10.42.50.5",
+      "macAddress": "70:69:79:DD:EE:FF",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 5,
+      "isPatched": true,
+      "connectedRackId": "rack-02",
+      "connectedSwitchPort": "Gi1/0/12"
+    },
+    {
+      "id": "cam-01",
+      "type": "WALL_OUTLET",
+      "name": "Caméra IP Sas",
+      "xMm": 17000,
+      "yMm": 10200,
+      "widthMm": 300,
+      "heightMm": 300,
+      "subType": "CAMERA_IP",
+      "outletRole": "CAMERA",
+      "portId": "6ff9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc02",
+      "ipAddress": "10.42.60.10",
+      "macAddress": "AC:CC:8E:12:34:56",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 7,
+      "isPatched": true,
+      "connectedRackId": "rack-01",
+      "connectedSwitchPort": "Gi1/0/18"
+    },
+    {
+      "id": "rack-03",
+      "type": "PATCH_PANEL",
+      "name": "BAIE-OUEST-R&D",
+      "xMm": 21500,
+      "yMm": 10800,
+      "widthMm": 800,
+      "heightMm": 800,
+      "subType": "RACK_18U",
+      "description": "Baie de sous-répartition 24U dédiée au banc d'essais et aux développeurs du Tech Lab.",
+      "ipAddress": "10.42.0.13",
+      "macAddress": "00:0A:41:88:99:C3",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 1,
+      "devices": [
+        {
+          "uPosition": 42,
+          "type": "PDU",
+          "brand": "APC",
+          "model": "AP7921B",
+          "portCount": 8,
+          "name": "PDU-A"
+        },
+        {
+          "uPosition": 24,
+          "type": "PATCH_PANEL",
+          "brand": "LEGRAND",
+          "model": "LCS3 24P Cat6A",
+          "portCount": 24,
+          "name": "BAIE-RND-PP01"
+        },
+        {
+          "uPosition": 22,
+          "type": "SWITCH",
+          "brand": "CISCO",
+          "model": "Catalyst C9300-48P",
+          "portCount": 48,
+          "name": "BAIE-RND-SW01"
+        }
+      ]
+    },
+    {
+      "id": "bench-403",
+      "type": "DESK",
+      "name": "Bureau 403",
+      "xMm": 23000,
+      "yMm": 19000,
+      "widthMm": 1600,
+      "heightMm": 1600,
+      "subType": "BENCH_DOUBLE",
+      "assignedPerson": "Emma Petit, Maxime Girard",
+      "department": "Tech Lab",
+      "description": "Bench double face-à-face pôle Frontend UI/UX et Architecture Cloud DevOps.",
+      "chairPosition": "BOTTOM",
+      "seats": [
+        {
+          "seatIndex": 0,
+          "seatLabel": "Place 1 (Nord)",
+          "userId": "usr-005",
+          "fullName": "Emma Petit",
+          "department": "Tech Lab"
+        },
+        {
+          "seatIndex": 1,
+          "seatLabel": "Place 2 (Sud)",
+          "userId": "usr-009",
+          "fullName": "Maxime Girard",
+          "department": "Tech Lab"
+        }
+      ]
+    },
+    {
+      "id": "colonnette-403",
+      "type": "WALL_OUTLET",
+      "name": "Colonnette 403",
+      "xMm": 23600,
+      "yMm": 18800,
+      "attachedToDeskId": "bench-403",
+      "outletRole": "DATA",
+      "connectedRackId": "rack-03",
+      "stackedPorts": [
+        {
+          "portIndex": 0,
+          "portLabel": "RJ45-1",
+          "outletRole": "DATA",
+          "vlanId": 20,
+          "isPatched": true,
+          "connectedRackId": "rack-03",
+          "attachedSeatIndex": 0,
+          "assignedPerson": "Emma Petit",
+          "ipAddress": "10.42.20.105",
+          "macAddress": "7C:10:C9:33:44:11",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 3
+        },
+        {
+          "portIndex": 1,
+          "portLabel": "RJ45-2",
+          "outletRole": "VOIP",
+          "vlanId": 30,
+          "isPatched": true,
+          "connectedRackId": "rack-03",
+          "attachedSeatIndex": 0,
+          "assignedPerson": "Emma Petit",
+          "ipAddress": "10.42.30.105",
+          "macAddress": "00:08:5D:8A:33:11",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 2
+        },
+        {
+          "portIndex": 2,
+          "portLabel": "RJ45-3",
+          "outletRole": "DATA",
+          "vlanId": 20,
+          "isPatched": true,
+          "connectedRackId": "rack-03",
+          "attachedSeatIndex": 1,
+          "assignedPerson": "Maxime Girard",
+          "ipAddress": "10.42.20.109",
+          "macAddress": "7C:10:C9:33:44:22",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 4
+        },
+        {
+          "portIndex": 3,
+          "portLabel": "RJ45-4",
+          "outletRole": "VOIP",
+          "vlanId": 30,
+          "isPatched": true,
+          "connectedRackId": "rack-03",
+          "attachedSeatIndex": 1,
+          "assignedPerson": "Maxime Girard",
+          "ipAddress": "10.42.30.109",
+          "macAddress": "00:08:5D:8A:33:22",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 2
+        }
+      ]
+    },
+    {
+      "id": "desk-409",
+      "type": "DESK",
+      "name": "Bureau 409",
+      "xMm": 29000,
+      "yMm": 19000,
+      "widthMm": 1600,
+      "heightMm": 800,
+      "subType": "DESK_SOLO",
+      "assignedPerson": "Antoine Roux",
+      "assignedUserId": "usr-007",
+      "department": "Maintenance & IT",
+      "description": "Poste technique de câblage, supervision et banc de diagnostic.",
+      "chairPosition": "BOTTOM",
+      "seats": [
+        {
+          "seatIndex": 0,
+          "seatLabel": "Place Diagnostic",
+          "userId": "usr-007",
+          "fullName": "Antoine Roux",
+          "department": "Maintenance & IT"
+        }
+      ]
+    },
+    {
+      "id": "outlet-409-a",
+      "type": "WALL_OUTLET",
+      "name": "Prise 409-A",
+      "xMm": 30800,
+      "yMm": 19200,
+      "portId": "7aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc03",
+      "attachedToDeskId": "desk-409",
+      "attachedSeatIndex": 0,
+      "outletRole": "DATA",
+      "assignedPerson": "Antoine Roux",
+      "ipAddress": "10.42.20.117",
+      "macAddress": "B4:2E:99:41:0A:77",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 3,
+      "isPatched": true,
+      "connectedRackId": "rack-03",
+      "connectedSwitchPort": "Gi1/0/3"
+    },
+    {
+      "id": "outlet-409-b",
+      "type": "WALL_OUTLET",
+      "name": "Prise 409-B",
+      "xMm": 30800,
+      "yMm": 19650,
+      "portId": "8bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc04",
+      "attachedToDeskId": "desk-409",
+      "attachedSeatIndex": 0,
+      "outletRole": "VOIP",
+      "assignedPerson": "Antoine Roux",
+      "ipAddress": "10.42.30.117",
+      "macAddress": "00:08:5D:8A:22:77",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 2,
+      "isPatched": true,
+      "connectedRackId": "rack-03",
+      "connectedSwitchPort": "Gi1/0/4"
+    },
+    {
+      "id": "desk-601",
+      "type": "DESK",
+      "name": "Bureau 601",
+      "xMm": 37000,
+      "yMm": 19000,
+      "widthMm": 1800,
+      "heightMm": 900,
+      "subType": "DESK_EXECUTIVE",
+      "assignedPerson": "Marc Lefebvre",
+      "assignedUserId": "usr-006",
+      "department": "Direction Financière",
+      "description": "Bureau exécutif direction financière, double écran avec ligne sécurisée.",
+      "chairPosition": "BOTTOM",
+      "seats": [
+        {
+          "seatIndex": 0,
+          "seatLabel": "Place DAF",
+          "userId": "usr-006",
+          "fullName": "Marc Lefebvre",
+          "department": "Direction Financière"
+        }
+      ]
+    },
+    {
+      "id": "outlet-601-a",
+      "type": "WALL_OUTLET",
+      "name": "Prise 601-A",
+      "xMm": 39000,
+      "yMm": 19200,
+      "portId": "9cc9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc05",
+      "attachedToDeskId": "desk-601",
+      "attachedSeatIndex": 0,
+      "outletRole": "DATA",
+      "assignedPerson": "Marc Lefebvre",
+      "ipAddress": "10.42.20.160",
+      "macAddress": "A0:36:BC:54:66:01",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 3,
+      "isPatched": true,
+      "connectedRackId": "rack-02",
+      "connectedSwitchPort": "Gi1/0/9"
+    },
+    {
+      "id": "outlet-601-b",
+      "type": "WALL_OUTLET",
+      "name": "Prise 601-B",
+      "xMm": 39000,
+      "yMm": 19650,
+      "portId": "add9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc06",
+      "attachedToDeskId": "desk-601",
+      "attachedSeatIndex": 0,
+      "outletRole": "VOIP",
+      "assignedPerson": "Marc Lefebvre",
+      "ipAddress": "10.42.30.160",
+      "macAddress": "00:08:5D:8A:66:01",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 2,
+      "isPatched": true,
+      "connectedRackId": "rack-02",
+      "connectedSwitchPort": "Gi1/0/10"
+    },
+    {
+      "id": "meeting-rnd",
+      "type": "DESK",
+      "name": "Table Visio R&D",
+      "xMm": 33000,
+      "yMm": 10500,
+      "widthMm": 3000,
+      "heightMm": 1400,
+      "subType": "MEETING_TABLE",
+      "department": "Tech Lab",
+      "description": "Table de réunion 8 personnes équipée d'un boîtier de sol HDMI/RJ45 et pieuvre audio.",
+      "chairPosition": "NONE"
+    },
+    {
+      "id": "floorbox-rnd",
+      "type": "WALL_OUTLET",
+      "name": "Boîte Sol Visio",
+      "xMm": 34500,
+      "yMm": 11200,
+      "widthMm": 400,
+      "heightMm": 400,
+      "subType": "FLOOR_BOX",
+      "attachedToDeskId": "meeting-rnd",
+      "outletRole": "DATA",
+      "connectedRackId": "rack-03",
+      "stackedPorts": [
+        {
+          "portIndex": 0,
+          "portLabel": "DATA-VISIO",
+          "outletRole": "DATA",
+          "vlanId": 20,
+          "isPatched": true,
+          "connectedRackId": "rack-03",
+          "ipAddress": "10.42.20.70",
+          "macAddress": "00:1B:44:88:99:01",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 2
+        },
+        {
+          "portIndex": 1,
+          "portLabel": "CODEC-IP",
+          "outletRole": "VOIP",
+          "vlanId": 30,
+          "isPatched": true,
+          "connectedRackId": "rack-03",
+          "ipAddress": "10.42.30.70",
+          "macAddress": "00:08:5D:CC:DD:01",
+          "pingStatus": "ONLINE",
+          "pingLatencyMs": 1
+        }
+      ]
+    },
+    {
+      "id": "printer-rnd",
+      "type": "WALL_OUTLET",
+      "name": "Traceur R&D",
+      "xMm": 29000,
+      "yMm": 10500,
+      "widthMm": 800,
+      "heightMm": 700,
+      "subType": "PRINTER_STATION",
+      "outletRole": "PRINTER",
+      "portId": "bee9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc07",
+      "ipAddress": "10.42.40.5",
+      "macAddress": "00:1E:8F:99:AA:01",
+      "pingStatus": "ONLINE",
+      "pingLatencyMs": 6,
+      "isPatched": true,
+      "connectedRackId": "rack-03",
+      "connectedSwitchPort": "Gi1/0/16"
+    }
+  ]
+}

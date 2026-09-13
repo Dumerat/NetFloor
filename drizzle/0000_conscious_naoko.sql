@@ -29,6 +29,7 @@ CREATE TABLE "racks" (
 	"width_mm" integer DEFAULT 600 NOT NULL,
 	"depth_mm" integer DEFAULT 800 NOT NULL,
 	"rotation_deg" double precision DEFAULT 0 NOT NULL,
+	"metadata" jsonb DEFAULT '{}'::jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

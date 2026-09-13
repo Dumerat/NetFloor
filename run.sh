@@ -27,6 +27,8 @@ AUTO_OPEN=false
 TEST_TARGET="all"
 BUILD_TARGET="all"
 DB_ACTION="seed"
+SEED_DB=false
+NO_DOCKER=false
 
 # Résolution automatique du binaire pnpm
 resolve_pnpm() {
@@ -127,6 +129,14 @@ while [[ $# -gt 0 ]]; do
             DB_ACTION="$2"
             shift 2
             ;;
+        --seed)
+            SEED_DB=true
+            shift
+            ;;
+        --no-docker)
+            NO_DOCKER=true
+            shift
+            ;;
         -v|--version)
             echo "NetFloor Architect v0.1.0"
             exit 0
@@ -170,6 +180,58 @@ open_browser() {
     fi
 }
 
+# Fonction pour assurer la disponibilité et l'initialisation de PostgreSQL (Docker)
+ensure_database() {
+    if [ "$NO_DOCKER" = true ]; then
+        echo -e "${YELLOW}⚠️ Option --no-docker spécifiée : contournement du démarrage automatique de PostgreSQL.${RESET}"
+        return 0
+    fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ Docker n'est pas détecté. Lancement sans conteneur local (mode hors-ligne ou PostgreSQL externe).${RESET}"
+        return 0
+    fi
+
+    # Forcer le contexte Docker standard default si présent
+    if docker context inspect default >/dev/null 2>&1; then
+        export DOCKER_CONTEXT="default"
+    fi
+
+    echo -e "${CYAN}🐘 Démarrage et vérification de la base PostgreSQL (Docker)...${RESET}"
+    DOCKER_CONFIG=$(mktemp -d 2>/dev/null || echo "/tmp") docker compose up -d postgres >/dev/null 2>&1 || docker compose up -d postgres
+
+    echo -ne "   • En attente de PostgreSQL... "
+    local RETRIES=15
+    until docker compose exec -T postgres pg_isready -q >/dev/null 2>&1 || [ $RETRIES -eq 0 ]; do
+        echo -ne "."
+        sleep 1
+        RETRIES=$((RETRIES - 1))
+    done
+
+    if [ $RETRIES -eq 0 ]; then
+        echo -e " ${RED}Délai dépassé.${RESET}"
+        echo -e "${YELLOW}   L'application démarrera en mode déconnecté.${RESET}"
+        return 0
+    else
+        echo -e " ${GREEN}Prêt !${RESET}"
+    fi
+
+    # Vérification et application automatique de la migration si la base est neuve
+    local TABLE_COUNT
+    TABLE_COUNT=$(docker compose exec -T postgres psql -U postgres -d netfloor -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d '[:space:]' || echo "0")
+    if [ "$TABLE_COUNT" = "0" ] || [ -z "$TABLE_COUNT" ]; then
+        echo -e "${CYAN}📜 Initialisation des tables PostgreSQL (migration initiale DDL)...${RESET}"
+        docker compose exec -T postgres psql -U postgres -d netfloor < "$PROJECT_ROOT/drizzle/0000_conscious_naoko.sql" >/dev/null 2>&1 || true
+        echo -e "   ${GREEN}✅ Tables créées avec succès.${RESET}"
+    fi
+
+    # Injection facultative du seed si demandé via --seed
+    if [ "$SEED_DB" = true ]; then
+        echo -e "${CYAN}🌱 Injection de la configuration d'exemple en base...${RESET}"
+        $PNPM_CMD db:seed || true
+    fi
+}
+
 # Exécution de la commande demandée
 case "$COMMAND" in
     dev)
@@ -177,6 +239,9 @@ case "$COMMAND" in
         echo -e "${GREEN}🚀 Lancement de NetFloor Architect en mode DÉVELOPPEMENT${RESET}"
         echo -e "   • URL locale : ${CYAN}http://${HOST}:${PORT}${RESET}"
         echo -e "   • Gestionnaire de paquets : ${YELLOW}$($PNPM_CMD -v)${RESET}\n"
+
+        ensure_database
+
 
         if [ "$AUTO_OPEN" = true ]; then
             open_browser &
@@ -256,10 +321,17 @@ case "$COMMAND" in
         ;;
 
     db)
+        ensure_database
         case "$DB_ACTION" in
             seed)
-                echo -e "${CYAN}🌱 Peuplement initial de la base de données...${RESET}"
+                echo -e "${CYAN}🌱 Peuplement de la base de données avec la configuration de référence...${RESET}"
                 $PNPM_CMD db:seed
+                ;;
+            reset)
+                echo -e "${CYAN}🧹 Réinitialisation complète de la base de données...${RESET}"
+                docker compose exec -T postgres psql -U postgres -d netfloor -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1 || true
+                docker compose exec -T postgres psql -U postgres -d netfloor < "$PROJECT_ROOT/drizzle/0000_conscious_naoko.sql" >/dev/null 2>&1 || true
+                echo -e "${GREEN}✅ Base de données vierge réinitialisée.${RESET}"
                 ;;
             migrate)
                 echo -e "${CYAN}🗄️ Application des migrations SQL...${RESET}"

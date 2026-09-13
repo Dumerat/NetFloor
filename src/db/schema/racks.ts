@@ -1,4 +1,12 @@
-import { pgTable, uuid, varchar, integer, doublePrecision, timestamp } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  varchar,
+  integer,
+  doublePrecision,
+  jsonb,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { floors } from "./floors";
 
 export const racks = pgTable("racks", {
@@ -13,6 +21,7 @@ export const racks = pgTable("racks", {
   widthMm: integer("width_mm").notNull().default(600), // Standard 19" rack outer width: 600mm
   depthMm: integer("depth_mm").notNull().default(800), // Standard depth: 800mm or 1000mm
   rotationDeg: doublePrecision("rotation_deg").notNull().default(0),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
