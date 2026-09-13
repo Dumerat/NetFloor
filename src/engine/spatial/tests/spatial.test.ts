@@ -612,7 +612,19 @@ PRISE-ERR2;DESK-999;User Erreur 2;10.42.20.50;INVALID_MAC_ADDR;20;BAIE-01;SW-01;
   console.log("\n🎉 TOUS LES TESTS DU MOTEUR SPATIAL 2D SONT VALIDÉS AVEC SUCCÈS !");
 }
 
-runSpatialTests().catch((err) => {
-  console.error("❌ ERREUR DANS LE TEST SPATIAL :", err);
-  process.exit(1);
-});
+// Exécution en tant que suite de tests Vitest si le runner est actif, ou CLI autonome avec tsx
+// @ts-ignore
+if (typeof describe !== "undefined" && typeof it !== "undefined") {
+  // @ts-ignore
+  describe("Spatial 2D Engine", () => {
+    // @ts-ignore
+    it("should pass all 16 spatial mathematics, snapping and batch tests", async () => {
+      await runSpatialTests();
+    });
+  });
+} else {
+  runSpatialTests().catch((err) => {
+    console.error("❌ ERREUR DANS LE TEST SPATIAL :", err);
+    process.exit(1);
+  });
+}

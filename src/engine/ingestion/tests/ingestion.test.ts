@@ -303,7 +303,19 @@ PRISE-A01;RJ45-1;Étage 1;BAIE-01;PP-01;06;CAT6A;12.0;SW-CORE;Gi1/0/6;20;DATA
   console.log("\n🎉 LES 3 PILIERS DE NETFLOOR ARCHITECT SONT VERROUILLÉS ET TESTÉS DE BOUT EN BOUT !");
 }
 
-runIngestionTests().catch((err) => {
-  console.error("❌ ERREUR LORS DU TEST D'INGESTION :", err);
-  process.exit(1);
-});
+// Exécution en tant que suite de tests Vitest si le runner est actif, ou CLI autonome avec tsx
+// @ts-ignore
+if (typeof describe !== "undefined" && typeof it !== "undefined") {
+  // @ts-ignore
+  describe("Ingestion & Cabling Ledger Engine", () => {
+    // @ts-ignore
+    it("should validate topology anomalies and mass enterprise cabling ledger", async () => {
+      await runIngestionTests();
+    });
+  });
+} else {
+  runIngestionTests().catch((err) => {
+    console.error("❌ ERREUR LORS DU TEST D'INGESTION :", err);
+    process.exit(1);
+  });
+}
