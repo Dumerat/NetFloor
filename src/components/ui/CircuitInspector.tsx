@@ -18,6 +18,7 @@ import {
 import { CloudSwitchDiscoveryModal } from "./CloudSwitchDiscoveryModal";
 import { SwitchPortVisualizer } from "./SwitchPortVisualizer";
 import { ENTERPRISE_DIRECTORY } from "@/data/directory";
+import { getRackPortAvailability } from "@/engine/spatial/autoRoute";
 import {
   Zap,
   ShieldCheck,
@@ -44,6 +45,7 @@ import {
   FileText,
   Mail,
   Building,
+  Building2,
   UserCheck,
   Users,
   Server,
@@ -59,10 +61,13 @@ import {
   Edit3,
   Cloud,
   PlusCircle,
+  Boxes,
 } from "lucide-react";
 import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 import { FloorZone } from "@/types/zones";
+import { FloorSite, DEFAULT_SITE_ID } from "@/engine/storage/planStorage";
+import { resolveEffectiveOutletNetwork } from "@/engine/spatial/networkProfiles";
 
 export const DEFAULT_RACK_DEVICES: RackDeviceItem[] = [
   {
@@ -306,6 +311,9 @@ export interface CircuitInspectorProps {
   isLoading: boolean;
   selectedNode: NodeDisplay | null;
   selectedZone?: FloorZone | null | undefined;
+  selectedNodeIds?: string[] | undefined;
+  onClearMultiSelection?: (() => void) | undefined;
+  onBulkDelete?: ((ids: string[]) => void) | undefined;
   allNodes: NodeDisplay[];
   desks: NodeDisplay[];
   racks?: RackDisplay[] | undefined;
@@ -323,6 +331,9 @@ export interface CircuitInspectorProps {
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
   onResetVlanStyles?: (() => void) | undefined;
+  onAutoRoute?: ((portIds: string[], targetRackId: string, targetSwitchId?: string | undefined) => void) | undefined;
+  sites?: FloorSite[] | undefined;
+  activeSiteId?: string | undefined;
 }
 
 const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
@@ -330,6 +341,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   isLoading,
   selectedNode,
   selectedZone,
+  selectedNodeIds,
+  onClearMultiSelection,
+  onBulkDelete,
   allNodes,
   desks,
   racks,
@@ -347,6 +361,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   vlanStyles,
   onUpdateVlanStyle,
   onResetVlanStyles,
+  onAutoRoute,
+  sites,
+  activeSiteId,
 }) => {
   // Mode de travail : Consultation (Rapide / Lecture seule) vs Modification (Formulaires d'édition)
   const [inspectorMode, setInspectorMode] = useState<"VIEW" | "EDIT">("VIEW");
@@ -360,27 +377,46 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [rackVlanFilter, setRackVlanFilter] = useState<string>("ALL");
 
   const availableRacks: RackDisplay[] = useMemo(() => {
-    if (racks && racks.length > 0) return racks;
-    const fromNodes: RackDisplay[] = allNodes
-      .filter((n) => n.type === "PATCH_PANEL" || n.subType === "RACK_42U" || n.subType === "RACK_18U")
-      .map((n) => ({
-        id: n.id,
-        name: n.name,
-        xMm: n.xMm,
-        yMm: n.yMm,
-        widthMm: n.widthMm ?? 800,
-        depthMm: n.heightMm ?? 1000,
-        uHeight: n.uHeight ?? (n.subType === "RACK_18U" ? 18 : 42),
-        devices: n.devices,
-      }));
-    return fromNodes.length > 0
-      ? fromNodes
-      : [{ id: "rack-01", name: "BAIE-PRINCIPALE-RDC", xMm: 12000, yMm: 14000, widthMm: 800, depthMm: 1000, uHeight: 42, devices: [] }];
-  }, [racks, allNodes]);
+    let baseList: RackDisplay[] = [];
+    if (racks && racks.length > 0) {
+      baseList = racks;
+    } else {
+      const fromNodes: RackDisplay[] = allNodes
+        .filter((n) => n.type === "PATCH_PANEL" || n.subType === "RACK_42U" || n.subType === "RACK_18U")
+        .map((n) => ({
+          id: n.id,
+          name: n.name,
+          xMm: n.xMm,
+          yMm: n.yMm,
+          widthMm: n.widthMm ?? 800,
+          depthMm: n.heightMm ?? 1000,
+          uHeight: n.uHeight ?? (n.subType === "RACK_18U" ? 18 : 42),
+          devices: n.devices,
+          siteId: n.siteId,
+        }));
+      baseList = fromNodes.length > 0
+        ? fromNodes
+        : [{ id: "rack-01", name: "BAIE-PRINCIPALE-RDC", xMm: 12000, yMm: 14000, widthMm: 800, depthMm: 1000, uHeight: 42, devices: [] }];
+    }
+
+    // Filtrer les baies sur le même site que l'équipement inspecté ou le site actif
+    const targetSiteId = selectedNode?.siteId ?? activeSiteId;
+    if (targetSiteId && targetSiteId !== "ALL") {
+      const siteFiltered = baseList.filter((r) => (r.siteId ?? DEFAULT_SITE_ID) === targetSiteId);
+      if (siteFiltered.length > 0) return siteFiltered;
+    }
+    return baseList;
+  }, [racks, allNodes, selectedNode?.siteId, activeSiteId]);
+
+  const rackAvailabilities = useMemo(() => {
+    return getRackPortAvailability(availableRacks, allNodes);
+  }, [availableRacks, allNodes]);
+  const [autoRouteTargetRackId, setAutoRouteTargetRackId] = useState<string>(availableRacks[0]?.id ?? "rack-01");
+  const [autoRouteTargetSwitchId, setAutoRouteTargetSwitchId] = useState<string>("AUTO");
 
   const getSwitchesForRack = (rackId: string | undefined): RackDeviceItem[] => {
     const targetRack = availableRacks.find((r) => r.id === rackId) ?? availableRacks[0];
-    const devs: RackDeviceItem[] = targetRack?.devices ?? [];
+    const devs: RackDeviceItem[] = (targetRack?.devices && targetRack.devices.length > 0) ? targetRack.devices : DEFAULT_RACK_DEVICES;
     return devs.filter((d: RackDeviceItem) => d.deviceType === "SWITCH");
   };
 
@@ -778,6 +814,31 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
           ✏️ Modification
         </button>
       </div>
+
+      {/* Sélecteur de site de rattachement */}
+      {sites && sites.length > 1 && (
+        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-800 text-[10px]">
+          <span className="text-slate-400 flex items-center gap-1 font-medium">
+            <Building2 className="w-3 h-3 text-amber-400 shrink-0" />
+            <span>Site :</span>
+          </span>
+          <select
+            value={selectedNode?.siteId ?? activeSiteId ?? DEFAULT_SITE_ID}
+            onChange={(e) => {
+              if (selectedNode) {
+                onUpdateNodeProperties?.(selectedNode.id, { siteId: e.target.value });
+              }
+            }}
+            className="bg-slate-950 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 text-[10px] font-medium focus:outline-none focus:border-blue-500 cursor-pointer"
+          >
+            {sites.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 
@@ -859,6 +920,29 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          {/* Sélecteur de site de rattachement */}
+          {sites && sites.length > 1 && (
+            <div className="flex items-center justify-between gap-1.5 p-2 rounded-lg bg-slate-900 border border-slate-800 text-[10px]">
+              <span className="text-slate-400 flex items-center gap-1 font-medium">
+                <Building2 className="w-3 h-3 text-amber-400 shrink-0" />
+                <span>Site de rattachement :</span>
+              </span>
+              <select
+                value={selectedZone.siteId ?? activeSiteId ?? DEFAULT_SITE_ID}
+                onChange={(e) => {
+                  onUpdateZone?.(selectedZone.id, { siteId: e.target.value });
+                }}
+                className="bg-slate-950 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 text-[10px] font-medium focus:outline-none focus:border-blue-500 cursor-pointer"
+              >
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Fiche Métrique & Superficie */}
           <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
             <div className="flex items-center justify-between">
@@ -1025,6 +1109,157 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 </>
               )}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Cas 0 : Sélection Multiple d'Éléments (Îlots de Bureaux, Prises RJ45, Équipements)
+  if (selectedNodeIds && selectedNodeIds.length > 1) {
+    const selectedItems = allNodes.filter((n) => selectedNodeIds.includes(n.id));
+    const selectedDesks = selectedItems.filter((n) => n.type === "DESK");
+    const selectedOutlets = selectedItems.filter((n) => n.type === "WALL_OUTLET");
+    const otherSelected = selectedItems.filter((n) => n.type !== "DESK" && n.type !== "WALL_OUTLET");
+
+    // Prises raccordables : les prises sélectionnées + les prises attachées aux bureaux sélectionnés
+    const attachedToSelectedDesks = allNodes.filter(
+      (n) => n.type === "WALL_OUTLET" && n.attachedToDeskId && selectedNodeIds.includes(n.attachedToDeskId)
+    );
+    const allRoutableOutletIds = Array.from(
+      new Set([...selectedOutlets.map((o) => o.id), ...attachedToSelectedDesks.map((o) => o.id)])
+    );
+
+    return (
+      <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
+        {/* En-tête sélection groupée */}
+        <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/30">
+              <Boxes className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-100 text-sm">
+                Sélection Multiple
+              </h3>
+              <p className="text-[11px] text-sky-400 font-mono">
+                {selectedItems.length} éléments sélectionnés
+              </p>
+            </div>
+          </div>
+          {onClearMultiSelection && (
+            <button
+              type="button"
+              onClick={onClearMultiSelection}
+              className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition"
+              title="Désélectionner tout"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          {/* Répartition des éléments sélectionnés */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <span className="text-[11px] font-semibold text-slate-300 block">
+              Composition de la sélection :
+            </span>
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="bg-slate-950 p-2 rounded border border-slate-800 flex items-center justify-between">
+                <span className="text-slate-400">Bureaux :</span>
+                <span className="font-bold text-sky-400 font-mono">{selectedDesks.length}</span>
+              </div>
+              <div className="bg-slate-950 p-2 rounded border border-slate-800 flex items-center justify-between">
+                <span className="text-slate-400">Prises RJ45 :</span>
+                <span className="font-bold text-emerald-400 font-mono">{selectedOutlets.length}</span>
+              </div>
+              {otherSelected.length > 0 && (
+                <div className="col-span-2 bg-slate-950 p-2 rounded border border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-400">Autres équipements :</span>
+                  <span className="font-bold text-amber-400 font-mono">{otherSelected.length}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Auto-Route Groupé pour tous les éléments sélectionnés */}
+          {allRoutableOutletIds.length > 0 && onAutoRoute && (
+            <div className="p-3 rounded-lg bg-blue-950/30 border border-blue-500/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-blue-200 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Auto-Route Groupé ({allRoutableOutletIds.length} prises)</span>
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                Câble l&apos;ensemble des prises des bureaux et îlots sélectionnés vers la baie et le switch désignés.
+              </p>
+              <div className="space-y-1.5 pt-1">
+                <select
+                  value={autoRouteTargetRackId}
+                  onChange={(e) => {
+                    setAutoRouteTargetRackId(e.target.value);
+                    setAutoRouteTargetSwitchId("AUTO");
+                  }}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-blue-500"
+                >
+                  {rackAvailabilities.map((ra) => (
+                    <option key={ra.rackId} value={ra.rackId}>
+                      {ra.rackName} ({ra.freePorts} ports libres)
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={autoRouteTargetSwitchId}
+                  onChange={(e) => setAutoRouteTargetSwitchId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[11px] text-sky-300 focus:outline-none focus:border-sky-500"
+                >
+                  <option value="AUTO">✨ Switch Automatique (1er disponible)</option>
+                  {getSwitchesForRack(autoRouteTargetRackId).map((sw) => (
+                    <option key={sw.id} value={sw.id}>
+                      🔲 {sw.name} ({sw.brand}) • {sw.portsCount}P
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onAutoRoute(
+                      allRoutableOutletIds,
+                      autoRouteTargetRackId,
+                      autoRouteTargetSwitchId === "AUTO" ? undefined : autoRouteTargetSwitchId
+                    );
+                  }}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-600/30 flex items-center justify-center gap-1.5 transition"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Raccorder les {allRoutableOutletIds.length} prises à la baie</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Déplacement / Alignement Rapide */}
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+            <span className="text-[11px] font-semibold text-slate-300 block">
+              Déplacement groupé :
+            </span>
+            <p className="text-[10px] text-slate-400">
+              Vous pouvez glisser-déposer n&apos;importe quel élément sélectionné sur la carte pour déplacer l&apos;ensemble du groupe à 60 FPS (Maj + Clic pour ajouter/retirer).
+            </p>
+            {onBulkDelete && (
+              <button
+                type="button"
+                onClick={() => onBulkDelete(selectedNodeIds)}
+                className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition mt-2"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Supprimer les {selectedNodeIds.length} éléments</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1924,52 +2159,90 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
             </div>
 
             {/* Spécifications réseau & VLAN */}
-            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-                  <Network className="w-3.5 h-3.5 text-sky-400" />
-                  Spécifications Réseau
-                </span>
-                {selectedNode.vlanId && (
-                  <span
-                    className="text-[9px] font-mono px-2 py-0.5 rounded border font-bold"
-                    style={{
-                      borderColor: `${vlanStyles?.[selectedNode.vlanId]?.color ?? "#38bdf8"}60`,
-                      backgroundColor: `${vlanStyles?.[selectedNode.vlanId]?.color ?? "#38bdf8"}20`,
-                      color: vlanStyles?.[selectedNode.vlanId]?.color ?? "#38bdf8",
-                    }}
-                  >
-                    VLAN {selectedNode.vlanId}
-                  </span>
-                )}
-              </div>
+            {(() => {
+              const effectiveNetwork = resolveEffectiveOutletNetwork(
+                selectedNode,
+                availableRacks
+              );
 
-              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
-                  <span className="text-slate-400">IP : </span>
-                  <span className="text-slate-200">{selectedNode.ipAddress || "Non assignée"}</span>
-                </div>
-                <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
-                  <span className="text-slate-400">MAC : </span>
-                  <span className="text-slate-200">{selectedNode.macAddress || "Non assignée"}</span>
-                </div>
-                <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
-                  <span className="text-slate-400">Rôle : </span>
-                  <span className="text-slate-200">{selectedNode.outletRole || "DATA"}</span>
-                </div>
-                <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
-                  <span className="text-slate-400">PoE : </span>
-                  <span className="text-amber-400 font-bold">{selectedNode.poeMode || "NONE"}</span>
-                </div>
-              </div>
+              return (
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Network className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Identité & Spécifications Réseau</span>
+                    </span>
+                    {effectiveNetwork.vlanId && (
+                      <span
+                        className="text-[9px] font-mono px-2 py-0.5 rounded border font-bold"
+                        style={{
+                          borderColor: `${vlanStyles?.[effectiveNetwork.vlanId]?.color ?? "#38bdf8"}60`,
+                          backgroundColor: `${vlanStyles?.[effectiveNetwork.vlanId]?.color ?? "#38bdf8"}20`,
+                          color: vlanStyles?.[effectiveNetwork.vlanId]?.color ?? "#38bdf8",
+                        }}
+                      >
+                        VLAN {effectiveNetwork.vlanId}
+                      </span>
+                    )}
+                  </div>
 
-              {selectedNode.assignedPerson && (
-                <div className="p-2 bg-slate-950 rounded border border-slate-850 text-[10px] flex items-center justify-between">
-                  <span className="text-slate-400">Affecté à :</span>
-                  <span className="text-emerald-300 font-semibold font-mono">👤 {selectedNode.assignedPerson}</span>
+                  {/* Indicateur Cuivre Passif vs Profil Hérité du Port Switch */}
+                  <div className={`p-2 rounded border text-[10px] ${
+                    selectedNode.isPatched
+                      ? "bg-sky-950/40 border-sky-500/40 text-sky-200"
+                      : "bg-slate-950 border-slate-800 text-slate-400"
+                  }`}>
+                    {selectedNode.isPatched ? (
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-sky-300 flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-amber-400" />
+                          <span>Profil hérité du Switch (Port {selectedNode.connectedSwitchPort ?? 1})</span>
+                        </div>
+                        <p className="text-[9px] text-slate-300 leading-tight">
+                          Prise RJ45 raccordée. Hérite du profil <strong>{effectiveNetwork.profileName}</strong>.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-slate-300 flex items-center gap-1">
+                          <Plug className="w-3 h-3 text-slate-400" />
+                          <span>Cuivre Passif (En attente de brassage)</span>
+                        </div>
+                        <p className="text-[9px] text-slate-500 leading-tight">
+                          Prise RJ45 brute sans profil actif. Raccordez-la à un port de switch pour lui conférer son rôle, VLAN et PoE.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                    <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">IP : </span>
+                      <span className="text-slate-200">{selectedNode.ipAddress || "Non assignée"}</span>
+                    </div>
+                    <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">MAC : </span>
+                      <span className="text-slate-200">{selectedNode.macAddress || "Non assignée"}</span>
+                    </div>
+                    <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Rôle : </span>
+                      <span className="text-sky-300 font-semibold">{effectiveNetwork.outletRole}</span>
+                    </div>
+                    <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">PoE : </span>
+                      <span className="text-amber-400 font-bold">{effectiveNetwork.poeMode}</span>
+                    </div>
+                  </div>
+
+                  {selectedNode.assignedPerson && (
+                    <div className="p-2 bg-slate-950 rounded border border-slate-850 text-[10px] flex items-center justify-between">
+                      <span className="text-slate-400">Affecté à :</span>
+                      <span className="text-emerald-300 font-semibold font-mono">👤 {selectedNode.assignedPerson}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Traçage CTE vers Switch & Rack */}
             {traceResult && (
@@ -2056,6 +2329,74 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Auto-Route orthogonal pour cette prise et prises voisines */}
+            {onAutoRoute && (
+              <div className="p-3 rounded-lg bg-blue-950/30 border border-blue-500/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-blue-200 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Auto-Route Orthogonal vers Baie</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-blue-400 font-bold">
+                    {siblingOutlets.length > 0 ? `${siblingOutlets.length + 1} prises liées` : "1 prise"}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  Raccorde automatiquement avec tracé 90° et faisceau ruban vers la baie sélectionnée.
+                </p>
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={autoRouteTargetRackId}
+                      onChange={(e) => {
+                        setAutoRouteTargetRackId(e.target.value);
+                        setAutoRouteTargetSwitchId("AUTO");
+                      }}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-blue-500"
+                    >
+                      {rackAvailabilities.map((ra) => (
+                        <option key={ra.rackId} value={ra.rackId}>
+                          {ra.rackName} ({ra.freePorts} libres)
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idsToRoute = siblingOutlets.length > 0
+                          ? [selectedNode.id, ...siblingOutlets.map((o) => o.id)]
+                          : [selectedNode.id];
+                        onAutoRoute(
+                          idsToRoute,
+                          autoRouteTargetRackId,
+                          autoRouteTargetSwitchId === "AUTO" ? undefined : autoRouteTargetSwitchId
+                        );
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-600/30 flex items-center gap-1 shrink-0 transition"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Auto-Route</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 font-medium shrink-0">Switch cible :</span>
+                    <select
+                      value={autoRouteTargetSwitchId}
+                      onChange={(e) => setAutoRouteTargetSwitchId(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-1 text-[10px] text-sky-300 focus:outline-none focus:border-sky-500"
+                    >
+                      <option value="AUTO">✨ Switch Automatique (1er dispo)</option>
+                      {getSwitchesForRack(autoRouteTargetRackId).map((sw) => (
+                        <option key={sw.id} value={sw.id}>
+                          🔲 {sw.name} ({sw.brand}) • {sw.portsCount}P
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Bouton d'action pour passer en mode édition */}
             <div className="pt-1">
@@ -4407,6 +4748,71 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 })}
               </div>
             </div>
+
+            {/* Assistant d'Auto-Route vers la Baie */}
+            {attachedOutlets.length > 0 && onAutoRoute && (
+              <div className="p-3 rounded-lg bg-blue-950/30 border border-blue-500/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-blue-200 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Raccordement Automatique (« Auto-Route »)</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-blue-400 font-bold">
+                    {attachedOutlets.length} prise{attachedOutlets.length > 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  Raccorde automatiquement toutes les prises de ce bureau vers les ports de switch libres d&apos;une baie avec tracé orthogonal à 90°.
+                </p>
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={autoRouteTargetRackId}
+                      onChange={(e) => {
+                        setAutoRouteTargetRackId(e.target.value);
+                        setAutoRouteTargetSwitchId("AUTO");
+                      }}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-blue-500"
+                    >
+                      {rackAvailabilities.map((ra) => (
+                        <option key={ra.rackId} value={ra.rackId}>
+                          {ra.rackName} ({ra.freePorts} ports disponibles)
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onAutoRoute(
+                          attachedOutlets.map((o) => o.id),
+                          autoRouteTargetRackId,
+                          autoRouteTargetSwitchId === "AUTO" ? undefined : autoRouteTargetSwitchId
+                        )
+                      }
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-600/30 flex items-center gap-1.5 shrink-0 transition"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Raccorder</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 font-medium shrink-0">Switch cible :</span>
+                    <select
+                      value={autoRouteTargetSwitchId}
+                      onChange={(e) => setAutoRouteTargetSwitchId(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-1 text-[10px] text-sky-300 focus:outline-none focus:border-sky-500"
+                    >
+                      <option value="AUTO">✨ Switch Automatique (1er disponible)</option>
+                      {getSwitchesForRack(autoRouteTargetRackId).map((sw) => (
+                        <option key={sw.id} value={sw.id}>
+                          🔲 {sw.name} ({sw.brand}) • {sw.portsCount}P
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Prises et équipements connectés à ce bureau */}
             <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">

@@ -24,6 +24,7 @@ import {
   Network,
   Camera,
   Boxes,
+  Building2,
 } from "lucide-react";
 import {
   OutletRole,
@@ -266,6 +267,9 @@ interface EquipmentPaletteProps {
   onToggle: () => void;
   onAddItem: (item: PaletteItem) => void;
   onOpenSettings?: (() => void) | undefined;
+  onOpenSites?: (() => void) | undefined;
+  isSitesOpen?: boolean | undefined;
+  sitesContent?: React.ReactNode | undefined;
   onOpenTopology?: (() => void) | undefined;
   isTopologyOpen?: boolean | undefined;
   onOpenInventory?: (() => void) | undefined;
@@ -275,6 +279,7 @@ interface EquipmentPaletteProps {
   onResizeStart?: ((e: React.MouseEvent) => void) | undefined;
   topologyContent?: React.ReactNode | undefined;
   inventoryContent?: React.ReactNode | undefined;
+  onOpenBatchSpawner?: (() => void) | undefined;
 }
 
 const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
@@ -282,6 +287,9 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   onToggle,
   onAddItem,
   onOpenSettings,
+  onOpenSites,
+  isSitesOpen = false,
+  sitesContent,
   onOpenTopology,
   isTopologyOpen = false,
   onOpenInventory,
@@ -291,8 +299,9 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   onResizeStart,
   topologyContent,
   inventoryContent,
+  onOpenBatchSpawner,
 }) => {
-  const isDrawerOpen = isOpen || isTopologyOpen || isInventoryOpen;
+  const isDrawerOpen = isOpen || isTopologyOpen || isInventoryOpen || isSitesOpen;
   // 3 sous-menus d'équipements dans la seconde fenêtre latérale
   const [selectedCategory, setSelectedCategory] = useState<PaletteCategory>("FURNITURE");
 
@@ -474,17 +483,35 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
       style={{ width: isDrawerOpen ? `${width}px` : "56px" }}
       className="fixed top-14 left-0 bottom-0 z-30 flex bg-slate-950/95 backdrop-blur-md border-r border-slate-800 shadow-2xl text-slate-100 font-sans"
     >
-      {/* 1. Barre latérale étroite (UN SEUL BOUTON AJOUT + PARAMÈTRES DSI) */}
+      {/* 1. Barre latérale étroite (BOUTON SITES EN PREMIER + AJOUT + PARAMÈTRES DSI) */}
       <div className="w-14 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-3 justify-between flex-shrink-0">
         <div className="flex flex-col items-center gap-3">
-          {/* Menu unique "Ajout" dans la barre latérale */}
+          {/* 1. PREMIER BOUTON ABSOLU : SITES & CAMPUS */}
+          {onOpenSites && (
+            <button
+              type="button"
+              onClick={onOpenSites}
+              title="Gestion des Sites & Campus (Multi-sites)"
+              className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 cursor-pointer ${
+                isSitesOpen
+                  ? "bg-amber-600 text-white shadow-lg shadow-amber-600/40"
+                  : "text-slate-400 hover:text-amber-400 hover:bg-slate-800"
+              }`}
+            >
+              <Building2 className="w-5 h-5" />
+              <span className="text-[8px] font-bold uppercase tracking-wider">Sites</span>
+            </button>
+          )}
+
+          {/* 2. Menu unique "Ajout" dans la barre latérale */}
           <button
+            type="button"
             onClick={() => {
               if (!isOpen) onToggle();
             }}
             title="Catalogue & Ajout d'équipements"
-            className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 ${
-              isOpen && !isTopologyOpen
+            className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 cursor-pointer ${
+              isOpen && !isTopologyOpen && !isInventoryOpen && !isSitesOpen
                 ? "bg-blue-600 text-white shadow-lg shadow-blue-600/40"
                 : "text-slate-400 hover:text-blue-400 hover:bg-slate-800"
             }`}
@@ -496,9 +523,10 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
           {/* Bouton "Topologie" pour ouvrir le panneau arborescent réseau */}
           {onOpenTopology && (
             <button
+              type="button"
               onClick={onOpenTopology}
               title="Topologie Réseau & Arborescence DSI"
-              className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 ${
+              className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 cursor-pointer ${
                 isTopologyOpen
                   ? "bg-purple-600 text-white shadow-lg shadow-purple-600/40"
                   : "text-slate-400 hover:text-purple-400 hover:bg-slate-800"
@@ -512,9 +540,10 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
           {/* Bouton "Inventaire" pour ouvrir l'inventaire complet */}
           {onOpenInventory && (
             <button
+              type="button"
               onClick={onOpenInventory}
               title="Inventaire Global (Utilisateurs, Bureaux, Ports, Équipements, Infra)"
-              className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 ${
+              className={`p-2 rounded-lg transition flex flex-col items-center gap-0.5 cursor-pointer ${
                 isInventoryOpen
                   ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/40"
                   : "text-slate-400 hover:text-emerald-400 hover:bg-slate-800"
@@ -530,28 +559,32 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
         <div className="flex flex-col items-center gap-2">
           {onOpenSettings && (
             <button
+              type="button"
               onClick={onOpenSettings}
               title="Paramètres DSI (Active Directory, SSO, SNMP, IPAM)"
-              className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition"
+              className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
             >
               <Sliders className="w-5 h-5" />
             </button>
           )}
 
           <button
+            type="button"
             onClick={onToggle}
             title={isOpen ? "Replier la palette" : "Déplier la palette"}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
           >
             {isDrawerOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
-      {/* 2. Seconde fenêtre latérale déployable (Catalogue, Topologie ou Inventaire) */}
+      {/* 2. Seconde fenêtre latérale déployable (Sites, Catalogue, Topologie ou Inventaire) */}
       {isDrawerOpen && (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-          {isInventoryOpen && inventoryContent ? (
+          {isSitesOpen && sitesContent ? (
+            sitesContent
+          ) : isInventoryOpen && inventoryContent ? (
             inventoryContent
           ) : isTopologyOpen && topologyContent ? (
             topologyContent
@@ -607,6 +640,29 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
 
           {/* Contenu avec défilement fluide */}
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            {/* Dans le sous-menu Mobilier : Bouton Générateur d'Îlots en Masse */}
+            {selectedCategory === "FURNITURE" && onOpenBatchSpawner && (
+              <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded-lg space-y-2 mb-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
+                    <Boxes className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Générateur d&apos;Îlots en Masse</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  Générez automatiquement un open-space entier avec mobilier et prises RJ45 pré-câblées.
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenBatchSpawner}
+                  className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
+                >
+                  <Boxes className="w-3 h-3" />
+                  <span>Configurer la Matrice</span>
+                </button>
+              </div>
+            )}
+
             {/* Dans le sous-menu Prises & Ports : Bouton & Formulaire de Création de Profil Personnalisé */}
             {selectedCategory === "CONNECTIVITY" && (
               <div className="p-2.5 bg-slate-900/90 border border-blue-500/30 rounded-lg space-y-2">

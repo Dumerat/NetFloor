@@ -1,4 +1,4 @@
-﻿export interface FloorZone {
+export interface FloorZone {
   id: string;
   name: string;
   serviceCode?: string | undefined;
@@ -11,6 +11,7 @@
   opacity?: number | undefined;
   isLocked?: boolean | undefined;
   description?: string | undefined;
+  siteId?: string | undefined;
 }
 
 export const DEFAULT_ZONES: FloorZone[] = [
@@ -26,6 +27,7 @@ export const DEFAULT_ZONES: FloorZone[] = [
     heightMm: 14000,
     opacity: 0.12,
     description: 'Espace ouvert dédié aux équipes ingénierie logicielle, R&D et bancs essais.',
+    siteId: 'site-principal',
   },
   {
     id: 'zone-dsi-noc',
@@ -39,6 +41,7 @@ export const DEFAULT_ZONES: FloorZone[] = [
     heightMm: 12000,
     opacity: 0.16,
     description: 'Local sécurisé climatisé abritant les répartiteurs étage, commutateurs cœur et arrivée fibre.',
+    siteId: 'site-principal',
   },
   {
     id: 'zone-rh-direction',
@@ -52,5 +55,6 @@ export const DEFAULT_ZONES: FloorZone[] = [
     heightMm: 14000,
     opacity: 0.12,
     description: 'Bureaux de direction et pôle de gestion des ressources humaines.',
+    siteId: 'site-principal',
   },
 ];
