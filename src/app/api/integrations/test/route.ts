@@ -7,6 +7,7 @@ export async function POST(req: Request) {
 
     const startTime = Date.now();
 
+    // ── Webhook ──────────────────────────────────────────────────────────────
     if (target === "webhooks") {
       const webhookUrl = config?.webhookUrl;
       if (!webhookUrl) {
@@ -16,94 +17,201 @@ export async function POST(req: Request) {
         );
       }
 
-      // Si l'URL est une vraie URL web externe, on peut tenter l'envoi, sinon on renvoie un accusé de réception de simulation
-      let delivered = false;
-      let statusCode = 200;
-      let responseBody = "Notification test délivrée avec succès dans le canal Teams / Slack";
-
-      if (webhookUrl.startsWith("http://") || webhookUrl.startsWith("https://")) {
-        try {
-          const res = await fetch(webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: "🔔 [NetFloor Alert Test] Test de communication réussi depuis le plateau R+4.",
-              themeColor: "0076D7",
-            }),
-            signal: AbortSignal.timeout(3000),
-          });
-          statusCode = res.status;
-          delivered = res.ok;
-          responseBody = `Réponse serveur webhook: Code ${res.status}`;
-        } catch {
-          // Si réseau isolé ou faux webhook de test, on valide le format
-          delivered = true;
-          statusCode = 200;
-          responseBody = "Payload JSON validé (mode simulation locale active)";
-        }
+      if (!webhookUrl.startsWith("http://") && !webhookUrl.startsWith("https://")) {
+        return NextResponse.json(
+          { success: false, error: "URL invalide. Elle doit commencer par http:// ou https://" },
+          { status: 400 }
+        );
       }
 
-      return NextResponse.json({
-        success: true,
-        target: "webhooks",
-        delivered,
-        statusCode,
-        responseBody,
-        latencyMs: Date.now() - startTime + 45,
-        timestamp: new Date().toISOString(),
-      });
+      try {
+        const res = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: "🔔 [NetFloor Alert Test] Test de communication depuis NetFloor.",
+            themeColor: "0076D7",
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+
+        return NextResponse.json({
+          success: res.ok,
+          target: "webhooks",
+          delivered: res.ok,
+          statusCode: res.status,
+          responseBody: `Réponse du serveur webhook : HTTP ${res.status}`,
+          latencyMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+          ...(res.ok ? {} : { error: `Le webhook a répondu HTTP ${res.status}` }),
+        });
+      } catch (err: unknown) {
+        return NextResponse.json(
+          {
+            success: false,
+            target: "webhooks",
+            error: `Impossible de joindre le webhook : ${err instanceof Error ? err.message : "Timeout ou réseau inaccessible"}`,
+            latencyMs: Date.now() - startTime,
+            timestamp: new Date().toISOString(),
+          },
+          { status: 502 }
+        );
+      }
     }
 
+    // ── NetBox ───────────────────────────────────────────────────────────────
     if (target === "netbox") {
-      return NextResponse.json({
-        success: true,
-        target: "netbox",
-        status: "CONNECTED",
-        latencyMs: 38,
-        apiEndpoint: config?.url || "https://netbox.corp.internal/api/",
-        details: {
-          serverVersion: "NetBox v3.7.4",
-          site: "Campus Horizon",
-          racksCount: 2,
-          cablesTracked: 84,
-          ipPrefixes: ["10.42.0.0/20", "10.42.20.0/24", "10.42.30.0/24"],
-        },
-        timestamp: new Date().toISOString(),
-      });
+      const url = config?.url;
+      const token = config?.apiToken;
+
+      if (!url || !token) {
+        return NextResponse.json(
+          { success: false, error: "URL et token API NetBox requis." },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const res = await fetch(`${url.replace(/\/$/, "")}/status/`, {
+          method: "GET",
+          headers: { Authorization: `Token ${token}`, Accept: "application/json" },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (!res.ok) {
+          return NextResponse.json(
+            { success: false, error: `NetBox a répondu HTTP ${res.status}` },
+            { status: 502 }
+          );
+        }
+
+        const data = await res.json().catch(() => ({}));
+
+        return NextResponse.json({
+          success: true,
+          target: "netbox",
+          status: "CONNECTED",
+          latencyMs: Date.now() - startTime,
+          details: {
+            serverVersion: data["netbox-version"] ?? "inconnu",
+          },
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err: unknown) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Impossible de joindre NetBox : ${err instanceof Error ? err.message : "Timeout ou réseau inaccessible"}`,
+          },
+          { status: 502 }
+        );
+      }
     }
 
+    // ── GLPI ─────────────────────────────────────────────────────────────────
     if (target === "glpi") {
-      return NextResponse.json({
-        success: true,
-        target: "glpi",
-        status: "AUTHENTICATED",
-        latencyMs: 52,
-        apiEndpoint: config?.url || "https://glpi.support.internal/apirest.php/",
-        details: {
-          glpiVersion: "10.0.12",
-          sessionTokenActive: true,
-          defaultEntity: "Root entity > Direction Informatique",
-          autoTicketActive: config?.ticketOnCableFault ?? true,
-        },
-        timestamp: new Date().toISOString(),
-      });
+      const url = config?.url;
+      const token = config?.apiToken;
+
+      if (!url || !token) {
+        return NextResponse.json(
+          { success: false, error: "URL et token API GLPI requis." },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const initRes = await fetch(`${url.replace(/\/$/, "")}/initSession`, {
+          method: "GET",
+          headers: {
+            "App-Token": token,
+            "Content-Type": "application/json",
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (!initRes.ok) {
+          return NextResponse.json(
+            { success: false, error: `GLPI a répondu HTTP ${initRes.status}` },
+            { status: 502 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          target: "glpi",
+          status: "AUTHENTICATED",
+          latencyMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err: unknown) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Impossible de joindre GLPI : ${err instanceof Error ? err.message : "Timeout ou réseau inaccessible"}`,
+          },
+          { status: 502 }
+        );
+      }
     }
 
+    // ── Intune / Microsoft Graph ──────────────────────────────────────────────
     if (target === "intune") {
-      return NextResponse.json({
-        success: true,
-        target: "intune",
-        status: "SYNCED",
-        latencyMs: 29,
-        details: {
-          graphApiVersion: "v1.0",
-          tenantLinked: true,
-          compliantDevices: 18,
-          nonCompliantDevices: 0,
-          macToUserMappingCount: 18,
-        },
-        timestamp: new Date().toISOString(),
-      });
+      const tenantId = config?.tenantId;
+      const clientId = config?.clientId;
+      const clientSecret = config?.clientSecret;
+
+      if (!tenantId || !clientId || !clientSecret) {
+        return NextResponse.json(
+          { success: false, error: "Tenant ID, Client ID et Client Secret requis pour Intune." },
+          { status: 400 }
+        );
+      }
+
+      try {
+        // Tentative d'obtention du token OAuth2 client_credentials
+        const tokenRes = await fetch(
+          `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              grant_type: "client_credentials",
+              client_id: clientId,
+              client_secret: clientSecret,
+              scope: "https://graph.microsoft.com/.default",
+            }),
+            signal: AbortSignal.timeout(8000),
+          }
+        );
+
+        if (!tokenRes.ok) {
+          const err = await tokenRes.json().catch(() => ({}));
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Authentification Microsoft échouée : ${err.error_description ?? `HTTP ${tokenRes.status}`}`,
+            },
+            { status: 401 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          target: "intune",
+          status: "AUTHENTICATED",
+          latencyMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err: unknown) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Impossible de joindre Microsoft Graph : ${err instanceof Error ? err.message : "Timeout ou réseau inaccessible"}`,
+          },
+          { status: 502 }
+        );
+      }
     }
 
     return NextResponse.json(

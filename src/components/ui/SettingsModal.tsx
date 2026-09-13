@@ -244,17 +244,27 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   };
 
   // Test de connexion SSO cloud (Entra ID / Okta)
-  const handleTestSsoCloud = () => {
+  const handleTestSsoCloud = async () => {
     setIsTestingSso(true);
     setSsoTestResult(null);
-    setTimeout(() => {
-      setIsTestingSso(false);
-      setSsoTestResult({
-        success: true,
-        message: `Authentification réussie sur le Tenant ${settings.sso.corporateDomain} (Token OIDC valide)`,
+    try {
+      const res = await fetch("/api/auth/ad-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: settings.sso.activeDirectory }),
       });
-      showToast("✅ Connexion IdP validée");
-    }, 1000);
+      const data = await res.json();
+      if (data.success) {
+        setSsoTestResult({ success: true, message: data.message || "Connexion SSO validée" });
+        showToast("✅ Connexion IdP validée");
+      } else {
+        setSsoTestResult({ success: false, message: data.error || "Échec de la connexion SSO" });
+      }
+    } catch {
+      setSsoTestResult({ success: false, message: "Impossible de joindre le serveur d'authentification" });
+    } finally {
+      setIsTestingSso(false);
+    }
   };
 
   // Lancement du scan SNMP actif
