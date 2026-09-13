@@ -2364,7 +2364,7 @@ export default function NetFloorApp() {
 
     const isCustom = Boolean(item.isCustomProfile);
     const isGenericPort = item.subType === "GENERIC_PORT";
-    const portCount = item.portCount ?? (item.subType === "GENERIC_PORT" ? 1 : 1);
+    const portCount = item.portCount ?? 1;
     const assignedVlan = item.vlanId ?? (item.outletRole === "VOIP" ? 30 : 20);
 
     const computeName = () => {
@@ -2849,7 +2849,12 @@ export default function NetFloorApp() {
 
             {isFileMenuOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setIsFileMenuOpen(false)} />
+                <button
+                  type="button"
+                  aria-label="Fermer le menu"
+                  className="fixed inset-0 z-40 cursor-default bg-transparent border-none w-full h-full"
+                  onClick={() => setIsFileMenuOpen(false)}
+                />
                 <div className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 text-xs text-slate-200 animate-in fade-in slide-in-from-top-1 font-sans">
                   <div className="px-2.5 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
                     Gestion des données

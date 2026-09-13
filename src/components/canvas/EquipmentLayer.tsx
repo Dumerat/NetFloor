@@ -540,14 +540,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
             const isVoip = outlet.outletRole === "VOIP";
             const isPrinter = outlet.outletRole === "PRINTER";
-            const isFloorBox = outlet.subType === "FLOOR_BOX";
-            const lineColor = isVoip
-              ? "#c084fc"
-              : isPrinter
-                ? "#fbbf24"
-                : isFloorBox
-                  ? "#38bdf8"
-                  : "#38bdf8";
+            const lineColor = isVoip ? "#c084fc" : isPrinter ? "#fbbf24" : "#38bdf8";
 
             return (
               <Group key={`anchor-link-${outlet.id}`} listening={false}>
