@@ -39,10 +39,7 @@ export const ScaleCalibrationLayer: FC<ScaleCalibrationLayerProps> = ({
   const activeSecondPt = point2 || hoverPoint;
   const distPx =
     point1 && activeSecondPt
-      ? Math.hypot(
-          activeSecondPt.screenX - point1.screenX,
-          activeSecondPt.screenY - point1.screenY
-        )
+      ? Math.hypot(activeSecondPt.screenX - point1.screenX, activeSecondPt.screenY - point1.screenY)
       : 0;
 
   const midX = point1 && activeSecondPt ? (point1.worldX + activeSecondPt.worldX) / 2 : 0;
@@ -100,7 +97,12 @@ export const ScaleCalibrationLayer: FC<ScaleCalibrationLayerProps> = ({
       {point1 && (
         <Group x={point1.worldX} y={point1.worldY} listening={false}>
           <Circle radius={Math.max(6, 14 / scale)} fill="#3b82f6" opacity={0.3} />
-          <Circle radius={Math.max(4, 8 / scale)} fill="#3b82f6" stroke="#ffffff" strokeWidth={Math.max(1.5, 2 / scale)} />
+          <Circle
+            radius={Math.max(4, 8 / scale)}
+            fill="#3b82f6"
+            stroke="#ffffff"
+            strokeWidth={Math.max(1.5, 2 / scale)}
+          />
           <KonvaText
             text="P1 (Départ)"
             x={12 / scale}
@@ -152,7 +154,12 @@ export const ScaleCalibrationLayer: FC<ScaleCalibrationLayerProps> = ({
       {point2 && (
         <Group x={point2.worldX} y={point2.worldY} listening={false}>
           <Circle radius={Math.max(6, 14 / scale)} fill="#10b981" opacity={0.3} />
-          <Circle radius={Math.max(4, 8 / scale)} fill="#10b981" stroke="#ffffff" strokeWidth={Math.max(1.5, 2 / scale)} />
+          <Circle
+            radius={Math.max(4, 8 / scale)}
+            fill="#10b981"
+            stroke="#ffffff"
+            strokeWidth={Math.max(1.5, 2 / scale)}
+          />
           <KonvaText
             text="P2 (Fin)"
             x={12 / scale}
@@ -236,9 +243,7 @@ export const ScaleCalibrationModal: FC<ScaleCalibrationModalProps> = ({
                 placeholder="Ex: 5.0"
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 pr-10 font-mono text-sm text-slate-100 focus:outline-none focus:border-blue-500 transition"
               />
-              <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">
-                m
-              </span>
+              <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">m</span>
             </div>
             <p className="text-[10px] text-slate-500 mt-1">
               Exemple : un mur de bureau standard de 5.0 mètres.

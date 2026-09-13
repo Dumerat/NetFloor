@@ -26,11 +26,7 @@ import {
   Boxes,
   Building2,
 } from "lucide-react";
-import {
-  OutletRole,
-  NodeSubType,
-  PoeMode,
-} from "@/components/canvas/EquipmentLayer";
+import { OutletRole, NodeSubType, PoeMode } from "@/components/canvas/EquipmentLayer";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 
 export type PaletteCategory = "FURNITURE" | "CONNECTIVITY" | "INFRASTRUCTURE";
@@ -198,7 +194,7 @@ export const PALETTE_CATALOG: PaletteItem[] = [
   {
     id: "infra-rack-42u",
     category: "INFRASTRUCTURE",
-    name: "Baie Informatique 19\" (42U)",
+    name: 'Baie Informatique 19" (42U)',
     subType: "RACK_42U",
     targetType: "PATCH_PANEL",
     widthMm: 800,
@@ -260,7 +256,22 @@ export const PALETTE_CATALOG: PaletteItem[] = [
   },
 ];
 
-const EMOTE_OPTIONS = ["🔌", "💻", "📞", "🖨️", "📶", "🖥️", "🎥", "⚡", "🌐", "🔒", "🚪", "⚙️", "📦", "🏷️"];
+const EMOTE_OPTIONS = [
+  "🔌",
+  "💻",
+  "📞",
+  "🖨️",
+  "📶",
+  "🖥️",
+  "🎥",
+  "⚡",
+  "🌐",
+  "🔒",
+  "🚪",
+  "⚙️",
+  "📦",
+  "🏷️",
+];
 
 interface EquipmentPaletteProps {
   isOpen: boolean;
@@ -370,9 +381,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
     onAddItem(customItem);
   };
 
-  const filteredItems = PALETTE_CATALOG.filter(
-    (item) => item.category === selectedCategory
-  );
+  const filteredItems = PALETTE_CATALOG.filter((item) => item.category === selectedCategory);
 
   const availableVlans = Object.values(vlanStyles).sort((a, b) => a.vlanId - b.vlanId);
 
@@ -461,7 +470,17 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
       ghost.style.backgroundColor = "#0f172a";
       ghost.style.border = "2px solid #38bdf8";
       ghost.style.borderRadius = "10px";
-      const emote = item.customEmote || (item.outletRole === "VOIP" ? "📞" : item.outletRole === "WIFI" ? "📶" : item.outletRole === "PRINTER" ? "🖨️" : item.outletRole === "CAMERA" ? "📷" : "🔌");
+      const emote =
+        item.customEmote ||
+        (item.outletRole === "VOIP"
+          ? "📞"
+          : item.outletRole === "WIFI"
+            ? "📶"
+            : item.outletRole === "PRINTER"
+              ? "🖨️"
+              : item.outletRole === "CAMERA"
+                ? "📷"
+                : "🔌");
       ghost.innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
           <span style="font-size:22px;">${emote}</span>
@@ -574,7 +593,11 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
             title={isOpen ? "Replier la palette" : "Déplier la palette"}
             className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
           >
-            {isDrawerOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+            {isDrawerOpen ? (
+              <ChevronLeft className="w-5 h-5" />
+            ) : (
+              <ChevronRight className="w-5 h-5" />
+            )}
           </button>
         </div>
       </div>
@@ -590,404 +613,410 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
             topologyContent
           ) : (
             <div className="flex-1 flex flex-col p-3 overflow-hidden">
-          {/* Header Palette */}
-          <div className="border-b border-slate-800 pb-2 mb-2 flex-shrink-0 flex items-center justify-between">
-            <span className="font-semibold text-xs text-slate-100 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-              Catalogue d'Ajout
-            </span>
-            <span className="text-[9px] font-mono bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20">
-              Échelle réelle
-            </span>
-          </div>
+              {/* Header Palette */}
+              <div className="border-b border-slate-800 pb-2 mb-2 flex-shrink-0 flex items-center justify-between">
+                <span className="font-semibold text-xs text-slate-100 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                  Catalogue d'Ajout
+                </span>
+                <span className="text-[9px] font-mono bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20">
+                  Échelle réelle
+                </span>
+              </div>
 
-          {/* LES 3 SOUS-MENUS D'ÉQUIPEMENTS DANS LA 2NDE FENÊTRE */}
-          <div className="grid grid-cols-3 gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg mb-2.5 flex-shrink-0">
-            <button
-              onClick={() => setSelectedCategory("FURNITURE")}
-              className={`py-1.5 px-1 rounded-md text-[10px] font-semibold flex flex-col items-center gap-1 transition ${
-                selectedCategory === "FURNITURE"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-emerald-400 hover:bg-slate-850"
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5" />
-              <span className="truncate">Mobilier</span>
-            </button>
-            <button
-              onClick={() => setSelectedCategory("CONNECTIVITY")}
-              className={`py-1.5 px-1 rounded-md text-[10px] font-semibold flex flex-col items-center gap-1 transition ${
-                selectedCategory === "CONNECTIVITY"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-blue-400 hover:bg-slate-850"
-              }`}
-            >
-              <Plug className="w-3.5 h-3.5" />
-              <span className="truncate">Prises/Ports</span>
-            </button>
-            <button
-              onClick={() => setSelectedCategory("INFRASTRUCTURE")}
-              className={`py-1.5 px-1 rounded-md text-[10px] font-semibold flex flex-col items-center gap-1 transition ${
-                selectedCategory === "INFRASTRUCTURE"
-                  ? "bg-purple-600 text-white shadow-sm"
-                  : "text-slate-400 hover:text-purple-400 hover:bg-slate-850"
-              }`}
-            >
-              <Server className="w-3.5 h-3.5" />
-              <span className="truncate">Infra/Baies</span>
-            </button>
-          </div>
-
-          {/* Contenu avec défilement fluide */}
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-            {/* Dans le sous-menu Mobilier : Bouton Générateur d'Îlots en Masse */}
-            {selectedCategory === "FURNITURE" && onOpenBatchSpawner && (
-              <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded-lg space-y-2 mb-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
-                    <Boxes className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Générateur d&apos;Îlots en Masse</span>
-                  </div>
-                </div>
-                <p className="text-[10px] text-slate-400 leading-tight">
-                  Générez automatiquement un open-space entier avec mobilier et prises RJ45 pré-câblées.
-                </p>
+              {/* LES 3 SOUS-MENUS D'ÉQUIPEMENTS DANS LA 2NDE FENÊTRE */}
+              <div className="grid grid-cols-3 gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg mb-2.5 flex-shrink-0">
                 <button
-                  type="button"
-                  onClick={onOpenBatchSpawner}
-                  className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
+                  onClick={() => setSelectedCategory("FURNITURE")}
+                  className={`py-1.5 px-1 rounded-md text-[10px] font-semibold flex flex-col items-center gap-1 transition ${
+                    selectedCategory === "FURNITURE"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-emerald-400 hover:bg-slate-850"
+                  }`}
                 >
-                  <Boxes className="w-3 h-3" />
-                  <span>Configurer la Matrice</span>
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span className="truncate">Mobilier</span>
+                </button>
+                <button
+                  onClick={() => setSelectedCategory("CONNECTIVITY")}
+                  className={`py-1.5 px-1 rounded-md text-[10px] font-semibold flex flex-col items-center gap-1 transition ${
+                    selectedCategory === "CONNECTIVITY"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-blue-400 hover:bg-slate-850"
+                  }`}
+                >
+                  <Plug className="w-3.5 h-3.5" />
+                  <span className="truncate">Prises/Ports</span>
+                </button>
+                <button
+                  onClick={() => setSelectedCategory("INFRASTRUCTURE")}
+                  className={`py-1.5 px-1 rounded-md text-[10px] font-semibold flex flex-col items-center gap-1 transition ${
+                    selectedCategory === "INFRASTRUCTURE"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-purple-400 hover:bg-slate-850"
+                  }`}
+                >
+                  <Server className="w-3.5 h-3.5" />
+                  <span className="truncate">Infra/Baies</span>
                 </button>
               </div>
-            )}
 
-            {/* Dans le sous-menu Prises & Ports : Bouton & Formulaire de Création de Profil Personnalisé */}
-            {selectedCategory === "CONNECTIVITY" && (
-              <div className="p-2.5 bg-slate-900/90 border border-blue-500/30 rounded-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-300">
-                    <Plug className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Créer un Profil de Port</span>
-                  </div>
-                  <button
-                    onClick={() => setIsCreatingProfile((prev) => !prev)}
-                    className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    {isCreatingProfile ? "Fermer" : "Nouveau"}
-                  </button>
-                </div>
-
-                {isCreatingProfile && (
-                  <div className="space-y-2 pt-1.5 border-t border-slate-800 text-[10px] font-mono">
-                    {/* Nom du profil */}
-                    <div>
-                      <label className="text-slate-400 block mb-0.5">Nom du profil :</label>
-                      <input
-                        type="text"
-                        value={newProfileName}
-                        onChange={(e) => setNewProfileName(e.target.value)}
-                        placeholder="Ex: Borne Wi-Fi PoE+, Double Desk..."
-                        className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs focus:border-blue-500 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Nombre de ports stackés (1 à 8) */}
-                    <div>
-                      <label className="text-slate-400 block mb-0.5">
-                        Nombre de ports ({newProfilePorts}P) :
-                      </label>
-                      <div className="grid grid-cols-5 gap-1 text-center">
-                        {[1, 2, 4, 6, 8].map((cnt) => (
-                          <button
-                            key={cnt}
-                            type="button"
-                            onClick={() => setNewProfilePorts(cnt)}
-                            className={`py-1 rounded border transition ${
-                              newProfilePorts === cnt
-                                ? "bg-blue-600 text-white border-blue-500 font-bold"
-                                : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
-                            }`}
-                          >
-                            {cnt}P
-                          </button>
-                        ))}
+              {/* Contenu avec défilement fluide */}
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                {/* Dans le sous-menu Mobilier : Bouton Générateur d'Îlots en Masse */}
+                {selectedCategory === "FURNITURE" && onOpenBatchSpawner && (
+                  <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded-lg space-y-2 mb-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
+                        <Boxes className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Générateur d&apos;Îlots en Masse</span>
                       </div>
                     </div>
-
-                    {/* Mode PoE */}
-                    <div>
-                      <label className="text-slate-400 block mb-0.5">Alimentation PoE :</label>
-                      <div className="grid grid-cols-2 gap-1">
-                        {[
-                          { id: "NONE" as PoeMode, label: "Non-PoE" },
-                          { id: "POE" as PoeMode, label: "PoE (15W)" },
-                          { id: "POE_PLUS" as PoeMode, label: "PoE+ (30W)" },
-                          { id: "POE_PLUS_PLUS" as PoeMode, label: "PoE++ (60W)" },
-                        ].map((poe) => (
-                          <button
-                            key={poe.id}
-                            type="button"
-                            onClick={() => setNewProfilePoe(poe.id)}
-                            className={`py-1 px-1 rounded border transition text-center ${
-                              newProfilePoe === poe.id
-                                ? "bg-amber-600/30 text-amber-300 border-amber-500 font-bold"
-                                : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
-                            }`}
-                          >
-                            {poe.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Attribution du VLAN */}
-                    <div>
-                      <label className="text-slate-400 block mb-0.5">Attribution du VLAN :</label>
-                      <div className="grid grid-cols-3 gap-1">
-                        {availableVlans.map((v) => (
-                          <button
-                            key={v.vlanId}
-                            type="button"
-                            onClick={() => setNewProfileVlan(v.vlanId)}
-                            className={`py-1 px-1 rounded border transition flex items-center justify-center gap-1 ${
-                              newProfileVlan === v.vlanId
-                                ? "bg-slate-800 text-white border-blue-500 font-bold ring-1 ring-blue-500/40"
-                                : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200"
-                            }`}
-                          >
-                            <span
-                              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: v.color }}
-                            />
-                            <span>V{v.vlanId}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Choix de l'Émote */}
-                    <div>
-                      <label className="text-slate-400 block mb-0.5">Émote au choix :</label>
-                      <div className="flex flex-wrap gap-1">
-                        {EMOTE_OPTIONS.map((em) => (
-                          <button
-                            key={em}
-                            type="button"
-                            onClick={() => setNewProfileEmote(em)}
-                            className={`w-6 h-6 rounded flex items-center justify-center text-xs transition ${
-                              newProfileEmote === em
-                                ? "bg-blue-600 scale-110 shadow"
-                                : "bg-slate-950 hover:bg-slate-800"
-                            }`}
-                          >
-                            {em}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Bouton Enregistrer le Profil */}
+                    <p className="text-[10px] text-slate-400 leading-tight">
+                      Générez automatiquement un open-space entier avec mobilier et prises RJ45
+                      pré-câblées.
+                    </p>
                     <button
                       type="button"
-                      onClick={handleSaveProfile}
-                      className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-sans font-semibold text-xs flex items-center justify-center gap-1.5 transition shadow"
+                      onClick={onOpenBatchSpawner}
+                      className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-semibold flex items-center justify-center gap-1.5 transition shadow-sm"
                     >
-                      <Check className="w-3.5 h-3.5" />
-                      Enregistrer ce profil
+                      <Boxes className="w-3 h-3" />
+                      <span>Configurer la Matrice</span>
                     </button>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Liste des profils personnalisés sauvegardés */}
-            {selectedCategory === "CONNECTIVITY" && customProfiles.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1 px-1">
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>Profils personnalisés ({customProfiles.length}) :</span>
-                </div>
-                {customProfiles.map((p) => {
-                  const vStyle = vlanStyles[p.vlanId] ?? DEFAULT_VLAN_STYLES[p.vlanId];
-                  const customItem: PaletteItem = {
-                    id: `custom-${p.id}`,
-                    category: "CONNECTIVITY",
-                    name: p.name,
-                    subType: "GENERIC_PORT",
-                    targetType: "WALL_OUTLET",
-                    outletRole: "GENERIC",
-                    widthMm: 250,
-                    heightMm: 250,
-                    description: `Profil personnalisé : ${p.portCount}P, ${p.poeMode}, VLAN ${p.vlanId}`,
-                    personaTag: "MAINTENANCE",
-                    customEmote: p.customEmote,
-                    customPortCount: p.portCount,
-                    customPoeMode: p.poeMode,
-                    customVlanId: p.vlanId,
-                    isCustomProfile: true,
-                    portCount: p.portCount,
-                    vlanId: p.vlanId,
-                    poeMode: p.poeMode,
-                    iconName: "Plug",
-                  };
-                  return (
-                    <div
-                      key={p.id}
-                      draggable={true}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData("application/json", JSON.stringify(customItem));
-                        e.dataTransfer.effectAllowed = "copy";
-                        setupDragPreview(e, customItem);
-                      }}
-                      className="p-2.5 bg-slate-900 border border-blue-500/40 hover:border-blue-400 rounded-lg transition space-y-1.5 group shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition flex-shrink-0" />
-                          <span className="text-base">{p.customEmote}</span>
-                          <div>
-                            <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300">
-                              {p.name}
-                            </div>
-                            <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1.5">
-                              <span>{p.portCount}P RJ45</span>
-                              <span>•</span>
-                              <span className="text-amber-400 font-bold">
-                                {p.poeMode !== "NONE" ? p.poeMode.replace("_", "+") : "Non-PoE"}
-                              </span>
-                              <span>•</span>
-                              <span className="flex items-center gap-1">
-                                <span
-                                  className="w-1.5 h-1.5 rounded-full"
-                                  style={{ backgroundColor: vStyle?.color ?? "#38bdf8" }}
-                                />
-                                V{p.vlanId}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleDeleteProfile(p.id)}
-                          title="Supprimer ce profil"
-                          className="text-slate-500 hover:text-red-400 p-1 rounded transition opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                {/* Dans le sous-menu Prises & Ports : Bouton & Formulaire de Création de Profil Personnalisé */}
+                {selectedCategory === "CONNECTIVITY" && (
+                  <div className="p-2.5 bg-slate-900/90 border border-blue-500/30 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-300">
+                        <Plug className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Créer un Profil de Port</span>
                       </div>
-
                       <button
-                        onClick={() => handleAddCustomProfileItem(p)}
-                        className="w-full py-1 px-2 bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white rounded text-[11px] font-medium flex items-center justify-center gap-1.5 transition border border-blue-500/40"
+                        onClick={() => setIsCreatingProfile((prev) => !prev)}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-1"
                       >
                         <Plus className="w-3 h-3" />
-                        Ajouter au plan
+                        {isCreatingProfile ? "Fermer" : "Nouveau"}
                       </button>
                     </div>
-                  );
-                })}
-              </div>
-            )}
 
-            {/* Liste des équipements standards du catalogue */}
-            <div className="space-y-2">
-              {selectedCategory === "CONNECTIVITY" && customProfiles.length > 0 && (
-                <div className="text-[10px] font-mono text-slate-400 px-1 pt-1">
-                  Modèles de base :
+                    {isCreatingProfile && (
+                      <div className="space-y-2 pt-1.5 border-t border-slate-800 text-[10px] font-mono">
+                        {/* Nom du profil */}
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Nom du profil :</label>
+                          <input
+                            type="text"
+                            value={newProfileName}
+                            onChange={(e) => setNewProfileName(e.target.value)}
+                            placeholder="Ex: Borne Wi-Fi PoE+, Double Desk..."
+                            className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Nombre de ports stackés (1 à 8) */}
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">
+                            Nombre de ports ({newProfilePorts}P) :
+                          </label>
+                          <div className="grid grid-cols-5 gap-1 text-center">
+                            {[1, 2, 4, 6, 8].map((cnt) => (
+                              <button
+                                key={cnt}
+                                type="button"
+                                onClick={() => setNewProfilePorts(cnt)}
+                                className={`py-1 rounded border transition ${
+                                  newProfilePorts === cnt
+                                    ? "bg-blue-600 text-white border-blue-500 font-bold"
+                                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                                }`}
+                              >
+                                {cnt}P
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Mode PoE */}
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Alimentation PoE :</label>
+                          <div className="grid grid-cols-2 gap-1">
+                            {[
+                              { id: "NONE" as PoeMode, label: "Non-PoE" },
+                              { id: "POE" as PoeMode, label: "PoE (15W)" },
+                              { id: "POE_PLUS" as PoeMode, label: "PoE+ (30W)" },
+                              { id: "POE_PLUS_PLUS" as PoeMode, label: "PoE++ (60W)" },
+                            ].map((poe) => (
+                              <button
+                                key={poe.id}
+                                type="button"
+                                onClick={() => setNewProfilePoe(poe.id)}
+                                className={`py-1 px-1 rounded border transition text-center ${
+                                  newProfilePoe === poe.id
+                                    ? "bg-amber-600/30 text-amber-300 border-amber-500 font-bold"
+                                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                                }`}
+                              >
+                                {poe.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Attribution du VLAN */}
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">
+                            Attribution du VLAN :
+                          </label>
+                          <div className="grid grid-cols-3 gap-1">
+                            {availableVlans.map((v) => (
+                              <button
+                                key={v.vlanId}
+                                type="button"
+                                onClick={() => setNewProfileVlan(v.vlanId)}
+                                className={`py-1 px-1 rounded border transition flex items-center justify-center gap-1 ${
+                                  newProfileVlan === v.vlanId
+                                    ? "bg-slate-800 text-white border-blue-500 font-bold ring-1 ring-blue-500/40"
+                                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200"
+                                }`}
+                              >
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: v.color }}
+                                />
+                                <span>V{v.vlanId}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Choix de l'Émote */}
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Émote au choix :</label>
+                          <div className="flex flex-wrap gap-1">
+                            {EMOTE_OPTIONS.map((em) => (
+                              <button
+                                key={em}
+                                type="button"
+                                onClick={() => setNewProfileEmote(em)}
+                                className={`w-6 h-6 rounded flex items-center justify-center text-xs transition ${
+                                  newProfileEmote === em
+                                    ? "bg-blue-600 scale-110 shadow"
+                                    : "bg-slate-950 hover:bg-slate-800"
+                                }`}
+                              >
+                                {em}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Bouton Enregistrer le Profil */}
+                        <button
+                          type="button"
+                          onClick={handleSaveProfile}
+                          className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-sans font-semibold text-xs flex items-center justify-center gap-1.5 transition shadow"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Enregistrer ce profil
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Liste des profils personnalisés sauvegardés */}
+                {selectedCategory === "CONNECTIVITY" && customProfiles.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1 px-1">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      <span>Profils personnalisés ({customProfiles.length}) :</span>
+                    </div>
+                    {customProfiles.map((p) => {
+                      const vStyle = vlanStyles[p.vlanId] ?? DEFAULT_VLAN_STYLES[p.vlanId];
+                      const customItem: PaletteItem = {
+                        id: `custom-${p.id}`,
+                        category: "CONNECTIVITY",
+                        name: p.name,
+                        subType: "GENERIC_PORT",
+                        targetType: "WALL_OUTLET",
+                        outletRole: "GENERIC",
+                        widthMm: 250,
+                        heightMm: 250,
+                        description: `Profil personnalisé : ${p.portCount}P, ${p.poeMode}, VLAN ${p.vlanId}`,
+                        personaTag: "MAINTENANCE",
+                        customEmote: p.customEmote,
+                        customPortCount: p.portCount,
+                        customPoeMode: p.poeMode,
+                        customVlanId: p.vlanId,
+                        isCustomProfile: true,
+                        portCount: p.portCount,
+                        vlanId: p.vlanId,
+                        poeMode: p.poeMode,
+                        iconName: "Plug",
+                      };
+                      return (
+                        <div
+                          key={p.id}
+                          draggable={true}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("application/json", JSON.stringify(customItem));
+                            e.dataTransfer.effectAllowed = "copy";
+                            setupDragPreview(e, customItem);
+                          }}
+                          className="p-2.5 bg-slate-900 border border-blue-500/40 hover:border-blue-400 rounded-lg transition space-y-1.5 group shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-2">
+                              <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition flex-shrink-0" />
+                              <span className="text-base">{p.customEmote}</span>
+                              <div>
+                                <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300">
+                                  {p.name}
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1.5">
+                                  <span>{p.portCount}P RJ45</span>
+                                  <span>•</span>
+                                  <span className="text-amber-400 font-bold">
+                                    {p.poeMode !== "NONE" ? p.poeMode.replace("_", "+") : "Non-PoE"}
+                                  </span>
+                                  <span>•</span>
+                                  <span className="flex items-center gap-1">
+                                    <span
+                                      className="w-1.5 h-1.5 rounded-full"
+                                      style={{ backgroundColor: vStyle?.color ?? "#38bdf8" }}
+                                    />
+                                    V{p.vlanId}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteProfile(p.id)}
+                              title="Supprimer ce profil"
+                              className="text-slate-500 hover:text-red-400 p-1 rounded transition opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => handleAddCustomProfileItem(p)}
+                            className="w-full py-1 px-2 bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white rounded text-[11px] font-medium flex items-center justify-center gap-1.5 transition border border-blue-500/40"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Ajouter au plan
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Liste des équipements standards du catalogue */}
+                <div className="space-y-2">
+                  {selectedCategory === "CONNECTIVITY" && customProfiles.length > 0 && (
+                    <div className="text-[10px] font-mono text-slate-400 px-1 pt-1">
+                      Modèles de base :
+                    </div>
+                  )}
+                  {filteredItems.map((item) => {
+                    const dimMeters = `${(item.widthMm / 1000).toFixed(2)} × ${(
+                      item.heightMm / 1000
+                    ).toFixed(2)} m`;
+                    const tagColor =
+                      item.personaTag === "RH"
+                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                        : item.personaTag === "MAINTENANCE"
+                          ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                          : "bg-purple-500/20 text-purple-400 border-purple-500/30";
+
+                    return (
+                      <div
+                        key={item.id}
+                        draggable={true}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("application/json", JSON.stringify(item));
+                          e.dataTransfer.effectAllowed = "copy";
+                          setupDragPreview(e, item);
+                        }}
+                        className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg transition flex flex-col gap-1.5 group cursor-grab active:cursor-grabbing hover:shadow-md"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition flex-shrink-0" />
+                            <div className="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center text-slate-300 group-hover:text-blue-400 transition">
+                              {item.customEmote ? (
+                                <span className="text-sm">{item.customEmote}</span>
+                              ) : (
+                                renderIcon(item.iconName)
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slate-200 group-hover:text-white">
+                                {item.name}
+                              </div>
+                              <div className="text-[10px] font-mono text-slate-400">
+                                {dimMeters} ({item.widthMm} × {item.heightMm} mm)
+                              </div>
+                            </div>
+                          </div>
+                          <span
+                            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${tagColor}`}
+                          >
+                            {item.personaTag}
+                          </span>
+                        </div>
+
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          {item.description}
+                        </p>
+
+                        <button
+                          onClick={() => onAddItem(item)}
+                          className="w-full py-1 px-2 bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white rounded text-[11px] font-medium flex items-center justify-center gap-1.5 transition border border-slate-700 hover:border-blue-500"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Ajouter au plan
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Guide d'aide bas de palette */}
+              <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-500 flex-shrink-0 leading-relaxed">
+                💡 <strong>Astuce :</strong> Glissez-déposez directement un équipement sur le plan
+                ou cliquez sur Ajouter.
+              </div>
+
+              {/* Bouton Paramtres DSI en bas */}
+              {onOpenSettings && (
+                <div className="pt-2 border-t border-slate-800 flex-shrink-0">
+                  <button
+                    onClick={onOpenSettings}
+                    className="w-full p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-cyan-500/50 flex items-center justify-between text-left transition group shadow-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                        <Sliders className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200 group-hover:text-white">
+                          Paramtres DSI
+                        </div>
+                        <div className="text-[9px] text-slate-400 font-mono">AD, SNMP, IPAM</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition" />
+                  </button>
                 </div>
               )}
-              {filteredItems.map((item) => {
-                const dimMeters = `${(item.widthMm / 1000).toFixed(2)} × ${(
-                  item.heightMm / 1000
-                ).toFixed(2)} m`;
-                const tagColor =
-                  item.personaTag === "RH"
-                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                    : item.personaTag === "MAINTENANCE"
-                    ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                    : "bg-purple-500/20 text-purple-400 border-purple-500/30";
-
-                return (
-                  <div
-                    key={item.id}
-                    draggable={true}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("application/json", JSON.stringify(item));
-                      e.dataTransfer.effectAllowed = "copy";
-                      setupDragPreview(e, item);
-                    }}
-                    className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg transition flex flex-col gap-1.5 group cursor-grab active:cursor-grabbing hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition flex-shrink-0" />
-                        <div className="w-7 h-7 rounded-md bg-slate-800 flex items-center justify-center text-slate-300 group-hover:text-blue-400 transition">
-                          {item.customEmote ? (
-                            <span className="text-sm">{item.customEmote}</span>
-                          ) : (
-                            renderIcon(item.iconName)
-                          )}
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-slate-200 group-hover:text-white">
-                            {item.name}
-                          </div>
-                          <div className="text-[10px] font-mono text-slate-400">
-                            {dimMeters} ({item.widthMm} × {item.heightMm} mm)
-                          </div>
-                        </div>
-                      </div>
-                      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${tagColor}`}>
-                        {item.personaTag}
-                      </span>
-                    </div>
-
-                    <p className="text-[10px] text-slate-400 leading-tight">
-                      {item.description}
-                    </p>
-
-                    <button
-                      onClick={() => onAddItem(item)}
-                      className="w-full py-1 px-2 bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white rounded text-[11px] font-medium flex items-center justify-center gap-1.5 transition border border-slate-700 hover:border-blue-500"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Ajouter au plan
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Guide d'aide bas de palette */}
-          <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-500 flex-shrink-0 leading-relaxed">
-            💡 <strong>Astuce :</strong> Glissez-déposez directement un équipement sur le plan ou cliquez sur Ajouter.
-          </div>
-
-                    {/* Bouton Paramtres DSI en bas */}
-          {onOpenSettings && (
-            <div className="pt-2 border-t border-slate-800 flex-shrink-0">
-              <button
-                onClick={onOpenSettings}
-                className="w-full p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-cyan-500/50 flex items-center justify-between text-left transition group shadow-sm"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-md bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
-                    <Sliders className="w-3.5 h-3.5" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-200 group-hover:text-white">
-                      Paramtres DSI
-                    </div>
-                    <div className="text-[9px] text-slate-400 font-mono">AD, SNMP, IPAM</div>
-                  </div>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition" />
-              </button>
-            </div>
-          )}
             </div>
           )}
         </div>

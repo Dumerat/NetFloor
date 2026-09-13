@@ -50,7 +50,9 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
               width={zone.widthMm}
               height={zone.heightMm}
               fill={zone.color}
-              opacity={isSelected ? Math.min(1, (zone.opacity ?? 0.12) + 0.08) : (zone.opacity ?? 0.12)}
+              opacity={
+                isSelected ? Math.min(1, (zone.opacity ?? 0.12) + 0.08) : (zone.opacity ?? 0.12)
+              }
               cornerRadius={24}
               stroke={isSelected ? "#ffffff" : zone.color}
               strokeWidth={isSelected ? 60 : 35}
@@ -166,9 +168,12 @@ export const ZoneLayerComponent: FC<ZoneLayerProps> = ({
             {/* Repère de coin inférieur droit */}
             <Line
               points={[
-                zone.widthMm - 250, zone.heightMm - 50,
-                zone.widthMm - 50, zone.heightMm - 50,
-                zone.widthMm - 50, zone.heightMm - 250
+                zone.widthMm - 250,
+                zone.heightMm - 50,
+                zone.widthMm - 50,
+                zone.heightMm - 50,
+                zone.widthMm - 50,
+                zone.heightMm - 250,
               ]}
               stroke={zone.color}
               strokeWidth={20}

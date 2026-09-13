@@ -125,9 +125,7 @@ export async function saveBackgroundPlan(
 /**
  * Charge un fond de plan spécifique par son ID
  */
-export async function loadBackgroundPlan(
-  planId: string
-): Promise<StoredBackgroundPlan | null> {
+export async function loadBackgroundPlan(planId: string): Promise<StoredBackgroundPlan | null> {
   try {
     const db = await openPlanDb();
     const tx = db.transaction(STORE_PLANS, "readonly");

@@ -247,7 +247,10 @@ export function loadStoredSettings(): SystemSettings {
         ...INITIAL_SETTINGS.snmp,
         ...(parsed.snmp || {}),
       },
-      subnets: Array.isArray(parsed.subnets) && parsed.subnets.length > 0 ? parsed.subnets : INITIAL_SETTINGS.subnets,
+      subnets:
+        Array.isArray(parsed.subnets) && parsed.subnets.length > 0
+          ? parsed.subnets
+          : INITIAL_SETTINGS.subnets,
       integrations: {
         ...INITIAL_SETTINGS.integrations,
         ...(parsed.integrations || {}),

@@ -128,11 +128,7 @@ export const BackgroundPlanLayer: FC<BackgroundPlanLayerProps> = memo(
       return (
         <Group listening={false}>
           {plans.map((p) => (
-            <SinglePlanItem
-              key={p.id}
-              plan={p}
-              onPositionChange={onPlanPositionChange}
-            />
+            <SinglePlanItem key={p.id} plan={p} onPositionChange={onPlanPositionChange} />
           ))}
         </Group>
       );

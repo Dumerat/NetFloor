@@ -58,9 +58,7 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({
       const result = parseAndAuditMatrixCsv(csvContent);
       setAuditResult(result);
       if (!result.isValid && result.errors.length > 0) {
-        setErrorMessage(
-          `${result.errors.length} anomalie(s) détectée(s) dans le carnet CSV.`
-        );
+        setErrorMessage(`${result.errors.length} anomalie(s) détectée(s) dans le carnet CSV.`);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erreur d'analyse du CSV";
@@ -101,7 +99,8 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({
                 Ingestion CSV Matricielle (Tables de Brassage DSI)
               </h3>
               <p className="text-[11px] text-slate-400">
-                Prise_ID, Bureau_ID, Utilisateur, IP_Machine, MAC, VLAN_ID, Baie, Switch_Nom, Port_Switch
+                Prise_ID, Bureau_ID, Utilisateur, IP_Machine, MAC, VLAN_ID, Baie, Switch_Nom,
+                Port_Switch
               </p>
             </div>
           </div>
@@ -152,14 +151,17 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({
             <div className="space-y-3 animate-in fade-in duration-150">
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-200">Bilan de Validation Matricielle :</span>
+                  <span className="font-semibold text-slate-200">
+                    Bilan de Validation Matricielle :
+                  </span>
                   {auditResult.isValid ? (
                     <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded border border-emerald-500/30 font-semibold flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5" /> CSV 100% VALIDE
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded border border-red-500/30 font-semibold flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" /> {auditResult.errors.length} ANOMALIES
+                      <AlertTriangle className="w-3.5 h-3.5" /> {auditResult.errors.length}{" "}
+                      ANOMALIES
                     </span>
                   )}
                 </div>
@@ -192,7 +194,9 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({
                 </div>
 
                 <p className="text-[10px] text-slate-500 pt-1">
-                  Les prises ou bureaux non encore présents sur le plan seront automatiquement placés dans la zone « Éléments non positionnés » pour un glisser-déposer sur le canevas.
+                  Les prises ou bureaux non encore présents sur le plan seront automatiquement
+                  placés dans la zone « Éléments non positionnés » pour un glisser-déposer sur le
+                  canevas.
                 </p>
               </div>
 

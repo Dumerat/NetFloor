@@ -86,10 +86,37 @@ export async function GET() {
         },
       ],
       ports: [
-        { id: "p-wall-1", nodeId: "outlet-408-a", label: "RJ45-1", direction: "BI", mode: "PASSIVE" },
-        { id: "p-pp-rear", nodeId: "pp-01", label: "PORT-08", direction: "REAR", mode: "PASSIVE", internalPeerPortId: "p-pp-front" },
-        { id: "p-pp-front", nodeId: "pp-01", label: "PORT-08", direction: "FRONT", mode: "PASSIVE", internalPeerPortId: "p-pp-rear" },
-        { id: "p-sw-8", nodeId: "sw-01", label: "Gi1/0/8", direction: "FRONT", mode: "ACCESS", nativeVlanId: "vlan-20" },
+        {
+          id: "p-wall-1",
+          nodeId: "outlet-408-a",
+          label: "RJ45-1",
+          direction: "BI",
+          mode: "PASSIVE",
+        },
+        {
+          id: "p-pp-rear",
+          nodeId: "pp-01",
+          label: "PORT-08",
+          direction: "REAR",
+          mode: "PASSIVE",
+          internalPeerPortId: "p-pp-front",
+        },
+        {
+          id: "p-pp-front",
+          nodeId: "pp-01",
+          label: "PORT-08",
+          direction: "FRONT",
+          mode: "PASSIVE",
+          internalPeerPortId: "p-pp-rear",
+        },
+        {
+          id: "p-sw-8",
+          nodeId: "sw-01",
+          label: "Gi1/0/8",
+          direction: "FRONT",
+          mode: "ACCESS",
+          nativeVlanId: "vlan-20",
+        },
       ],
       cables: [
         {
@@ -112,8 +139,20 @@ export async function GET() {
         },
       ],
       vlans: [
-        { id: "vlan-20", vid: 20, name: "VLAN_CORP_DATA", subnetCidr: "10.40.20.0/22", colorHex: "#2563eb" },
-        { id: "vlan-30", vid: 30, name: "VLAN_VOIP", subnetCidr: "10.40.30.0/24", colorHex: "#10b981" },
+        {
+          id: "vlan-20",
+          vid: 20,
+          name: "VLAN_CORP_DATA",
+          subnetCidr: "10.40.20.0/22",
+          colorHex: "#2563eb",
+        },
+        {
+          id: "vlan-30",
+          vid: 30,
+          name: "VLAN_VOIP",
+          subnetCidr: "10.40.30.0/24",
+          colorHex: "#10b981",
+        },
       ],
     });
   }

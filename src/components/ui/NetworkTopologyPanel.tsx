@@ -71,8 +71,7 @@ export const NetworkTopologyPanel: React.FC<NetworkTopologyPanelProps> = ({
           (node.subType ? node.subType.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
           (node.ipAddress && node.ipAddress.includes(searchTerm));
 
-        const matchVlan =
-          vlanFilter === "ALL" || String(node.vlanId ?? 20) === vlanFilter;
+        const matchVlan = vlanFilter === "ALL" || String(node.vlanId ?? 20) === vlanFilter;
 
         return matchSearch && matchVlan;
       });
@@ -201,7 +200,9 @@ export const NetworkTopologyPanel: React.FC<NetworkTopologyPanelProps> = ({
 
             <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-1 border-t border-slate-800/80 text-slate-400">
               <div>IP WAN : 195.154.42.1</div>
-              <div className="text-right text-emerald-400 font-semibold">Debit : 10 Gbps symetrique</div>
+              <div className="text-right text-emerald-400 font-semibold">
+                Debit : 10 Gbps symetrique
+              </div>
             </div>
           </div>
         </div>
@@ -221,7 +222,10 @@ export const NetworkTopologyPanel: React.FC<NetworkTopologyPanelProps> = ({
             const totalU = rack.uHeight || 42;
 
             return (
-              <div key={rack.id} className="rounded-lg bg-slate-900/70 border border-slate-800 overflow-hidden">
+              <div
+                key={rack.id}
+                className="rounded-lg bg-slate-900/70 border border-slate-800 overflow-hidden"
+              >
                 {/* En-tete Baie cliquable */}
                 <div
                   onClick={() => toggleRack(rack.id)}
@@ -229,12 +233,20 @@ export const NetworkTopologyPanel: React.FC<NetworkTopologyPanelProps> = ({
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <button className="text-slate-400 p-0.5">
-                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      {isExpanded ? (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      )}
                     </button>
                     <Server className="w-4 h-4 text-purple-400 flex-shrink-0" />
                     <div className="truncate">
-                      <span className="font-semibold text-slate-200 text-xs truncate">{rack.name}</span>
-                      <span className="text-[10px] text-purple-300 font-mono ml-1.5">({totalU}U)</span>
+                      <span className="font-semibold text-slate-200 text-xs truncate">
+                        {rack.name}
+                      </span>
+                      <span className="text-[10px] text-purple-300 font-mono ml-1.5">
+                        ({totalU}U)
+                      </span>
                     </div>
                   </div>
 
@@ -274,7 +286,9 @@ export const NetworkTopologyPanel: React.FC<NetworkTopologyPanelProps> = ({
                             <span className="font-mono text-purple-300 font-bold bg-purple-950/60 px-1 py-0.2 rounded text-[9px] border border-purple-800/40">
                               U{String(sw.slotU).padStart(2, "0")}
                             </span>
-                            <span className="font-semibold text-slate-200 text-[11px] truncate">{sw.name}</span>
+                            <span className="font-semibold text-slate-200 text-[11px] truncate">
+                              {sw.name}
+                            </span>
                           </div>
                           <span className="text-[8px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                             {sw.status}
@@ -359,7 +373,11 @@ export const NetworkTopologyPanel: React.FC<NetworkTopologyPanelProps> = ({
                 >
                   <div className="flex items-center gap-2 truncate">
                     <span className="text-slate-400 text-[10px]">
-                      {ep.subType === "WIFI_AP" ? "📶" : ep.subType === "PRINTER_STATION" ? "🖨️" : "🔌"}
+                      {ep.subType === "WIFI_AP"
+                        ? "📶"
+                        : ep.subType === "PRINTER_STATION"
+                          ? "🖨️"
+                          : "🔌"}
                     </span>
                     <span className="font-semibold text-slate-200 truncate">{ep.name}</span>
                   </div>

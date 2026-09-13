@@ -230,10 +230,14 @@ export async function seedTopology() {
   console.log("✅ Topologie de référence déployée avec succès :");
   console.log(`   - Étage : ${floor.name} (${floor.widthMm / 1000}m x ${floor.heightMm / 1000}m)`);
   console.log(`   - Prise Murale : ${wallOutlet.name} -> Port ${wallPort.label}`);
-  console.log(`   - Câble Horizontal : ${horizontalCable?.lengthMm ? horizontalCable.lengthMm / 1000 : 0}m (${horizontalCable?.category})`);
+  console.log(
+    `   - Câble Horizontal : ${horizontalCable?.lengthMm ? horizontalCable.lengthMm / 1000 : 0}m (${horizontalCable?.category})`
+  );
   console.log(`   - Patch Panel : ${patchPanel.name} (Port Arrière <-> Port Avant couplés)`);
   console.log(`   - Cordon de Brassage : ${patchCord?.lengthMm ? patchCord.lengthMm / 1000 : 0}m`);
-  console.log(`   - Switch Actif : ${switchNode.name} [${switchPort.label}] -> VLAN ${vlanData.vid} (${vlanData.name})`);
+  console.log(
+    `   - Switch Actif : ${switchNode.name} [${switchPort.label}] -> VLAN ${vlanData.vid} (${vlanData.name})`
+  );
 
   return {
     floor,

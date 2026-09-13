@@ -4,7 +4,12 @@
  * boîtiers RJ45 (Data + VoIP) solidaires et magnétisme de grille.
  */
 
-import { NodeDisplay, NodeSubType, getDefaultSeatLabels, DeskSeatOccupant } from "@/components/canvas/EquipmentLayer";
+import {
+  NodeDisplay,
+  NodeSubType,
+  getDefaultSeatLabels,
+  DeskSeatOccupant,
+} from "@/components/canvas/EquipmentLayer";
 import { FloorZone } from "@/types/zones";
 import { GridConfig } from "./types";
 import { snapToGrid } from "./snapping";

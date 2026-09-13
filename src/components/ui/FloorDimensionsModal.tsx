@@ -15,11 +15,36 @@ export interface FloorDimensionsModalProps {
 }
 
 const PRESET_SIZES = [
-  { label: "Compact • 30m × 20m", widthM: 30, heightM: 20, desc: "Petit plateau ou agence (600 m²)" },
-  { label: "Standard • 45m × 25m", widthM: 45, heightM: 25, desc: "Étage entreprise standard (1 125 m²)" },
-  { label: "Grand • 60m × 35m", widthM: 60, heightM: 35, desc: "Grand plateau open-space (2 100 m²)" },
-  { label: "Campus • 80m × 45m", widthM: 80, heightM: 45, desc: "Bâtiment tertiaire étendu (3 600 m²)" },
-  { label: "Siège • 100m × 60m", widthM: 100, heightM: 60, desc: "Campus ou tour multi-ailes (6 000 m²)" },
+  {
+    label: "Compact • 30m × 20m",
+    widthM: 30,
+    heightM: 20,
+    desc: "Petit plateau ou agence (600 m²)",
+  },
+  {
+    label: "Standard • 45m × 25m",
+    widthM: 45,
+    heightM: 25,
+    desc: "Étage entreprise standard (1 125 m²)",
+  },
+  {
+    label: "Grand • 60m × 35m",
+    widthM: 60,
+    heightM: 35,
+    desc: "Grand plateau open-space (2 100 m²)",
+  },
+  {
+    label: "Campus • 80m × 45m",
+    widthM: 80,
+    heightM: 45,
+    desc: "Bâtiment tertiaire étendu (3 600 m²)",
+  },
+  {
+    label: "Siège • 100m × 60m",
+    widthM: 100,
+    heightM: 60,
+    desc: "Campus ou tour multi-ailes (6 000 m²)",
+  },
 ];
 
 export const FloorDimensionsModal: FC<FloorDimensionsModalProps> = ({
@@ -114,12 +139,8 @@ export const FloorDimensionsModal: FC<FloorDimensionsModalProps> = ({
                     }`}
                   >
                     <div>
-                      <span className="font-bold font-mono text-[11px] block">
-                        {preset.label}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        {preset.desc}
-                      </span>
+                      <span className="font-bold font-mono text-[11px] block">{preset.label}</span>
+                      <span className="text-[10px] text-slate-400">{preset.desc}</span>
                     </div>
                     {isCurrent && (
                       <span className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-white">
@@ -150,7 +171,9 @@ export const FloorDimensionsModal: FC<FloorDimensionsModalProps> = ({
                 <span className="text-[10px] text-slate-500 font-mono">= {widthM * 1000} mm</span>
               </div>
               <div className="space-y-1">
-                <span className="text-[10px] text-slate-400">Longueur / Profondeur Y (mètres) :</span>
+                <span className="text-[10px] text-slate-400">
+                  Longueur / Profondeur Y (mètres) :
+                </span>
                 <input
                   type="number"
                   min="10"

@@ -42,8 +42,8 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
     currentStyle.strokePattern === "DASHED"
       ? `${(strokeWidthPx * 2.6).toFixed(1)},${(strokeWidthPx * 2.8).toFixed(1)}`
       : currentStyle.strokePattern === "DOTTED"
-      ? `0.1,${(strokeWidthPx * 2.4).toFixed(1)}`
-      : undefined;
+        ? `0.1,${(strokeWidthPx * 2.4).toFixed(1)}`
+        : undefined;
 
   return (
     <div className="space-y-3">
@@ -120,14 +120,14 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
             {currentStyle.strokePattern === "SOLID"
               ? "Plein"
               : currentStyle.strokePattern === "DASHED"
-              ? "Pointillés"
-              : "Points"}
+                ? "Pointillés"
+                : "Points"}
             {" • "}
             {currentStyle.thickness === "FINE"
               ? "Fin (2mm)"
               : currentStyle.thickness === "THICK"
-              ? "Épais (7mm)"
-              : "Normal (4mm)"}
+                ? "Épais (7mm)"
+                : "Normal (4mm)"}
           </span>
         </div>
 
@@ -156,9 +156,7 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
               <input
                 type="color"
                 value={currentStyle.color}
-                onChange={(e) =>
-                  onUpdateVlanStyle(currentStyle.vlanId, { color: e.target.value })
-                }
+                onChange={(e) => onUpdateVlanStyle(currentStyle.vlanId, { color: e.target.value })}
                 className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0"
                 title="Choisir une couleur libre"
               />
@@ -197,8 +195,16 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
           <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
             {[
               { id: "SOLID" as CableStrokePattern, label: "Plein ───", desc: "Ligne continue" },
-              { id: "DASHED" as CableStrokePattern, label: "Pointillé - -", desc: "Tirets espacés" },
-              { id: "DOTTED" as CableStrokePattern, label: "Points • •", desc: "Petits points fins" },
+              {
+                id: "DASHED" as CableStrokePattern,
+                label: "Pointillé - -",
+                desc: "Tirets espacés",
+              },
+              {
+                id: "DOTTED" as CableStrokePattern,
+                label: "Points • •",
+                desc: "Petits points fins",
+              },
             ].map((pattern) => (
               <button
                 key={pattern.id}
@@ -220,9 +226,7 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
 
         {/* 3. Épaisseur du Câble */}
         <div className="space-y-1.5">
-          <label className="text-[10px] text-slate-400 font-mono block">
-            Épaisseur du câble :
-          </label>
+          <label className="text-[10px] text-slate-400 font-mono block">Épaisseur du câble :</label>
           <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
             {[
               { id: "FINE" as CableThickness, label: "Fin (2mm)", widthDesc: "Discret & fin" },
@@ -231,9 +235,7 @@ export const VlanStyleCustomizer: FC<VlanStyleCustomizerProps> = ({
             ].map((thick) => (
               <button
                 key={thick.id}
-                onClick={() =>
-                  onUpdateVlanStyle(currentStyle.vlanId, { thickness: thick.id })
-                }
+                onClick={() => onUpdateVlanStyle(currentStyle.vlanId, { thickness: thick.id })}
                 className={`py-2 px-2 rounded-lg border transition text-center ${
                   currentStyle.thickness === thick.id
                     ? "bg-sky-600/30 text-sky-300 border-sky-500/50 font-bold shadow-sm"

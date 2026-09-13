@@ -1,4 +1,13 @@
-import { pgTable, uuid, varchar, integer, doublePrecision, text, jsonb, timestamp } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  varchar,
+  integer,
+  doublePrecision,
+  text,
+  jsonb,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 export const floors = pgTable("floors", {
   id: uuid("id").defaultRandom().primaryKey(),

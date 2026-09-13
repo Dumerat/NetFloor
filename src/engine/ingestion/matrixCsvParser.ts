@@ -50,7 +50,8 @@ export interface ApplyMatrixResult {
   newUnpositionedCount: number;
 }
 
-const IP_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+const IP_REGEX =
+  /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 const MAC_REGEX = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
 
 /**
@@ -110,9 +111,7 @@ export function parseAndAuditMatrixCsv(csvText: string): MatrixAuditResult {
     macAddress: rawHeaders.findIndex((h) =>
       ["mac", "mac_address", "macaddress", "adresse_mac"].includes(h)
     ),
-    vlanId: rawHeaders.findIndex((h) =>
-      ["vlan_id", "vlan", "vlanid", "vid"].includes(h)
-    ),
+    vlanId: rawHeaders.findIndex((h) => ["vlan_id", "vlan", "vlanid", "vid"].includes(h)),
     rackName: rawHeaders.findIndex((h) =>
       ["baie", "rack", "rack_name", "baie_nom", "rackid"].includes(h)
     ),
@@ -304,9 +303,7 @@ export function applyMatrixImport(
   validRows.forEach((row) => {
     // 1. Résolution de la baie
     const targetRackId =
-      (row.rackName && rackMap.get(row.rackName.toLowerCase())) ||
-      racks[0]?.id ||
-      "rack-01";
+      (row.rackName && rackMap.get(row.rackName.toLowerCase())) || racks[0]?.id || "rack-01";
 
     // 2. Recherche du meuble associé si spécifié
     let attachedDeskId: string | undefined = undefined;

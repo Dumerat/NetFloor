@@ -5,9 +5,11 @@ import { Group, Rect, Text, Line, Circle } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 
-export type RackDeviceType = "SWITCH" | "PATCH_PANEL" | "ROUTER" | "SERVER" | "PDU" | "FIREWALL" | "FIBER_TRAY";
+export type RackDeviceType =
+  "SWITCH" | "PATCH_PANEL" | "ROUTER" | "SERVER" | "PDU" | "FIREWALL" | "FIBER_TRAY";
 
-export type RackDeviceBrand = "ARUBA" | "ZYXEL" | "ZYXEL_NEBULA" | "CISCO" | "UBIQUITI" | "FORTINET" | "GENERIC";
+export type RackDeviceBrand =
+  "ARUBA" | "ZYXEL" | "ZYXEL_NEBULA" | "CISCO" | "UBIQUITI" | "FORTINET" | "GENERIC";
 
 export interface RackDeviceItem {
   id: string;
@@ -23,7 +25,14 @@ export interface RackDeviceItem {
   poeBudgetW?: number | undefined;
   status: "ONLINE" | "OFFLINE" | "SYNCED";
   cloudManaged?: boolean | undefined;
-  cloudManagedBy?: "ARUBA_CENTRAL" | "NEBULA_CLOUD" | "MERAKI" | "FORTICLOUD" | "SNMP_LOCAL" | "MANUAL" | undefined;
+  cloudManagedBy?:
+    | "ARUBA_CENTRAL"
+    | "NEBULA_CLOUD"
+    | "MERAKI"
+    | "FORTICLOUD"
+    | "SNMP_LOCAL"
+    | "MANUAL"
+    | undefined;
 }
 
 export interface RackDisplay {
@@ -181,7 +190,8 @@ interface EquipmentLayerProps {
   onSelectNodeToggle?: ((node: NodeDisplay, isMulti: boolean) => void) | undefined;
   onNodeContextMenu?: ((node: NodeDisplay, pos: { x: number; y: number }) => void) | undefined;
   onNodeMoveEnd: (id: string, newPos: { x: number; y: number }) => void;
-  onGroupNodeMoveEnd?: ((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => void) | undefined;
+  onGroupNodeMoveEnd?:
+    ((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => void) | undefined;
   onNodeDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   isMarqueeJustEnded?: (() => boolean) | undefined;
@@ -298,8 +308,10 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 localAnchorY = sIdx === 0 ? deskH / 4 : (3 * deskH) / 4;
               }
             }
-            startAnchorX = desk.xMm + localAnchorX * Math.cos(rotRad) - localAnchorY * Math.sin(rotRad);
-            startAnchorY = desk.yMm + localAnchorX * Math.sin(rotRad) + localAnchorY * Math.cos(rotRad);
+            startAnchorX =
+              desk.xMm + localAnchorX * Math.cos(rotRad) - localAnchorY * Math.sin(rotRad);
+            startAnchorY =
+              desk.yMm + localAnchorX * Math.sin(rotRad) + localAnchorY * Math.cos(rotRad);
           }
           attachedOutlets.push({
             id: n.id,
@@ -330,11 +342,13 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
       if (stage) {
         groupState.otherNodes.forEach((item) => {
           const konvaNode = stage.findOne("#" + item.id);
-          if (konvaNode) konvaNode.position({ x: item.startPos.x + deltaX, y: item.startPos.y + deltaY });
+          if (konvaNode)
+            konvaNode.position({ x: item.startPos.x + deltaX, y: item.startPos.y + deltaY });
         });
         groupState.attachedOutlets.forEach((item) => {
           const konvaNode = stage.findOne("#" + item.id);
-          if (konvaNode) konvaNode.position({ x: item.startPos.x + deltaX, y: item.startPos.y + deltaY });
+          if (konvaNode)
+            konvaNode.position({ x: item.startPos.x + deltaX, y: item.startPos.y + deltaY });
           const anchorLine = stage.findOne("#anchor-line-" + item.id) as any;
           if (anchorLine && typeof anchorLine.points === "function") {
             anchorLine.points([
@@ -382,7 +396,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
     e.cancelBubble = true;
     initGroupDragIfMulti(desk.id, e);
 
-    const attached = nodes.filter((n) => n.type === "WALL_OUTLET" && n.attachedToDeskId === desk.id);
+    const attached = nodes.filter(
+      (n) => n.type === "WALL_OUTLET" && n.attachedToDeskId === desk.id
+    );
     const deskW = desk.widthMm ?? 1600;
     const deskH = desk.heightMm ?? 800;
 
@@ -528,10 +544,10 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             const lineColor = isVoip
               ? "#c084fc"
               : isPrinter
-              ? "#fbbf24"
-              : isFloorBox
-              ? "#38bdf8"
-              : "#38bdf8";
+                ? "#fbbf24"
+                : isFloorBox
+                  ? "#38bdf8"
+                  : "#38bdf8";
 
             return (
               <Group key={`anchor-link-${outlet.id}`} listening={false}>
@@ -769,28 +785,38 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                       const devFill = isSw
                         ? "#172554"
                         : isPp
-                        ? "#1e293b"
-                        : isFw
-                        ? "#450a0a"
-                        : isSrv
-                        ? "#09090b"
-                        : isPdu
-                        ? "#422006"
-                        : "#1e293b";
+                          ? "#1e293b"
+                          : isFw
+                            ? "#450a0a"
+                            : isSrv
+                              ? "#09090b"
+                              : isPdu
+                                ? "#422006"
+                                : "#1e293b";
 
                       const devStroke = isSw
                         ? "#3b82f6"
                         : isPp
-                        ? "#64748b"
-                        : isFw
-                        ? "#ef4444"
-                        : isSrv
-                        ? "#a1a1aa"
-                        : isPdu
-                        ? "#f59e0b"
-                        : "#475569";
+                          ? "#64748b"
+                          : isFw
+                            ? "#ef4444"
+                            : isSrv
+                              ? "#a1a1aa"
+                              : isPdu
+                                ? "#f59e0b"
+                                : "#475569";
 
-                      const typeBadge = isSw ? "SW" : isPp ? "PP" : isFw ? "FW" : isSrv ? "SRV" : isPdu ? "PDU" : "DEV";
+                      const typeBadge = isSw
+                        ? "SW"
+                        : isPp
+                          ? "PP"
+                          : isFw
+                            ? "FW"
+                            : isSrv
+                              ? "SRV"
+                              : isPdu
+                                ? "PDU"
+                                : "DEV";
 
                       return (
                         <Group key={dev.id}>
@@ -846,7 +872,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                           {/* Représentation des ports RJ45 / LEDs */}
                           {dev.portsCount && devH >= 54 && (
                             <Group y={devY + devH - 24}>
-                              {Array.from({ length: Math.min(12, Math.ceil(dev.portsCount / 2)) }).map((_, pIdx) => (
+                              {Array.from({
+                                length: Math.min(12, Math.ceil(dev.portsCount / 2)),
+                              }).map((_, pIdx) => (
                                 <Rect
                                   key={`dev-port-${dev.id}-${pIdx}`}
                                   x={190 + pIdx * ((rWidth - 320) / 12)}
@@ -898,7 +926,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
           // Intitulé court : "Bureau {N}"
           const matchNum = desk.name.match(/\d+/);
-          const shortTitle = matchNum ? `Bureau ${matchNum[0]}` : desk.name.replace(/^Poste\s+/i, "Bureau ");
+          const shortTitle = matchNum
+            ? `Bureau ${matchNum[0]}`
+            : desk.name.replace(/^Poste\s+/i, "Bureau ");
 
           // Récupération sécurisée d'un occupant de place
           const getSeat = (idx: number): DeskSeatOccupant | undefined => {
@@ -931,12 +961,49 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               {/* Ombre / socle */}
               <Rect x={-55} y={-45} width={110} height={90} fill="#090d16" cornerRadius={10} />
               {/* Corps principal incliné du téléphone */}
-              <Rect x={-52} y={-42} width={104} height={84} fill="#1e293b" stroke="#334155" strokeWidth={4} cornerRadius={8} />
+              <Rect
+                x={-52}
+                y={-42}
+                width={104}
+                height={84}
+                fill="#1e293b"
+                stroke="#334155"
+                strokeWidth={4}
+                cornerRadius={8}
+              />
               {/* Combiné téléphonique à gauche */}
-              <Rect x={-45} y={-38} width={22} height={76} fill="#0f172a" stroke="#475569" strokeWidth={3} cornerRadius={6} />
+              <Rect
+                x={-45}
+                y={-38}
+                width={22}
+                height={76}
+                fill="#0f172a"
+                stroke="#475569"
+                strokeWidth={3}
+                cornerRadius={6}
+              />
               {/* Écran LCD rétroéclairé cyan */}
-              <Rect x={-15} y={-36} width={60} height={32} fill="#0369a1" stroke="#38bdf8" strokeWidth={2} cornerRadius={4} />
-              <Text x={-13} y={-28} width={56} text="IP TEL" fontSize={11} fontFamily="monospace" fontStyle="bold" fill="#e0f2fe" align="center" />
+              <Rect
+                x={-15}
+                y={-36}
+                width={60}
+                height={32}
+                fill="#0369a1"
+                stroke="#38bdf8"
+                strokeWidth={2}
+                cornerRadius={4}
+              />
+              <Text
+                x={-13}
+                y={-28}
+                width={56}
+                text="IP TEL"
+                fontSize={11}
+                fontFamily="monospace"
+                fontStyle="bold"
+                fill="#e0f2fe"
+                align="center"
+              />
               {/* Pavé numérique stylisé */}
               <Rect x={-15} y={4} width={42} height={32} fill="#0f172a" cornerRadius={3} />
               <Rect x={-11} y={8} width={8} height={6} fill="#475569" cornerRadius={1} />
@@ -1051,32 +1118,135 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               {!isMeeting && isBenchQuad && (
                 <Group listening={false}>
                   {/* Place 0 (Haut-Gauche) : Écran contre la cloisonnette centrale, clavier vers l'utilisateur */}
-                  <Rect x={width / 4 - 210} y={height / 2 - 120} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={width / 4 - 45} y={height / 2 - 82} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={width / 4 - 160} y={80} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect
+                    x={width / 4 - 210}
+                    y={height / 2 - 120}
+                    width={420}
+                    height={38}
+                    fill="#0284c7"
+                    stroke="#38bdf8"
+                    strokeWidth={7}
+                    cornerRadius={6}
+                  />
+                  <Rect
+                    x={width / 4 - 45}
+                    y={height / 2 - 82}
+                    width={90}
+                    height={22}
+                    fill="#475569"
+                    cornerRadius={5}
+                  />
+                  <Rect
+                    x={width / 4 - 160}
+                    y={80}
+                    width={320}
+                    height={95}
+                    fill="#1e293b"
+                    stroke="#334155"
+                    strokeWidth={7}
+                    cornerRadius={8}
+                  />
 
                   {/* Place 1 (Haut-Droite) */}
-                  <Rect x={(3 * width) / 4 - 210} y={height / 2 - 120} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={(3 * width) / 4 - 45} y={height / 2 - 82} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={(3 * width) / 4 - 160} y={80} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect
+                    x={(3 * width) / 4 - 210}
+                    y={height / 2 - 120}
+                    width={420}
+                    height={38}
+                    fill="#0284c7"
+                    stroke="#38bdf8"
+                    strokeWidth={7}
+                    cornerRadius={6}
+                  />
+                  <Rect
+                    x={(3 * width) / 4 - 45}
+                    y={height / 2 - 82}
+                    width={90}
+                    height={22}
+                    fill="#475569"
+                    cornerRadius={5}
+                  />
+                  <Rect
+                    x={(3 * width) / 4 - 160}
+                    y={80}
+                    width={320}
+                    height={95}
+                    fill="#1e293b"
+                    stroke="#334155"
+                    strokeWidth={7}
+                    cornerRadius={8}
+                  />
 
                   {/* Place 2 (Bas-Gauche) */}
-                  <Rect x={width / 4 - 210} y={height / 2 + 82} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={width / 4 - 45} y={height / 2 + 60} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={width / 4 - 160} y={height - 175} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect
+                    x={width / 4 - 210}
+                    y={height / 2 + 82}
+                    width={420}
+                    height={38}
+                    fill="#0284c7"
+                    stroke="#38bdf8"
+                    strokeWidth={7}
+                    cornerRadius={6}
+                  />
+                  <Rect
+                    x={width / 4 - 45}
+                    y={height / 2 + 60}
+                    width={90}
+                    height={22}
+                    fill="#475569"
+                    cornerRadius={5}
+                  />
+                  <Rect
+                    x={width / 4 - 160}
+                    y={height - 175}
+                    width={320}
+                    height={95}
+                    fill="#1e293b"
+                    stroke="#334155"
+                    strokeWidth={7}
+                    cornerRadius={8}
+                  />
 
                   {/* Place 3 (Bas-Droite) */}
-                  <Rect x={(3 * width) / 4 - 210} y={height / 2 + 82} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={(3 * width) / 4 - 45} y={height / 2 + 60} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={(3 * width) / 4 - 160} y={height - 175} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect
+                    x={(3 * width) / 4 - 210}
+                    y={height / 2 + 82}
+                    width={420}
+                    height={38}
+                    fill="#0284c7"
+                    stroke="#38bdf8"
+                    strokeWidth={7}
+                    cornerRadius={6}
+                  />
+                  <Rect
+                    x={(3 * width) / 4 - 45}
+                    y={height / 2 + 60}
+                    width={90}
+                    height={22}
+                    fill="#475569"
+                    cornerRadius={5}
+                  />
+                  <Rect
+                    x={(3 * width) / 4 - 160}
+                    y={height - 175}
+                    width={320}
+                    height={95}
+                    fill="#1e293b"
+                    stroke="#334155"
+                    strokeWidth={7}
+                    cornerRadius={8}
+                  />
 
                   {/* Téléphones IP si le bureau est équipé VoIP */}
                   {hasVoipPhone && (
                     <Group listening={false}>
                       {renderVoipPhone(width / 4 + 210, height / 2 - 120, 0)}
-                      {desk.seats?.[1]?.fullName && renderVoipPhone((3 * width) / 4 + 210, height / 2 - 120, 0)}
-                      {desk.seats?.[2]?.fullName && renderVoipPhone(width / 4 + 210, height / 2 + 120, 180)}
-                      {desk.seats?.[3]?.fullName && renderVoipPhone((3 * width) / 4 + 210, height / 2 + 120, 180)}
+                      {desk.seats?.[1]?.fullName &&
+                        renderVoipPhone((3 * width) / 4 + 210, height / 2 - 120, 0)}
+                      {desk.seats?.[2]?.fullName &&
+                        renderVoipPhone(width / 4 + 210, height / 2 + 120, 180)}
+                      {desk.seats?.[3]?.fullName &&
+                        renderVoipPhone((3 * width) / 4 + 210, height / 2 + 120, 180)}
                     </Group>
                   )}
 
@@ -1084,28 +1254,156 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   {desk.chairPosition !== "NONE" && (
                     <Group listening={false}>
                       {/* Chaise 0 (Top-Left) */}
-                      <Rect x={width / 4 - 190} y={-380} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
-                      <Rect x={width / 4 - 170} y={-360} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
-                      <Rect x={width / 4 - 210} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
-                      <Rect x={width / 4 + 175} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect
+                        x={width / 4 - 190}
+                        y={-380}
+                        width={380}
+                        height={320}
+                        fill="#1e293b"
+                        stroke="#475569"
+                        strokeWidth={12}
+                        cornerRadius={45}
+                      />
+                      <Rect
+                        x={width / 4 - 170}
+                        y={-360}
+                        width={340}
+                        height={75}
+                        fill="#0f172a"
+                        stroke="#64748b"
+                        strokeWidth={10}
+                        cornerRadius={35}
+                      />
+                      <Rect
+                        x={width / 4 - 210}
+                        y={-300}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
+                      <Rect
+                        x={width / 4 + 175}
+                        y={-300}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
 
                       {/* Chaise 1 (Top-Right) */}
-                      <Rect x={(3 * width) / 4 - 190} y={-380} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
-                      <Rect x={(3 * width) / 4 - 170} y={-360} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
-                      <Rect x={(3 * width) / 4 - 210} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
-                      <Rect x={(3 * width) / 4 + 175} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect
+                        x={(3 * width) / 4 - 190}
+                        y={-380}
+                        width={380}
+                        height={320}
+                        fill="#1e293b"
+                        stroke="#475569"
+                        strokeWidth={12}
+                        cornerRadius={45}
+                      />
+                      <Rect
+                        x={(3 * width) / 4 - 170}
+                        y={-360}
+                        width={340}
+                        height={75}
+                        fill="#0f172a"
+                        stroke="#64748b"
+                        strokeWidth={10}
+                        cornerRadius={35}
+                      />
+                      <Rect
+                        x={(3 * width) / 4 - 210}
+                        y={-300}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
+                      <Rect
+                        x={(3 * width) / 4 + 175}
+                        y={-300}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
 
                       {/* Chaise 2 (Bottom-Left) */}
-                      <Rect x={width / 4 - 190} y={height + 50} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
-                      <Rect x={width / 4 - 170} y={height + 280} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
-                      <Rect x={width / 4 - 210} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
-                      <Rect x={width / 4 + 175} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect
+                        x={width / 4 - 190}
+                        y={height + 50}
+                        width={380}
+                        height={320}
+                        fill="#1e293b"
+                        stroke="#475569"
+                        strokeWidth={12}
+                        cornerRadius={45}
+                      />
+                      <Rect
+                        x={width / 4 - 170}
+                        y={height + 280}
+                        width={340}
+                        height={75}
+                        fill="#0f172a"
+                        stroke="#64748b"
+                        strokeWidth={10}
+                        cornerRadius={35}
+                      />
+                      <Rect
+                        x={width / 4 - 210}
+                        y={height + 130}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
+                      <Rect
+                        x={width / 4 + 175}
+                        y={height + 130}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
 
                       {/* Chaise 3 (Bottom-Right) */}
-                      <Rect x={(3 * width) / 4 - 190} y={height + 50} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
-                      <Rect x={(3 * width) / 4 - 170} y={height + 280} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
-                      <Rect x={(3 * width) / 4 - 210} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
-                      <Rect x={(3 * width) / 4 + 175} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect
+                        x={(3 * width) / 4 - 190}
+                        y={height + 50}
+                        width={380}
+                        height={320}
+                        fill="#1e293b"
+                        stroke="#475569"
+                        strokeWidth={12}
+                        cornerRadius={45}
+                      />
+                      <Rect
+                        x={(3 * width) / 4 - 170}
+                        y={height + 280}
+                        width={340}
+                        height={75}
+                        fill="#0f172a"
+                        stroke="#64748b"
+                        strokeWidth={10}
+                        cornerRadius={35}
+                      />
+                      <Rect
+                        x={(3 * width) / 4 - 210}
+                        y={height + 130}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
+                      <Rect
+                        x={(3 * width) / 4 + 175}
+                        y={height + 130}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
                     </Group>
                   )}
                 </Group>
@@ -1114,20 +1412,71 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               {!isMeeting && isBenchDouble && (
                 <Group listening={false}>
                   {/* Écran & Clavier Place 0 (Haut) */}
-                  <Rect x={width / 2 - 210} y={height / 2 - 120} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={width / 2 - 45} y={height / 2 - 82} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={width / 2 - 160} y={80} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect
+                    x={width / 2 - 210}
+                    y={height / 2 - 120}
+                    width={420}
+                    height={38}
+                    fill="#0284c7"
+                    stroke="#38bdf8"
+                    strokeWidth={7}
+                    cornerRadius={6}
+                  />
+                  <Rect
+                    x={width / 2 - 45}
+                    y={height / 2 - 82}
+                    width={90}
+                    height={22}
+                    fill="#475569"
+                    cornerRadius={5}
+                  />
+                  <Rect
+                    x={width / 2 - 160}
+                    y={80}
+                    width={320}
+                    height={95}
+                    fill="#1e293b"
+                    stroke="#334155"
+                    strokeWidth={7}
+                    cornerRadius={8}
+                  />
 
                   {/* Écran & Clavier Place 1 (Bas) */}
-                  <Rect x={width / 2 - 210} y={height / 2 + 82} width={420} height={38} fill="#0284c7" stroke="#38bdf8" strokeWidth={7} cornerRadius={6} />
-                  <Rect x={width / 2 - 45} y={height / 2 + 60} width={90} height={22} fill="#475569" cornerRadius={5} />
-                  <Rect x={width / 2 - 160} y={height - 175} width={320} height={95} fill="#1e293b" stroke="#334155" strokeWidth={7} cornerRadius={8} />
+                  <Rect
+                    x={width / 2 - 210}
+                    y={height / 2 + 82}
+                    width={420}
+                    height={38}
+                    fill="#0284c7"
+                    stroke="#38bdf8"
+                    strokeWidth={7}
+                    cornerRadius={6}
+                  />
+                  <Rect
+                    x={width / 2 - 45}
+                    y={height / 2 + 60}
+                    width={90}
+                    height={22}
+                    fill="#475569"
+                    cornerRadius={5}
+                  />
+                  <Rect
+                    x={width / 2 - 160}
+                    y={height - 175}
+                    width={320}
+                    height={95}
+                    fill="#1e293b"
+                    stroke="#334155"
+                    strokeWidth={7}
+                    cornerRadius={8}
+                  />
 
                   {/* Téléphones IP si le bureau double est équipé VoIP */}
                   {hasVoipPhone && (
                     <Group listening={false}>
                       {renderVoipPhone(width / 2 + 250, height / 2 - 120, 0)}
-                      {desk.seats?.[1]?.fullName && renderVoipPhone(width / 2 + 250, height / 2 + 120, 180)}
+                      {desk.seats?.[1]?.fullName &&
+                        renderVoipPhone(width / 2 + 250, height / 2 + 120, 180)}
                     </Group>
                   )}
 
@@ -1135,16 +1484,80 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   {desk.chairPosition !== "NONE" && (
                     <Group listening={false}>
                       {/* Chaise 0 (Top) */}
-                      <Rect x={width / 2 - 190} y={-380} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
-                      <Rect x={width / 2 - 170} y={-360} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
-                      <Rect x={width / 2 - 210} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
-                      <Rect x={width / 2 + 175} y={-300} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect
+                        x={width / 2 - 190}
+                        y={-380}
+                        width={380}
+                        height={320}
+                        fill="#1e293b"
+                        stroke="#475569"
+                        strokeWidth={12}
+                        cornerRadius={45}
+                      />
+                      <Rect
+                        x={width / 2 - 170}
+                        y={-360}
+                        width={340}
+                        height={75}
+                        fill="#0f172a"
+                        stroke="#64748b"
+                        strokeWidth={10}
+                        cornerRadius={35}
+                      />
+                      <Rect
+                        x={width / 2 - 210}
+                        y={-300}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
+                      <Rect
+                        x={width / 2 + 175}
+                        y={-300}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
 
                       {/* Chaise 1 (Bottom) */}
-                      <Rect x={width / 2 - 190} y={height + 50} width={380} height={320} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={45} />
-                      <Rect x={width / 2 - 170} y={height + 280} width={340} height={75} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={35} />
-                      <Rect x={width / 2 - 210} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
-                      <Rect x={width / 2 + 175} y={height + 130} width={35} height={160} fill="#334155" cornerRadius={12} />
+                      <Rect
+                        x={width / 2 - 190}
+                        y={height + 50}
+                        width={380}
+                        height={320}
+                        fill="#1e293b"
+                        stroke="#475569"
+                        strokeWidth={12}
+                        cornerRadius={45}
+                      />
+                      <Rect
+                        x={width / 2 - 170}
+                        y={height + 280}
+                        width={340}
+                        height={75}
+                        fill="#0f172a"
+                        stroke="#64748b"
+                        strokeWidth={10}
+                        cornerRadius={35}
+                      />
+                      <Rect
+                        x={width / 2 - 210}
+                        y={height + 130}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
+                      <Rect
+                        x={width / 2 + 175}
+                        y={height + 130}
+                        width={35}
+                        height={160}
+                        fill="#334155"
+                        cornerRadius={12}
+                      />
                     </Group>
                   )}
                 </Group>
@@ -1153,10 +1566,35 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               {!isMeeting && !isBenchDouble && !isBenchQuad && (
                 <Group listening={false}>
                   {/* Écran Principal Solo */}
-                  <Rect x={width / 2 - 220} y={80} width={440} height={40} fill="#0284c7" stroke="#38bdf8" strokeWidth={8} cornerRadius={6} />
-                  <Rect x={width / 2 - 50} y={55} width={100} height={25} fill="#475569" cornerRadius={5} />
+                  <Rect
+                    x={width / 2 - 220}
+                    y={80}
+                    width={440}
+                    height={40}
+                    fill="#0284c7"
+                    stroke="#38bdf8"
+                    strokeWidth={8}
+                    cornerRadius={6}
+                  />
+                  <Rect
+                    x={width / 2 - 50}
+                    y={55}
+                    width={100}
+                    height={25}
+                    fill="#475569"
+                    cornerRadius={5}
+                  />
                   {/* Clavier Solo */}
-                  <Rect x={width / 2 - 180} y={170} width={360} height={110} fill="#1e293b" stroke="#334155" strokeWidth={8} cornerRadius={8} />
+                  <Rect
+                    x={width / 2 - 180}
+                    y={170}
+                    width={360}
+                    height={110}
+                    fill="#1e293b"
+                    stroke="#334155"
+                    strokeWidth={8}
+                    cornerRadius={8}
+                  />
 
                   {/* Téléphone IP sur bureau Solo */}
                   {hasVoipPhone && renderVoipPhone(width / 2 + 260, 140, 15)}
@@ -1164,10 +1602,42 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   {/* Fauteuil Solo Ergonomique */}
                   {desk.chairPosition !== "NONE" && (
                     <Group listening={false}>
-                      <Rect x={width / 2 - 200} y={height + 50} width={400} height={350} fill="#1e293b" stroke="#475569" strokeWidth={12} cornerRadius={50} />
-                      <Rect x={width / 2 - 180} y={height + 280} width={360} height={90} fill="#0f172a" stroke="#64748b" strokeWidth={10} cornerRadius={40} />
-                      <Rect x={width / 2 - 220} y={height + 110} width={40} height={180} fill="#334155" cornerRadius={15} />
-                      <Rect x={width / 2 + 180} y={height + 110} width={40} height={180} fill="#334155" cornerRadius={15} />
+                      <Rect
+                        x={width / 2 - 200}
+                        y={height + 50}
+                        width={400}
+                        height={350}
+                        fill="#1e293b"
+                        stroke="#475569"
+                        strokeWidth={12}
+                        cornerRadius={50}
+                      />
+                      <Rect
+                        x={width / 2 - 180}
+                        y={height + 280}
+                        width={360}
+                        height={90}
+                        fill="#0f172a"
+                        stroke="#64748b"
+                        strokeWidth={10}
+                        cornerRadius={40}
+                      />
+                      <Rect
+                        x={width / 2 - 220}
+                        y={height + 110}
+                        width={40}
+                        height={180}
+                        fill="#334155"
+                        cornerRadius={15}
+                      />
+                      <Rect
+                        x={width / 2 + 180}
+                        y={height + 110}
+                        width={40}
+                        height={180}
+                        fill="#334155"
+                        cornerRadius={15}
+                      />
                     </Group>
                   )}
                 </Group>
@@ -1181,8 +1651,29 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                     <Group listening={false}>
                       {/* Badge Central Îlot */}
                       <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
-                        <Rect x={-270} y={-50} width={540} height={100} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={18} />
-                        <Text x={-260} y={-28} width={520} text={`${shortTitle} • Îlot 4P`} fontSize={60} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" wrap="none" ellipsis={true} />
+                        <Rect
+                          x={-270}
+                          y={-50}
+                          width={540}
+                          height={100}
+                          fill="rgba(10, 15, 30, 0.96)"
+                          stroke={isSelected ? "#60a5fa" : "#0284c7"}
+                          strokeWidth={6}
+                          cornerRadius={18}
+                        />
+                        <Text
+                          x={-260}
+                          y={-28}
+                          width={520}
+                          text={`${shortTitle} • Îlot 4P`}
+                          fontSize={60}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill="#38bdf8"
+                          align="center"
+                          wrap="none"
+                          ellipsis={true}
+                        />
                       </Group>
 
                       {/* 4 Grands Badges d'occupants dans les 4 quadrants (police adaptative + auto-ellipsis) */}
@@ -1200,8 +1691,23 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         const nameFontSize = nameLen > 16 ? 68 : 78;
 
                         return (
-                          <Group key={`quad-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
-                            <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.95)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
+                          <Group
+                            key={`quad-seat-${idx}`}
+                            x={cx}
+                            y={cy}
+                            rotation={-rotDeg}
+                            listening={false}
+                          >
+                            <Rect
+                              x={-bW / 2}
+                              y={-bH / 2}
+                              width={bW}
+                              height={bH}
+                              fill="rgba(15, 23, 42, 0.95)"
+                              stroke={isOccupied ? "#38bdf8" : "#475569"}
+                              strokeWidth={7}
+                              cornerRadius={18}
+                            />
                             <Text
                               x={-bW / 2 + 15}
                               y={-bH / 2 + 20}
@@ -1240,8 +1746,29 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                     <Group listening={false}>
                       {/* Badge Central Bench */}
                       <Group x={width / 2} y={height / 2} rotation={-rotDeg} listening={false}>
-                        <Rect x={-250} y={-45} width={500} height={90} fill="rgba(10, 15, 30, 0.96)" stroke={isSelected ? "#60a5fa" : "#0284c7"} strokeWidth={6} cornerRadius={16} />
-                        <Text x={-240} y={-26} width={480} text={`${shortTitle} • Bench 2P`} fontSize={56} fontFamily="sans-serif" fontStyle="bold" fill="#38bdf8" align="center" wrap="none" ellipsis={true} />
+                        <Rect
+                          x={-250}
+                          y={-45}
+                          width={500}
+                          height={90}
+                          fill="rgba(10, 15, 30, 0.96)"
+                          stroke={isSelected ? "#60a5fa" : "#0284c7"}
+                          strokeWidth={6}
+                          cornerRadius={16}
+                        />
+                        <Text
+                          x={-240}
+                          y={-26}
+                          width={480}
+                          text={`${shortTitle} • Bench 2P`}
+                          fontSize={56}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill="#38bdf8"
+                          align="center"
+                          wrap="none"
+                          ellipsis={true}
+                        />
                       </Group>
 
                       {/* 2 Grands Badges d'occupants (Face Nord, Face Sud) */}
@@ -1257,8 +1784,23 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         const nameFontSize = nameLen > 16 ? 70 : 80;
 
                         return (
-                          <Group key={`double-seat-${idx}`} x={cx} y={cy} rotation={-rotDeg} listening={false}>
-                            <Rect x={-bW / 2} y={-bH / 2} width={bW} height={bH} fill="rgba(15, 23, 42, 0.95)" stroke={isOccupied ? "#38bdf8" : "#475569"} strokeWidth={7} cornerRadius={18} />
+                          <Group
+                            key={`double-seat-${idx}`}
+                            x={cx}
+                            y={cy}
+                            rotation={-rotDeg}
+                            listening={false}
+                          >
+                            <Rect
+                              x={-bW / 2}
+                              y={-bH / 2}
+                              width={bW}
+                              height={bH}
+                              fill="rgba(15, 23, 42, 0.95)"
+                              stroke={isOccupied ? "#38bdf8" : "#475569"}
+                              strokeWidth={7}
+                              cornerRadius={18}
+                            />
                             <Text
                               x={-bW / 2 + 15}
                               y={-bH / 2 + 20}
@@ -1317,12 +1859,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 }
 
                 return (
-                  <Group
-                    x={groupX}
-                    y={groupY}
-                    rotation={-rotDeg}
-                    listening={false}
-                  >
+                  <Group x={groupX} y={groupY} rotation={-rotDeg} listening={false}>
                     <Rect
                       x={-badgeWidth / 2}
                       y={-badgeHeight / 2}
@@ -1352,11 +1889,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                       x={-badgeWidth / 2 + 15}
                       y={-badgeHeight / 2 + 115}
                       width={badgeWidth - 30}
-                      text={
-                        desk.assignedPerson
-                          ? `👤 ${desk.assignedPerson}`
-                          : "👤 Poste Libre"
-                      }
+                      text={desk.assignedPerson ? `👤 ${desk.assignedPerson}` : "👤 Poste Libre"}
                       fontSize={personFontSize}
                       fontFamily="sans-serif"
                       fontStyle={desk.assignedPerson ? "bold" : "normal"}
@@ -1431,8 +1964,10 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
           // Rendu Boîte de Sol encastrée (Nourrice inox 4x RJ45)
           if (isFloorBox) {
-            const vlan20Color = vlanStyles?.[20]?.color ?? DEFAULT_VLAN_STYLES[20]?.color ?? "#38bdf8";
-            const vlan30Color = vlanStyles?.[30]?.color ?? DEFAULT_VLAN_STYLES[30]?.color ?? "#a855f7";
+            const vlan20Color =
+              vlanStyles?.[20]?.color ?? DEFAULT_VLAN_STYLES[20]?.color ?? "#38bdf8";
+            const vlan30Color =
+              vlanStyles?.[30]?.color ?? DEFAULT_VLAN_STYLES[30]?.color ?? "#a855f7";
 
             return (
               <Group
@@ -1466,71 +2001,146 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   listening={false}
                 />
                 {/* 4 Connecteurs RJ45 avec contour couleur VLAN et statut vert/rouge */}
-                <Rect x={-80} y={-80} width={65} height={65} fill="#0f172a" stroke={vlan20Color} strokeWidth={6} cornerRadius={8} listening={false} />
-                <Circle x={-47} y={-47} radius={8} fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"} listening={false} />
+                <Rect
+                  x={-80}
+                  y={-80}
+                  width={65}
+                  height={65}
+                  fill="#0f172a"
+                  stroke={vlan20Color}
+                  strokeWidth={6}
+                  cornerRadius={8}
+                  listening={false}
+                />
+                <Circle
+                  x={-47}
+                  y={-47}
+                  radius={8}
+                  fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"}
+                  listening={false}
+                />
 
-                <Rect x={15} y={-80} width={65} height={65} fill="#0f172a" stroke={vlan20Color} strokeWidth={6} cornerRadius={8} listening={false} />
-                <Circle x={47} y={-47} radius={8} fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"} listening={false} />
+                <Rect
+                  x={15}
+                  y={-80}
+                  width={65}
+                  height={65}
+                  fill="#0f172a"
+                  stroke={vlan20Color}
+                  strokeWidth={6}
+                  cornerRadius={8}
+                  listening={false}
+                />
+                <Circle
+                  x={47}
+                  y={-47}
+                  radius={8}
+                  fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"}
+                  listening={false}
+                />
 
-                <Rect x={-80} y={15} width={65} height={65} fill="#0f172a" stroke={vlan30Color} strokeWidth={6} cornerRadius={8} listening={false} />
-                <Circle x={-47} y={47} radius={8} fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"} listening={false} />
+                <Rect
+                  x={-80}
+                  y={15}
+                  width={65}
+                  height={65}
+                  fill="#0f172a"
+                  stroke={vlan30Color}
+                  strokeWidth={6}
+                  cornerRadius={8}
+                  listening={false}
+                />
+                <Circle
+                  x={-47}
+                  y={47}
+                  radius={8}
+                  fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"}
+                  listening={false}
+                />
 
-                <Rect x={15} y={15} width={65} height={65} fill="#0f172a" stroke={vlan30Color} strokeWidth={6} cornerRadius={8} listening={false} />
-                <Circle x={47} y={47} radius={8} fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"} listening={false} />
+                <Rect
+                  x={15}
+                  y={15}
+                  width={65}
+                  height={65}
+                  fill="#0f172a"
+                  stroke={vlan30Color}
+                  strokeWidth={6}
+                  cornerRadius={8}
+                  listening={false}
+                />
+                <Circle
+                  x={47}
+                  y={47}
+                  radius={8}
+                  fill={outlet.pingStatus === "ONLINE" ? "#22c55e" : "#ef4444"}
+                  listening={false}
+                />
 
                 {/* Passe-câbles brosse */}
-                <Rect x={-80} y={-100} width={160} height={12} fill="#000" cornerRadius={4} listening={false} />
+                <Rect
+                  x={-80}
+                  y={-100}
+                  width={160}
+                  height={12}
+                  fill="#000"
+                  cornerRadius={4}
+                  listening={false}
+                />
 
                 {/* Libellé Boîte de Sol (au survol / sélection / global) */}
-                {shouldShowOutletLabel && (() => {
-                  const badgeHeight = 88;
-                  const textFontSize = 50;
-                  const badgeWidth = 520;
-                  const labelPos = outlet.labelPosition || "RIGHT";
-                  const { x: groupX, y: groupY } = getLabelCoordinates(
-                    labelPos,
-                    300,
-                    300,
-                    badgeWidth,
-                    badgeHeight,
-                    20
-                  );
+                {shouldShowOutletLabel &&
+                  (() => {
+                    const badgeHeight = 88;
+                    const textFontSize = 50;
+                    const badgeWidth = 520;
+                    const labelPos = outlet.labelPosition || "RIGHT";
+                    const { x: groupX, y: groupY } = getLabelCoordinates(
+                      labelPos,
+                      300,
+                      300,
+                      badgeWidth,
+                      badgeHeight,
+                      20
+                    );
 
-                  return (
-                    <Group x={groupX} y={groupY} listening={false}>
-                      <Rect
-                        x={0}
-                        y={0}
-                        width={badgeWidth}
-                        height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.96)"
-                        stroke={isSelected ? "#ffffff" : isLinked ? "#38bdf8" : "#475569"}
-                        strokeWidth={isSelected ? 6 : 4}
-                        cornerRadius={14}
-                      />
-                      <Text
-                        x={18}
-                        y={(badgeHeight - textFontSize) / 2}
-                        width={badgeWidth - 36}
-                        text="📦 Boîte de Sol (4x RJ45)"
-                        fontSize={textFontSize}
-                        fontFamily="sans-serif"
-                        fontStyle="bold"
-                        fill={isSelected ? "#ffffff" : "#38bdf8"}
-                        wrap="none"
-                        ellipsis={true}
-                      />
-                    </Group>
-                  );
-                })()}
+                    return (
+                      <Group x={groupX} y={groupY} listening={false}>
+                        <Rect
+                          x={0}
+                          y={0}
+                          width={badgeWidth}
+                          height={badgeHeight}
+                          fill="rgba(15, 23, 42, 0.96)"
+                          stroke={isSelected ? "#ffffff" : isLinked ? "#38bdf8" : "#475569"}
+                          strokeWidth={isSelected ? 6 : 4}
+                          cornerRadius={14}
+                        />
+                        <Text
+                          x={18}
+                          y={(badgeHeight - textFontSize) / 2}
+                          width={badgeWidth - 36}
+                          text="📦 Boîte de Sol (4x RJ45)"
+                          fontSize={textFontSize}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill={isSelected ? "#ffffff" : "#38bdf8"}
+                          wrap="none"
+                          ellipsis={true}
+                        />
+                      </Group>
+                    );
+                  })()}
               </Group>
             );
           }
 
           // Rendu Borne Wi-Fi Ceiling AP
           if (isWifiAp) {
-            const vlan50Color = vlanStyles?.[50]?.color ?? DEFAULT_VLAN_STYLES[50]?.color ?? "#6366f1";
-            const isConnected = outlet.isPatched !== undefined ? outlet.isPatched : (outlet.pingStatus === "ONLINE");
+            const vlan50Color =
+              vlanStyles?.[50]?.color ?? DEFAULT_VLAN_STYLES[50]?.color ?? "#6366f1";
+            const isConnected =
+              outlet.isPatched !== undefined ? outlet.isPatched : outlet.pingStatus === "ONLINE";
             const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
             return (
@@ -1542,7 +2152,14 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 {...interactiveProps}
               >
                 {/* Onde radio Wi-Fi externe */}
-                <Circle radius={180} stroke={vlan50Color} strokeWidth={10} dash={[30, 20]} opacity={0.6} listening={false} />
+                <Circle
+                  radius={180}
+                  stroke={vlan50Color}
+                  strokeWidth={10}
+                  dash={[30, 20]}
+                  opacity={0.6}
+                  listening={false}
+                />
                 {/* Dôme plafonnier avec contour VLAN */}
                 <Circle
                   radius={120}
@@ -1554,55 +2171,58 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 <Circle radius={25} fill={statusColor} listening={false} />
 
                 {/* Libellé Wi-Fi (au survol / sélection / global) */}
-                {shouldShowOutletLabel && (() => {
-                  const badgeHeight = 88;
-                  const textFontSize = 50;
-                  const badgeWidth = 480;
-                  const labelPos = outlet.labelPosition || "RIGHT";
-                  const { x: groupX, y: groupY } = getLabelCoordinates(
-                    labelPos,
-                    260,
-                    260,
-                    badgeWidth,
-                    badgeHeight,
-                    20
-                  );
+                {shouldShowOutletLabel &&
+                  (() => {
+                    const badgeHeight = 88;
+                    const textFontSize = 50;
+                    const badgeWidth = 480;
+                    const labelPos = outlet.labelPosition || "RIGHT";
+                    const { x: groupX, y: groupY } = getLabelCoordinates(
+                      labelPos,
+                      260,
+                      260,
+                      badgeWidth,
+                      badgeHeight,
+                      20
+                    );
 
-                  return (
-                    <Group x={groupX} y={groupY} listening={false}>
-                      <Rect
-                        x={0}
-                        y={0}
-                        width={badgeWidth}
-                        height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.96)"
-                        stroke={isSelected ? "#ffffff" : vlan50Color}
-                        strokeWidth={isSelected ? 6 : 4}
-                        cornerRadius={14}
-                      />
-                      <Text
-                        x={18}
-                        y={(badgeHeight - textFontSize) / 2}
-                        width={badgeWidth - 36}
-                        text="📡 Wi-Fi 6 • Plafonnier"
-                        fontSize={textFontSize}
-                        fontFamily="sans-serif"
-                        fontStyle="bold"
-                        fill={isSelected ? "#ffffff" : "#c7d2fe"}
-                        wrap="none"
-                        ellipsis={true}
-                      />
-                    </Group>
-                  );
-                })()}
+                    return (
+                      <Group x={groupX} y={groupY} listening={false}>
+                        <Rect
+                          x={0}
+                          y={0}
+                          width={badgeWidth}
+                          height={badgeHeight}
+                          fill="rgba(15, 23, 42, 0.96)"
+                          stroke={isSelected ? "#ffffff" : vlan50Color}
+                          strokeWidth={isSelected ? 6 : 4}
+                          cornerRadius={14}
+                        />
+                        <Text
+                          x={18}
+                          y={(badgeHeight - textFontSize) / 2}
+                          width={badgeWidth - 36}
+                          text="📡 Wi-Fi 6 • Plafonnier"
+                          fontSize={textFontSize}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill={isSelected ? "#ffffff" : "#c7d2fe"}
+                          wrap="none"
+                          ellipsis={true}
+                        />
+                      </Group>
+                    );
+                  })()}
               </Group>
             );
           }
 
           // Rendu Copieur / Imprimante Réseau
           if (isPrinter) {
-            const vlan40Color = vlanStyles?.[40]?.color ?? DEFAULT_VLAN_STYLES[40]?.color ?? "#f59e0b";
-            const isConnected = outlet.isPatched !== undefined ? outlet.isPatched : (outlet.pingStatus === "ONLINE");
+            const vlan40Color =
+              vlanStyles?.[40]?.color ?? DEFAULT_VLAN_STYLES[40]?.color ?? "#f59e0b";
+            const isConnected =
+              outlet.isPatched !== undefined ? outlet.isPatched : outlet.pingStatus === "ONLINE";
             const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
             return (
@@ -1625,53 +2245,72 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   cornerRadius={25}
                 />
                 {/* Vitre scanner & bac papier */}
-                <Rect x={-160} y={-140} width={320} height={180} fill="#0f172a" stroke="#b45309" strokeWidth={10} cornerRadius={10} listening={false} />
-                <Rect x={-160} y={70} width={320} height={70} fill="#334155" cornerRadius={6} listening={false} />
+                <Rect
+                  x={-160}
+                  y={-140}
+                  width={320}
+                  height={180}
+                  fill="#0f172a"
+                  stroke="#b45309"
+                  strokeWidth={10}
+                  cornerRadius={10}
+                  listening={false}
+                />
+                <Rect
+                  x={-160}
+                  y={70}
+                  width={320}
+                  height={70}
+                  fill="#334155"
+                  cornerRadius={6}
+                  listening={false}
+                />
                 {/* Voyant LED de statut vert ou rouge */}
                 <Circle x={140} y={-115} radius={14} fill={statusColor} listening={false} />
 
                 {/* Libellé Copieur (au survol / sélection / global) */}
-                {shouldShowOutletLabel && (() => {
-                  const badgeHeight = 88;
-                  const textFontSize = 50;
-                  const badgeWidth = 440;
-                  const labelPos = outlet.labelPosition || "RIGHT";
-                  const { x: groupX, y: groupY } = getLabelCoordinates(
-                    labelPos,
-                    400,
-                    350,
-                    badgeWidth,
-                    badgeHeight,
-                    20
-                  );
+                {shouldShowOutletLabel &&
+                  (() => {
+                    const badgeHeight = 88;
+                    const textFontSize = 50;
+                    const badgeWidth = 440;
+                    const labelPos = outlet.labelPosition || "RIGHT";
+                    const { x: groupX, y: groupY } = getLabelCoordinates(
+                      labelPos,
+                      400,
+                      350,
+                      badgeWidth,
+                      badgeHeight,
+                      20
+                    );
 
-                  return (
-                    <Group x={groupX} y={groupY} listening={false}>
-                      <Rect
-                        x={0}
-                        y={0}
-                        width={badgeWidth}
-                        height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.96)"
-                        stroke={isSelected ? "#ffffff" : "#d97706"}
-                        strokeWidth={isSelected ? 6 : 4}
-                        cornerRadius={14}
-                      />
-                      <Text
-                        x={18}
-                        y={(badgeHeight - textFontSize) / 2}
-                        width={badgeWidth - 36}
-                        text="🖨️ Copieur RH"
-                        fontSize={textFontSize}
-                        fontFamily="sans-serif"
-                        fontStyle="bold"
-                        fill={isSelected ? "#ffffff" : "#fbbf24"}
-                        wrap="none"
-                        ellipsis={true}
-                      />
-                    </Group>
-                  );
-                })()}
+                    return (
+                      <Group x={groupX} y={groupY} listening={false}>
+                        <Rect
+                          x={0}
+                          y={0}
+                          width={badgeWidth}
+                          height={badgeHeight}
+                          fill="rgba(15, 23, 42, 0.96)"
+                          stroke={isSelected ? "#ffffff" : "#d97706"}
+                          strokeWidth={isSelected ? 6 : 4}
+                          cornerRadius={14}
+                        />
+                        <Text
+                          x={18}
+                          y={(badgeHeight - textFontSize) / 2}
+                          width={badgeWidth - 36}
+                          text="🖨️ Copieur RH"
+                          fontSize={textFontSize}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill={isSelected ? "#ffffff" : "#fbbf24"}
+                          wrap="none"
+                          ellipsis={true}
+                        />
+                      </Group>
+                    );
+                  })()}
               </Group>
             );
           }
@@ -1728,20 +2367,20 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 {outlet.stackedPorts.map((sp, idx) => {
                   const col = isTwoColumns ? (idx % 2 === 0 ? 0 : 1) : 0;
                   const row = isTwoColumns ? Math.floor(idx / 2) : idx;
-                  const portX = isTwoColumns
-                    ? (col === 0 ? -blockWidth / 4 : blockWidth / 4)
-                    : 0;
+                  const portX = isTwoColumns ? (col === 0 ? -blockWidth / 4 : blockWidth / 4) : 0;
                   const portY = -blockHeight / 2 + 70 + row * 82;
 
                   const portVlan = sp.vlanId ?? outlet.vlanId ?? 20;
                   const vlanColor =
-                    vlanStyles?.[portVlan]?.color ?? DEFAULT_VLAN_STYLES[portVlan]?.color ?? "#38bdf8";
+                    vlanStyles?.[portVlan]?.color ??
+                    DEFAULT_VLAN_STYLES[portVlan]?.color ??
+                    "#38bdf8";
                   const isConnected =
                     sp.isPatched !== undefined
                       ? sp.isPatched
                       : outlet.isPatched !== undefined
-                      ? outlet.isPatched
-                      : sp.pingStatus === "ONLINE";
+                        ? outlet.isPatched
+                        : sp.pingStatus === "ONLINE";
                   const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
                   return (
@@ -1793,61 +2432,64 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 })}
 
                 {/* Cartouche d'identification (visible au survol, si sélectionné, ou si global) */}
-                {shouldShowOutletLabel && (() => {
-                  const icon = outlet.customEmote || "🔲";
-                  const poeText =
-                    outlet.poeMode === "POE_PLUS_PLUS"
-                      ? " • ⚡PoE++"
-                      : outlet.poeMode === "POE_PLUS"
-                      ? " • ⚡PoE+"
-                      : outlet.poeMode === "POE"
-                      ? " • ⚡PoE"
-                      : "";
-                  const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
-                  const title = `${icon} Colonnette (${portsCount}P)${poeText}${vlanText} • ${outlet.name}`;
-                  const badgeHeight = 88;
-                  const textFontSize = 50;
-                  const badgeWidth = Math.min(950, Math.max(380, title.length * 28 + 60));
-                  const labelPos = outlet.labelPosition || "RIGHT";
-                  const colonnetteVlan = outlet.vlanId ?? outlet.stackedPorts?.[0]?.vlanId ?? 20;
-                  const badgeVlanColor =
-                    vlanStyles?.[colonnetteVlan]?.color ?? DEFAULT_VLAN_STYLES[colonnetteVlan]?.color ?? "#38bdf8";
-                  const { x: groupX, y: groupY } = getLabelCoordinates(
-                    labelPos,
-                    blockWidth,
-                    blockHeight,
-                    badgeWidth,
-                    badgeHeight,
-                    25
-                  );
+                {shouldShowOutletLabel &&
+                  (() => {
+                    const icon = outlet.customEmote || "🔲";
+                    const poeText =
+                      outlet.poeMode === "POE_PLUS_PLUS"
+                        ? " • ⚡PoE++"
+                        : outlet.poeMode === "POE_PLUS"
+                          ? " • ⚡PoE+"
+                          : outlet.poeMode === "POE"
+                            ? " • ⚡PoE"
+                            : "";
+                    const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
+                    const title = `${icon} Colonnette (${portsCount}P)${poeText}${vlanText} • ${outlet.name}`;
+                    const badgeHeight = 88;
+                    const textFontSize = 50;
+                    const badgeWidth = Math.min(950, Math.max(380, title.length * 28 + 60));
+                    const labelPos = outlet.labelPosition || "RIGHT";
+                    const colonnetteVlan = outlet.vlanId ?? outlet.stackedPorts?.[0]?.vlanId ?? 20;
+                    const badgeVlanColor =
+                      vlanStyles?.[colonnetteVlan]?.color ??
+                      DEFAULT_VLAN_STYLES[colonnetteVlan]?.color ??
+                      "#38bdf8";
+                    const { x: groupX, y: groupY } = getLabelCoordinates(
+                      labelPos,
+                      blockWidth,
+                      blockHeight,
+                      badgeWidth,
+                      badgeHeight,
+                      25
+                    );
 
-                  return (
-                    <Group x={groupX} y={groupY} listening={false}>
-                      <Rect
-                        x={0}
-                        y={0}
-                        width={badgeWidth}
-                        height={badgeHeight}
-                        fill="rgba(15, 23, 42, 0.96)"
-                        stroke={isSelected ? "#ffffff" : badgeVlanColor}
-                        strokeWidth={isSelected ? 6 : 4}
-                        cornerRadius={14}
-                      />
-                      <Text
-                        x={18}
-                        y={(badgeHeight - textFontSize) / 2}
-                        width={badgeWidth - 36}
-                        text={title}
-                        fontSize={textFontSize}
-                        fontFamily="sans-serif"
-                        fontStyle="bold"
-                        fill={isSelected ? "#ffffff" : "#38bdf8"}
-                        wrap="none"
-                        ellipsis={true}
-                      />
-                    </Group>
-                  );
-                })()}
+                    return (
+                      <Group x={groupX} y={groupY} listening={false}>
+                        <Rect
+                          x={0}
+                          y={0}
+                          width={badgeWidth}
+                          height={badgeHeight}
+                          fill="rgba(15, 23, 42, 0.96)"
+                          stroke={isSelected ? "#ffffff" : badgeVlanColor}
+                          strokeWidth={isSelected ? 6 : 4}
+                          cornerRadius={14}
+                        />
+                        <Text
+                          x={18}
+                          y={(badgeHeight - textFontSize) / 2}
+                          width={badgeWidth - 36}
+                          text={title}
+                          fontSize={textFontSize}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill={isSelected ? "#ffffff" : "#38bdf8"}
+                          wrap="none"
+                          ellipsis={true}
+                        />
+                      </Group>
+                    );
+                  })()}
               </Group>
             );
           }
@@ -1857,8 +2499,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
           const roleIcon = outlet.customEmote || (isVoipRole ? "📞" : "🔌");
           const vlanId = outlet.vlanId ?? (isVoipRole ? 30 : 20);
           const vlanColor =
-            vlanStyles?.[vlanId]?.color ?? DEFAULT_VLAN_STYLES[vlanId]?.color ?? (isVoipRole ? "#c084fc" : "#38bdf8");
-          const isConnected = outlet.isPatched !== undefined ? outlet.isPatched : (outlet.pingStatus === "ONLINE");
+            vlanStyles?.[vlanId]?.color ??
+            DEFAULT_VLAN_STYLES[vlanId]?.color ??
+            (isVoipRole ? "#c084fc" : "#38bdf8");
+          const isConnected =
+            outlet.isPatched !== undefined ? outlet.isPatched : outlet.pingStatus === "ONLINE";
           const statusColor = isConnected ? "#22c55e" : "#ef4444";
 
           return (
@@ -1931,68 +2576,69 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               />
 
               {/* Cartouche d'identification (visible au survol, si sélectionné ou global) */}
-              {shouldShowOutletLabel && (() => {
-                const poeText =
-                  outlet.poeMode === "POE_PLUS_PLUS"
-                    ? " ⚡PoE++"
-                    : outlet.poeMode === "POE_PLUS"
-                    ? " ⚡PoE+"
-                    : outlet.poeMode === "POE"
-                    ? " ⚡PoE"
-                    : "";
-                const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
+              {shouldShowOutletLabel &&
+                (() => {
+                  const poeText =
+                    outlet.poeMode === "POE_PLUS_PLUS"
+                      ? " ⚡PoE++"
+                      : outlet.poeMode === "POE_PLUS"
+                        ? " ⚡PoE+"
+                        : outlet.poeMode === "POE"
+                          ? " ⚡PoE"
+                          : "";
+                  const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
 
-                let shortOutletText = "";
-                if (outlet.assignedPerson) {
-                  shortOutletText = `${roleIcon} ${outlet.assignedPerson}${poeText}${vlanText}`;
-                } else {
-                  const cleanName = outlet.name
-                    .replace(/^PRISE-DESK-/i, "Prise ")
-                    .replace(/^PRISE-BENCH-/i, "Prise ")
-                    .replace(/^PRISE-/i, "Prise ");
-                  shortOutletText = `${roleIcon} ${cleanName}${poeText}${vlanText}`;
-                }
+                  let shortOutletText = "";
+                  if (outlet.assignedPerson) {
+                    shortOutletText = `${roleIcon} ${outlet.assignedPerson}${poeText}${vlanText}`;
+                  } else {
+                    const cleanName = outlet.name
+                      .replace(/^PRISE-DESK-/i, "Prise ")
+                      .replace(/^PRISE-BENCH-/i, "Prise ")
+                      .replace(/^PRISE-/i, "Prise ");
+                    shortOutletText = `${roleIcon} ${cleanName}${poeText}${vlanText}`;
+                  }
 
-                const badgeHeight = 88;
-                const textFontSize = 50;
-                const badgeWidth = Math.min(920, Math.max(360, shortOutletText.length * 30 + 60));
-                const labelPos = outlet.labelPosition || "RIGHT";
-                const { x: groupX, y: groupY } = getLabelCoordinates(
-                  labelPos,
-                  220,
-                  220,
-                  badgeWidth,
-                  badgeHeight,
-                  20
-                );
+                  const badgeHeight = 88;
+                  const textFontSize = 50;
+                  const badgeWidth = Math.min(920, Math.max(360, shortOutletText.length * 30 + 60));
+                  const labelPos = outlet.labelPosition || "RIGHT";
+                  const { x: groupX, y: groupY } = getLabelCoordinates(
+                    labelPos,
+                    220,
+                    220,
+                    badgeWidth,
+                    badgeHeight,
+                    20
+                  );
 
-                return (
-                  <Group x={groupX} y={groupY} listening={false}>
-                    <Rect
-                      x={0}
-                      y={0}
-                      width={badgeWidth}
-                      height={badgeHeight}
-                      fill="rgba(15, 23, 42, 0.96)"
-                      stroke={isSelected ? "#ffffff" : isLinked ? vlanColor : "#475569"}
-                      strokeWidth={isSelected ? 6 : 4}
-                      cornerRadius={14}
-                    />
-                    <Text
-                      x={18}
-                      y={(badgeHeight - textFontSize) / 2}
-                      width={badgeWidth - 36}
-                      text={shortOutletText}
-                      fontSize={textFontSize}
-                      fontFamily="sans-serif"
-                      fontStyle="bold"
-                      fill={isSelected ? "#ffffff" : vlanColor}
-                      wrap="none"
-                      ellipsis={true}
-                    />
-                  </Group>
-                );
-              })()}
+                  return (
+                    <Group x={groupX} y={groupY} listening={false}>
+                      <Rect
+                        x={0}
+                        y={0}
+                        width={badgeWidth}
+                        height={badgeHeight}
+                        fill="rgba(15, 23, 42, 0.96)"
+                        stroke={isSelected ? "#ffffff" : isLinked ? vlanColor : "#475569"}
+                        strokeWidth={isSelected ? 6 : 4}
+                        cornerRadius={14}
+                      />
+                      <Text
+                        x={18}
+                        y={(badgeHeight - textFontSize) / 2}
+                        width={badgeWidth - 36}
+                        text={shortOutletText}
+                        fontSize={textFontSize}
+                        fontFamily="sans-serif"
+                        fontStyle="bold"
+                        fill={isSelected ? "#ffffff" : vlanColor}
+                        wrap="none"
+                        ellipsis={true}
+                      />
+                    </Group>
+                  );
+                })()}
             </Group>
           );
         })}

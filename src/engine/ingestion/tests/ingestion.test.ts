@@ -46,7 +46,9 @@ PRISE-A01;RJ45-1;Étage 1;BAIE-01;PP-01;06;CAT6A;12.0;SW-CORE;Gi1/0/6;20;DATA
   assert(!validationCorrupt.isValid, "Le fichier corrompu doit être invalidé");
   assert(validationCorrupt.errors.length >= 4, "Au moins 4 anomalies détectées");
 
-  console.log(`   ✅ Rejet validé : ${validationCorrupt.errors.length} anomalies interceptées avec précision.`);
+  console.log(
+    `   ✅ Rejet validé : ${validationCorrupt.errors.length} anomalies interceptées avec précision.`
+  );
   validationCorrupt.errors.forEach((e) => {
     console.log(`      • [Ligne ${e.row}] [${e.code}] : ${e.message}`);
   });
@@ -78,7 +80,7 @@ PRISE-A01;RJ45-1;Étage 1;BAIE-01;PP-01;06;CAT6A;12.0;SW-CORE;Gi1/0/6;20;DATA
     const swPortNum = (posInRack % 48) + 1;
     const switchPort = `Gi1/0/${swPortNum}`;
 
-    const vlanVid = (i % 3) === 0 ? 30 : 20; // Alternance DATA (20) / VOIP (30)
+    const vlanVid = i % 3 === 0 ? 30 : 20; // Alternance DATA (20) / VOIP (30)
     const vlanName = vlanVid === 30 ? "VLAN_VOIP" : "VLAN_CORP_DATA";
 
     const lengthM = (15 + (i % 35) * 1.2).toFixed(1);
@@ -110,7 +112,9 @@ PRISE-A01;RJ45-1;Étage 1;BAIE-01;PP-01;06;CAT6A;12.0;SW-CORE;Gi1/0/6;20;DATA
 
   console.log(`   ✅ Validation achevée en ${(t1 - t0).toFixed(2)} ms.`);
   console.log(`   📊 Résumé de l'analyse :`);
-  console.log(`      • Lignes traitées : ${dryRun.summary.validRows} / ${dryRun.summary.totalRows}`);
+  console.log(
+    `      • Lignes traitées : ${dryRun.summary.validRows} / ${dryRun.summary.totalRows}`
+  );
   console.log(`      • Étages : ${dryRun.summary.distinctFloors}`);
   console.log(`      • Baies : ${dryRun.summary.distinctRacks}`);
   console.log(`      • Patch Panels : ${dryRun.summary.distinctPatchPanels}`);
@@ -296,11 +300,17 @@ PRISE-A01;RJ45-1;Étage 1;BAIE-01;PP-01;06;CAT6A;12.0;SW-CORE;Gi1/0/6;20;DATA
   console.log(`   ✅ Traçage complet réussi pour ${wallPortRow.node_name} :`);
   hops.forEach((h) => {
     const len = h.cableLengthMm > 0 ? ` (${h.cableLengthMm / 1000}m)` : "";
-    console.log(`      [Hop ${h.hopNumber}] [${h.transitionType}] -> ${h.nodeName} [Port: ${h.portLabel}]${len}`);
+    console.log(
+      `      [Hop ${h.hopNumber}] [${h.transitionType}] -> ${h.nodeName} [Port: ${h.portLabel}]${len}`
+    );
   });
-  console.log(`   🎯 Terminé sur : ${lastHop?.nodeName} -> VLAN VID ${lastHop?.vlanVid} (${lastHop?.vlanName})`);
+  console.log(
+    `   🎯 Terminé sur : ${lastHop?.nodeName} -> VLAN VID ${lastHop?.vlanVid} (${lastHop?.vlanName})`
+  );
 
-  console.log("\n🎉 LES 3 PILIERS DE NETFLOOR ARCHITECT SONT VERROUILLÉS ET TESTÉS DE BOUT EN BOUT !");
+  console.log(
+    "\n🎉 LES 3 PILIERS DE NETFLOOR ARCHITECT SONT VERROUILLÉS ET TESTÉS DE BOUT EN BOUT !"
+  );
 }
 
 // Exécution en tant que suite de tests Vitest si le runner est actif, ou CLI autonome avec tsx

@@ -71,7 +71,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>("sso");
   const [dsiMode, setDsiMode] = useState<"SUPERVISION" | "CONFIGURATION">("SUPERVISION");
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
-  const [discoveredDevices, setDiscoveredDevices] = useState<DeviceTelemetry[]>(MOCK_DISCOVERED_DEVICES);
+  const [discoveredDevices, setDiscoveredDevices] =
+    useState<DeviceTelemetry[]>(MOCK_DISCOVERED_DEVICES);
 
   // Chargement des paramètres depuis le localStorage au montage
   useEffect(() => {
@@ -86,7 +87,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   const [snmpIsLive, setSnmpIsLive] = useState<boolean | null>(null);
 
   const [isTestingSso, setIsTestingSso] = useState(false);
-  const [ssoTestResult, setSsoTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [ssoTestResult, setSsoTestResult] = useState<{ success: boolean; message: string } | null>(
+    null
+  );
 
   // Diagnostic Active Directory
   const [isTestingAd, setIsTestingAd] = useState(false);
@@ -109,9 +112,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   const handleUpdateSubnet = (vlanId: number, updates: Partial<SubnetDefinition>) => {
     setSettings((prev) => ({
       ...prev,
-      subnets: prev.subnets.map((sub) =>
-        sub.vlanId === vlanId ? { ...sub, ...updates } : sub
-      ),
+      subnets: prev.subnets.map((sub) => (sub.vlanId === vlanId ? { ...sub, ...updates } : sub)),
     }));
   };
 
@@ -318,10 +319,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
         target === "netbox"
           ? settings.integrations.netbox
           : target === "glpi"
-          ? settings.integrations.glpi
-          : target === "intune"
-          ? settings.integrations.intune
-          : settings.integrations.webhooks;
+            ? settings.integrations.glpi
+            : target === "intune"
+              ? settings.integrations.intune
+              : settings.integrations.webhooks;
 
       const res = await fetch("/api/integrations/test", {
         method: "POST",
@@ -374,7 +375,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     if (role === "PRINTER") targetVlan = settings.subnets.find((s) => s.vlanId === 40);
     if (role === "WIFI") targetVlan = settings.subnets.find((s) => s.vlanId === 50);
 
-    const prefix = targetVlan?.cidr ? (targetVlan.cidr.split("/")[0] ?? "10.42.20").replace(/\.\d+$/, "") : "10.42.20";
+    const prefix = targetVlan?.cidr
+      ? (targetVlan.cidr.split("/")[0] ?? "10.42.20").replace(/\.\d+$/, "")
+      : "10.42.20";
     const randomHost = Math.floor(Math.random() * 80) + 120;
     const generatedIp = `${prefix}.${randomHost}`;
 
@@ -388,7 +391,16 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
   // Export CSV IPAM
   const handleExportIpamCsv = () => {
-    const headers = ["ID", "Nom", "Type", "Rôle", "Adresse IP", "Adresse MAC", "Statut Ping", "Latence (ms)"];
+    const headers = [
+      "ID",
+      "Nom",
+      "Type",
+      "Rôle",
+      "Adresse IP",
+      "Adresse MAC",
+      "Statut Ping",
+      "Latence (ms)",
+    ];
     const rows = nodes
       .filter((n) => n.type !== "DESK")
       .map((n) => [
@@ -402,11 +414,16 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
         n.pingLatencyMs !== undefined ? `${n.pingLatencyMs}` : "N/A",
       ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `netfloor_ipam_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute(
+      "download",
+      `netfloor_ipam_export_${new Date().toISOString().slice(0, 10)}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -438,7 +455,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                Active Directory / LDAP, SSO fédéré, sondes SNMP actives, plan d'adressage IPAM et connecteurs ITSM
+                Active Directory / LDAP, SSO fédéré, sondes SNMP actives, plan d'adressage IPAM et
+                connecteurs ITSM
               </p>
             </div>
           </div>
@@ -486,9 +504,12 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
           <div className="px-6 py-2 bg-emerald-950/40 border-b border-emerald-800/40 flex items-center justify-between text-xs text-emerald-200 flex-shrink-0">
             <div className="flex items-center gap-3">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-semibold text-emerald-300">Mode Supervision Active (Lecture seule)</span>
+              <span className="font-semibold text-emerald-300">
+                Mode Supervision Active (Lecture seule)
+              </span>
               <span className="text-emerald-400/80 font-mono text-[11px]">
-                AD: {settings.sso.activeDirectory.serverHost} • SNMP: {discoveredDevices.length} équipements surveillés • {settings.subnets.length} VLANs IPAM
+                AD: {settings.sso.activeDirectory.serverHost} • SNMP: {discoveredDevices.length}{" "}
+                équipements surveillés • {settings.subnets.length} VLANs IPAM
               </span>
             </div>
             <button
@@ -572,7 +593,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         </span>
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
-                        Sélectionnez l'annuaire d'entreprise utilisé pour l'authentification et l'attribution des postes
+                        Sélectionnez l'annuaire d'entreprise utilisé pour l'authentification et
+                        l'attribution des postes
                       </div>
                     </div>
                   </div>
@@ -580,11 +602,36 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
                 <div className="grid grid-cols-5 gap-2 pt-2">
                   {[
-                    { id: "ACTIVE_DIRECTORY_LDAP", label: "Active Directory (AD DS / LDAP)", desc: "Windows Server sur site", icon: Database },
-                    { id: "ENTRA_ID", label: "Microsoft Entra ID", desc: "Azure AD Cloud OIDC", icon: KeyRound },
-                    { id: "OKTA", label: "Okta Identity Cloud", desc: "SAML 2.0 / SCIM", icon: Shield },
-                    { id: "GOOGLE_WORKSPACE", label: "Google Workspace", desc: "SAML Enterprise", icon: Shield },
-                    { id: "SAML_GENERIC", label: "SAML / OIDC Générique", desc: "Fédération standard", icon: KeyRound },
+                    {
+                      id: "ACTIVE_DIRECTORY_LDAP",
+                      label: "Active Directory (AD DS / LDAP)",
+                      desc: "Windows Server sur site",
+                      icon: Database,
+                    },
+                    {
+                      id: "ENTRA_ID",
+                      label: "Microsoft Entra ID",
+                      desc: "Azure AD Cloud OIDC",
+                      icon: KeyRound,
+                    },
+                    {
+                      id: "OKTA",
+                      label: "Okta Identity Cloud",
+                      desc: "SAML 2.0 / SCIM",
+                      icon: Shield,
+                    },
+                    {
+                      id: "GOOGLE_WORKSPACE",
+                      label: "Google Workspace",
+                      desc: "SAML Enterprise",
+                      icon: Shield,
+                    },
+                    {
+                      id: "SAML_GENERIC",
+                      label: "SAML / OIDC Générique",
+                      desc: "Fédération standard",
+                      icon: KeyRound,
+                    },
                   ].map((p) => {
                     const Icon = p.icon;
                     const isSel = settings.sso.provider === p.id;
@@ -604,11 +651,15 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <Icon className={`w-4 h-4 ${isSel ? "text-cyan-400" : "text-slate-500"}`} />
+                          <Icon
+                            className={`w-4 h-4 ${isSel ? "text-cyan-400" : "text-slate-500"}`}
+                          />
                           {isSel && <Check className="w-3.5 h-3.5 text-cyan-400" />}
                         </div>
                         <div>
-                          <div className={`text-xs font-semibold ${isSel ? "text-slate-100" : "text-slate-300"}`}>
+                          <div
+                            className={`text-xs font-semibold ${isSel ? "text-slate-100" : "text-slate-300"}`}
+                          >
                             {p.label}
                           </div>
                           <div className="text-[10px] text-slate-500 mt-0.5">{p.desc}</div>
@@ -636,15 +687,17 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                           className="px-3 py-1.5 bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/40 transition shadow-sm"
                           title="Remplir automatiquement avec les paramètres du Lab Docker (OpenLDAP 127.0.0.1:389)"
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                          ⚡ Remplir avec le Lab Local
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />⚡ Remplir avec le Lab
+                          Local
                         </button>
                         <button
                           onClick={handleSyncAdDirectory}
                           disabled={isTestingAd}
                           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
                         >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isTestingAd ? "animate-spin" : ""}`} />
+                          <RefreshCw
+                            className={`w-3.5 h-3.5 ${isTestingAd ? "animate-spin" : ""}`}
+                          />
                           Sync Annuaire AD
                         </button>
                         <button
@@ -660,7 +713,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-slate-300">Contrôleur de Domaine (DC FQDN / IP)</label>
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Contrôleur de Domaine (DC FQDN / IP)
+                        </label>
                         <input
                           type="text"
                           value={settings.sso.activeDirectory.serverHost}
@@ -670,7 +725,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                               ...prev,
                               sso: {
                                 ...prev.sso,
-                                activeDirectory: { ...prev.sso.activeDirectory, serverHost: e.target.value },
+                                activeDirectory: {
+                                  ...prev.sso.activeDirectory,
+                                  serverHost: e.target.value,
+                                },
                               },
                             }))
                           }
@@ -679,7 +737,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-slate-300">Port LDAP & Protocole</label>
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Port LDAP & Protocole
+                        </label>
                         <div className="grid grid-cols-2 gap-1">
                           <input
                             type="number"
@@ -689,7 +749,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 ...prev,
                                 sso: {
                                   ...prev.sso,
-                                  activeDirectory: { ...prev.sso.activeDirectory, port: Number(e.target.value) },
+                                  activeDirectory: {
+                                    ...prev.sso.activeDirectory,
+                                    port: Number(e.target.value),
+                                  },
                                 },
                               }))
                             }
@@ -702,7 +765,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 ...prev,
                                 sso: {
                                   ...prev.sso,
-                                  activeDirectory: { ...prev.sso.activeDirectory, encryption: e.target.value as any },
+                                  activeDirectory: {
+                                    ...prev.sso.activeDirectory,
+                                    encryption: e.target.value as any,
+                                  },
                                 },
                               }))
                             }
@@ -716,7 +782,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-slate-300">Domaine NetBIOS / FQDN</label>
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Domaine NetBIOS / FQDN
+                        </label>
                         <input
                           type="text"
                           value={settings.sso.activeDirectory.domainFqdn}
@@ -726,7 +794,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                               ...prev,
                               sso: {
                                 ...prev.sso,
-                                activeDirectory: { ...prev.sso.activeDirectory, domainFqdn: e.target.value },
+                                activeDirectory: {
+                                  ...prev.sso.activeDirectory,
+                                  domainFqdn: e.target.value,
+                                },
                               },
                             }))
                           }
@@ -735,7 +806,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       </div>
 
                       <div className="col-span-2 space-y-1">
-                        <label className="text-[11px] font-medium text-slate-300">Base DN de Recherche (Search Base)</label>
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Base DN de Recherche (Search Base)
+                        </label>
                         <input
                           type="text"
                           value={settings.sso.activeDirectory.baseDn}
@@ -745,7 +818,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                               ...prev,
                               sso: {
                                 ...prev.sso,
-                                activeDirectory: { ...prev.sso.activeDirectory, baseDn: e.target.value },
+                                activeDirectory: {
+                                  ...prev.sso.activeDirectory,
+                                  baseDn: e.target.value,
+                                },
                               },
                             }))
                           }
@@ -754,7 +830,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-slate-300">Filtre LDAP Utilisateurs</label>
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Filtre LDAP Utilisateurs
+                        </label>
                         <input
                           type="text"
                           value={settings.sso.activeDirectory.userSearchFilter}
@@ -764,7 +842,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                               ...prev,
                               sso: {
                                 ...prev.sso,
-                                activeDirectory: { ...prev.sso.activeDirectory, userSearchFilter: e.target.value },
+                                activeDirectory: {
+                                  ...prev.sso.activeDirectory,
+                                  userSearchFilter: e.target.value,
+                                },
                               },
                             }))
                           }
@@ -773,7 +854,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-slate-300">Compte de Service (Bind DN)</label>
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Compte de Service (Bind DN)
+                        </label>
                         <input
                           type="text"
                           value={settings.sso.activeDirectory.bindDn}
@@ -783,7 +866,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                               ...prev,
                               sso: {
                                 ...prev.sso,
-                                activeDirectory: { ...prev.sso.activeDirectory, bindDn: e.target.value },
+                                activeDirectory: {
+                                  ...prev.sso.activeDirectory,
+                                  bindDn: e.target.value,
+                                },
                               },
                             }))
                           }
@@ -792,7 +878,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       </div>
 
                       <div className="col-span-2 space-y-1">
-                        <label className="text-[11px] font-medium text-slate-300">Mot de Passe du Compte de Liaison (Bind Password)</label>
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Mot de Passe du Compte de Liaison (Bind Password)
+                        </label>
                         <div className="relative">
                           <input
                             type={showBindPassword ? "text" : "password"}
@@ -802,7 +890,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 ...prev,
                                 sso: {
                                   ...prev.sso,
-                                  activeDirectory: { ...prev.sso.activeDirectory, bindPassword: e.target.value },
+                                  activeDirectory: {
+                                    ...prev.sso.activeDirectory,
+                                    bindPassword: e.target.value,
+                                  },
                                 },
                               }))
                             }
@@ -813,7 +904,11 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                             onClick={() => setShowBindPassword(!showBindPassword)}
                             className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-200"
                           >
-                            {showBindPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            {showBindPassword ? (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5" />
+                            )}
                           </button>
                         </div>
                       </div>
@@ -836,7 +931,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 ...prev,
                                 sso: {
                                   ...prev.sso,
-                                  activeDirectory: { ...prev.sso.activeDirectory, adminGroupDn: e.target.value },
+                                  activeDirectory: {
+                                    ...prev.sso.activeDirectory,
+                                    adminGroupDn: e.target.value,
+                                  },
                                 },
                               }))
                             }
@@ -853,7 +951,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 ...prev,
                                 sso: {
                                   ...prev.sso,
-                                  activeDirectory: { ...prev.sso.activeDirectory, rhGroupDn: e.target.value },
+                                  activeDirectory: {
+                                    ...prev.sso.activeDirectory,
+                                    rhGroupDn: e.target.value,
+                                  },
                                 },
                               }))
                             }
@@ -861,7 +962,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] text-amber-400">Groupe Maintenance / Travaux</label>
+                          <label className="text-[10px] text-amber-400">
+                            Groupe Maintenance / Travaux
+                          </label>
                           <input
                             type="text"
                             value={settings.sso.activeDirectory.techGroupDn}
@@ -870,7 +973,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 ...prev,
                                 sso: {
                                   ...prev.sso,
-                                  activeDirectory: { ...prev.sso.activeDirectory, techGroupDn: e.target.value },
+                                  activeDirectory: {
+                                    ...prev.sso.activeDirectory,
+                                    techGroupDn: e.target.value,
+                                  },
                                 },
                               }))
                             }
@@ -928,7 +1034,11 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 [{step.step}]
                               </span>
                               <span className="text-slate-200 font-semibold">{step.title} :</span>
-                              <span className={step.status === "ERROR" ? "text-rose-300" : "text-slate-400"}>
+                              <span
+                                className={
+                                  step.status === "ERROR" ? "text-rose-300" : "text-slate-400"
+                                }
+                              >
                                 {step.detail}
                               </span>
                             </div>
@@ -958,12 +1068,40 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                             </span>
                           </div>
                           <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-slate-300">
-                            <div>sAMAccountName: <span className="text-white">{adDiagnosticData.sampleUser.sAMAccountName}</span></div>
-                            <div>Nom: <span className="text-white">{adDiagnosticData.sampleUser.displayName}</span></div>
-                            <div>Email: <span className="text-white">{adDiagnosticData.sampleUser.mail}</span></div>
-                            <div>Département: <span className="text-white">{adDiagnosticData.sampleUser.department}</span></div>
-                            <div>Bureau assigné: <span className="text-white">{adDiagnosticData.sampleUser.physicalDeliveryOfficeName}</span></div>
-                            <div>Statut compte: <span className="text-emerald-400">{adDiagnosticData.sampleUser.accountStatus}</span></div>
+                            <div>
+                              sAMAccountName:{" "}
+                              <span className="text-white">
+                                {adDiagnosticData.sampleUser.sAMAccountName}
+                              </span>
+                            </div>
+                            <div>
+                              Nom:{" "}
+                              <span className="text-white">
+                                {adDiagnosticData.sampleUser.displayName}
+                              </span>
+                            </div>
+                            <div>
+                              Email:{" "}
+                              <span className="text-white">{adDiagnosticData.sampleUser.mail}</span>
+                            </div>
+                            <div>
+                              Département:{" "}
+                              <span className="text-white">
+                                {adDiagnosticData.sampleUser.department}
+                              </span>
+                            </div>
+                            <div>
+                              Bureau assigné:{" "}
+                              <span className="text-white">
+                                {adDiagnosticData.sampleUser.physicalDeliveryOfficeName}
+                              </span>
+                            </div>
+                            <div>
+                              Statut compte:{" "}
+                              <span className="text-emerald-400">
+                                {adDiagnosticData.sampleUser.accountStatus}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -976,7 +1114,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-slate-200 flex items-center gap-2">
                           <Database className="w-4 h-4 text-cyan-400" />
-                          Comptes Collaborateurs Synchronisés depuis l'Active Directory ({syncedAdUsers.length})
+                          Comptes Collaborateurs Synchronisés depuis l'Active Directory (
+                          {syncedAdUsers.length})
                         </span>
                         <span className="text-[10px] font-mono text-emerald-400">À jour</span>
                       </div>
@@ -994,7 +1133,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                           <tbody className="divide-y divide-slate-850 text-slate-300 text-[11px]">
                             {syncedAdUsers.map((u) => (
                               <tr key={u.id} className="hover:bg-slate-900/50">
-                                <td className="py-1.5 px-2 font-bold text-cyan-300">{u.sAMAccountName}</td>
+                                <td className="py-1.5 px-2 font-bold text-cyan-300">
+                                  {u.sAMAccountName}
+                                </td>
                                 <td className="py-1.5 px-2">{u.fullName}</td>
                                 <td className="py-1.5 px-2 text-slate-400">{u.department}</td>
                                 <td className="py-1.5 px-2 text-slate-300">{u.office}</td>
@@ -1039,7 +1180,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-300">Domaine d'Entreprise Autorisé</label>
+                      <label className="text-[11px] font-medium text-slate-300">
+                        Domaine d'Entreprise Autorisé
+                      </label>
                       <input
                         type="text"
                         value={settings.sso.corporateDomain}
@@ -1053,7 +1196,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-300">Tenant ID / Realm</label>
+                      <label className="text-[11px] font-medium text-slate-300">
+                        Tenant ID / Realm
+                      </label>
                       <input
                         type="text"
                         value={settings.sso.tenantId}
@@ -1067,7 +1212,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-300">Client ID (Application ID)</label>
+                      <label className="text-[11px] font-medium text-slate-300">
+                        Client ID (Application ID)
+                      </label>
                       <input
                         type="text"
                         value={settings.sso.clientId}
@@ -1081,7 +1228,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-300">Client Secret</label>
+                      <label className="text-[11px] font-medium text-slate-300">
+                        Client Secret
+                      </label>
                       <input
                         type="password"
                         value={settings.sso.clientSecret}
@@ -1111,7 +1260,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       Sonde de Découverte Réseau Active (SNMP)
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      Scan physique des commutateurs, baies 42U, PDU et bornes Wi-Fi avec synchronisation vers le plan
+                      Scan physique des commutateurs, baies 42U, PDU et bornes Wi-Fi avec
+                      synchronisation vers le plan
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -1120,8 +1270,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       className="px-3 py-1.5 bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/40 transition shadow-sm"
                       title="Remplir automatiquement avec les paramètres du Lab Docker SNMP (127.0.0.1:161 public)"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      ⚡ Remplir avec le Lab Local
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />⚡ Remplir avec le Lab
+                      Local
                     </button>
                     <button
                       onClick={handleSyncAllDevicesToFloor}
@@ -1136,7 +1286,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       disabled={isScanningSnmp}
                       className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow transition"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isScanningSnmp ? "animate-spin" : ""}`} />
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isScanningSnmp ? "animate-spin" : ""}`}
+                      />
                       {isScanningSnmp ? "Scan en cours..." : "Lancer le scan SNMP"}
                     </button>
                   </div>
@@ -1144,7 +1296,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[11px] text-slate-300 font-medium">Plage Sous-Réseau CIDR</label>
+                    <label className="text-[11px] text-slate-300 font-medium">
+                      Plage Sous-Réseau CIDR
+                    </label>
                     <input
                       type="text"
                       value={settings.snmp.targetSubnet}
@@ -1158,7 +1312,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] text-slate-300 font-medium">Version Protocole</label>
+                    <label className="text-[11px] text-slate-300 font-medium">
+                      Version Protocole
+                    </label>
                     <select
                       value={settings.snmp.version}
                       onChange={(e) =>
@@ -1174,7 +1330,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] text-slate-300 font-medium">Communauté / Mot de passe</label>
+                    <label className="text-[11px] text-slate-300 font-medium">
+                      Communauté / Mot de passe
+                    </label>
                     <input
                       type="password"
                       value={settings.snmp.community}
@@ -1218,7 +1376,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                     Matériels Détectés sur le Réseau ({discoveredDevices.length})
                   </h4>
                   <span className="text-[11px] font-mono text-slate-500">
-                    Cliquez sur &quot;Importer sur le plan&quot; pour répercuter l&apos;IP et la télémétrie sur le canvas
+                    Cliquez sur &quot;Importer sur le plan&quot; pour répercuter l&apos;IP et la
+                    télémétrie sur le canvas
                   </span>
                 </div>
 
@@ -1249,8 +1408,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                   device.status === "ONLINE"
                                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                                     : device.status === "WARNING"
-                                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                    : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                      : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
                                 }`}
                               >
                                 {device.status}
@@ -1280,7 +1439,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         </div>
                         <div className="p-1 rounded bg-slate-900/80">
                           <div className="text-[9px] text-slate-500">RAM</div>
-                          <div className="font-bold text-slate-200">{device.memoryUsagePercent}%</div>
+                          <div className="font-bold text-slate-200">
+                            {device.memoryUsagePercent}%
+                          </div>
                         </div>
                         <div className="p-1 rounded bg-slate-900/80">
                           <div className="text-[9px] text-slate-500">TEMP</div>
@@ -1288,7 +1449,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         </div>
                         <div className="p-1 rounded bg-slate-900/80">
                           <div className="text-[9px] text-slate-500">PORTS</div>
-                          <div className="font-bold text-emerald-400">{device.activePorts}/{device.totalPorts}</div>
+                          <div className="font-bold text-emerald-400">
+                            {device.activePorts}/{device.totalPorts}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1321,7 +1484,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                 <div className="p-3.5 bg-slate-950 border border-cyan-500/40 rounded-lg space-y-3">
                   <div className="flex items-center justify-between text-xs font-semibold text-cyan-300">
                     <span>Créer une nouvelle plage d'adressage IPAM</span>
-                    <button onClick={() => setIsAddSubnetOpen(false)} className="text-slate-400 hover:text-white">
+                    <button
+                      onClick={() => setIsAddSubnetOpen(false)}
+                      className="text-slate-400 hover:text-white"
+                    >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -1331,7 +1497,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       <input
                         type="number"
                         value={newSubnet.vlanId}
-                        onChange={(e) => setNewSubnet({ ...newSubnet, vlanId: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setNewSubnet({ ...newSubnet, vlanId: Number(e.target.value) })
+                        }
                         className="w-full px-2 py-1 bg-slate-900 border border-slate-800 rounded font-mono"
                       />
                     </div>
@@ -1416,7 +1584,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                               className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
                               style={{ backgroundColor: vColor }}
                             />
-                            <span className={isSelected ? "text-cyan-300 font-bold" : "text-slate-100"}>
+                            <span
+                              className={isSelected ? "text-cyan-300 font-bold" : "text-slate-100"}
+                            >
                               VLAN {sub.vlanId}
                             </span>
                           </div>
@@ -1426,12 +1596,16 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
                           <div
                             className="bg-cyan-500 h-full rounded-full transition-all"
-                            style={{ width: `${Math.min(100, (sub.usedIps / sub.totalIps) * 100)}%` }}
+                            style={{
+                              width: `${Math.min(100, (sub.usedIps / sub.totalIps) * 100)}%`,
+                            }}
                           />
                         </div>
                         <div className="text-[10px] font-mono text-slate-500 flex justify-between pt-1">
                           <span>GW: {sub.gateway}</span>
-                          <span>{sub.usedIps}/{sub.totalIps} IP</span>
+                          <span>
+                            {sub.usedIps}/{sub.totalIps} IP
+                          </span>
                         </div>
                       </div>
                     );
@@ -1455,8 +1629,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                           className="w-3.5 h-3.5 rounded-full shadow"
                           style={{
                             backgroundColor:
-                              (vlanStyles?.[activeSubnet.vlanId] ?? DEFAULT_VLAN_STYLES[activeSubnet.vlanId])?.color ??
-                              "#38bdf8",
+                              (
+                                vlanStyles?.[activeSubnet.vlanId] ??
+                                DEFAULT_VLAN_STYLES[activeSubnet.vlanId]
+                              )?.color ?? "#38bdf8",
                           }}
                         />
                         <h4 className="text-xs font-bold text-slate-100 flex items-center gap-2">
@@ -1584,7 +1760,11 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         const isVoip = node.outletRole === "VOIP";
                         const isPrinter = node.outletRole === "PRINTER";
                         const isWifi = node.outletRole === "WIFI";
-                        const isRack = Boolean(node.subType?.startsWith("RACK") || node.type === "PATCH_PANEL" || node.type === "SWITCH");
+                        const isRack = Boolean(
+                          node.subType?.startsWith("RACK") ||
+                          node.type === "PATCH_PANEL" ||
+                          node.type === "SWITCH"
+                        );
 
                         return (
                           <tr key={node.id} className="hover:bg-slate-900/60 transition">
@@ -1603,7 +1783,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 )}
                                 <span>{node.name}</span>
                               </div>
-                              <div className="text-[10px] text-slate-500 font-mono">ID: {node.id}</div>
+                              <div className="text-[10px] text-slate-500 font-mono">
+                                ID: {node.id}
+                              </div>
                             </td>
 
                             <td className="py-2 px-3 font-mono text-[11px]">
@@ -1613,10 +1795,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                     isVoip
                                       ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
                                       : isPrinter
-                                      ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                                      : isWifi
-                                      ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
-                                      : "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                                        ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                        : isWifi
+                                          ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
+                                          : "bg-blue-500/20 text-blue-300 border-blue-500/30"
                                   }`}
                                 >
                                   {node.outletRole}
@@ -1680,7 +1862,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                                 >
                                   <span
                                     className={`w-1.5 h-1.5 rounded-full ${
-                                      node.pingStatus === "ONLINE" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+                                      node.pingStatus === "ONLINE"
+                                        ? "bg-emerald-400 animate-pulse"
+                                        : "bg-rose-400"
                                     }`}
                                   />
                                   {node.pingStatus} ({node.pingLatencyMs ?? 4}ms)
@@ -1727,7 +1911,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-100">NetBox DCIM & IPAM</div>
-                      <div className="text-[10px] text-slate-400">Source of Truth Baies, Câbles et Préfixes</div>
+                      <div className="text-[10px] text-slate-400">
+                        Source of Truth Baies, Câbles et Préfixes
+                      </div>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -1809,7 +1995,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-100">GLPI / ServiceNow ITSM</div>
-                      <div className="text-[10px] text-slate-400">Ticketing automatique & Gestion du Parc</div>
+                      <div className="text-[10px] text-slate-400">
+                        Ticketing automatique & Gestion du Parc
+                      </div>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -1915,11 +2103,15 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
                 <div className="space-y-2 text-xs">
                   <div className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-850">
-                    <span className="text-slate-300">Vérification conformité BitLocker/Antivirus</span>
+                    <span className="text-slate-300">
+                      Vérification conformité BitLocker/Antivirus
+                    </span>
                     <span className="text-emerald-400 font-mono text-[10px]">Actif</span>
                   </div>
                   <div className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-850">
-                    <span className="text-slate-300">Mappage automatique adresse MAC ➔ Utilisateur</span>
+                    <span className="text-slate-300">
+                      Mappage automatique adresse MAC ➔ Utilisateur
+                    </span>
                     <span className="text-purple-400 font-mono text-[10px]">Synchronisé</span>
                   </div>
                 </div>
@@ -1946,8 +2138,12 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       <Send className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-slate-100">Webhooks d'Alertes (Teams / Slack)</div>
-                      <div className="text-[10px] text-slate-400">Notifications temps réel en cas d'incident</div>
+                      <div className="text-xs font-bold text-slate-100">
+                        Webhooks d'Alertes (Teams / Slack)
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Notifications temps réel en cas d'incident
+                      </div>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">

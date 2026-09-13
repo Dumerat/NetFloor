@@ -52,7 +52,8 @@ export const UnpositionedElementsDrawer: FC<UnpositionedElementsDrawerProps> = (
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-100">Éléments Non Positionnés</span>
             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold border border-amber-500/30">
-              {desks.length > 0 ? `${desks.length}B ` : ""}{outlets.length > 0 ? `${outlets.length}P` : ""}
+              {desks.length > 0 ? `${desks.length}B ` : ""}
+              {outlets.length > 0 ? `${outlets.length}P` : ""}
             </span>
           </div>
         </div>

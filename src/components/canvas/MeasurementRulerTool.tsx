@@ -30,7 +30,7 @@ export const MeasurementRulerLayer: FC<MeasurementRulerLayerProps> = ({
   onPointSelect,
   onHoverMove,
 }) => {
-  const effectiveEnd = isCompleted ? pointB : mousePos ?? pointB;
+  const effectiveEnd = isCompleted ? pointB : (mousePos ?? pointB);
 
   let distanceMm = 0;
   let midX = 0;
@@ -198,7 +198,8 @@ export const MeasurementRulerOverlay: FC<MeasurementRulerOverlayProps> = ({
           <span className="text-slate-300">Cliquez sur le premier point de mesure sur le plan</span>
         ) : !isCompleted ? (
           <span className="text-sky-300 font-semibold">
-            Mesure en cours : <strong className="text-white text-sm">{distanceM} m</strong> ({angleDeg}°)
+            Mesure en cours : <strong className="text-white text-sm">{distanceM} m</strong> (
+            {angleDeg}°)
           </span>
         ) : (
           <span className="text-emerald-400 font-semibold flex items-center gap-1.5">

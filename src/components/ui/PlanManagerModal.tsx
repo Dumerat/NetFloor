@@ -67,7 +67,9 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
 
   useEffect(() => {
     if (plans.length > 0) {
-      setSelectedPlanId((prev) => (prev && plans.some((p) => p.id === prev) ? prev : plans[0]?.id ?? null));
+      setSelectedPlanId((prev) =>
+        prev && plans.some((p) => p.id === prev) ? prev : (plans[0]?.id ?? null)
+      );
     } else {
       setSelectedPlanId(null);
     }
@@ -192,7 +194,8 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                Dimensionnez vos plans architecturaux en mètres réels, superposez plusieurs étages ou visualisez des sites distants.
+                Dimensionnez vos plans architecturaux en mètres réels, superposez plusieurs étages
+                ou visualisez des sites distants.
               </p>
             </div>
           </div>
@@ -240,7 +243,9 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 >
                   <option value="ALL">🌐 Tous les sites ({plans.length})</option>
                   {sites.map((s) => {
-                    const count = plans.filter((p) => (p.siteId ?? DEFAULT_SITE_ID) === s.id).length;
+                    const count = plans.filter(
+                      (p) => (p.siteId ?? DEFAULT_SITE_ID) === s.id
+                    ).length;
                     return (
                       <option key={s.id} value={s.id}>
                         🏢 {s.name} ({count})
@@ -266,7 +271,9 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 </div>
               ) : (
                 plans
-                  .filter((p) => filterSiteId === "ALL" || (p.siteId ?? DEFAULT_SITE_ID) === filterSiteId)
+                  .filter(
+                    (p) => filterSiteId === "ALL" || (p.siteId ?? DEFAULT_SITE_ID) === filterSiteId
+                  )
                   .map((plan) => {
                     const isSelected = currentPlan?.id === plan.id;
                     const widthM = ((plan.widthMm ?? floorWidthMm) / 1000).toFixed(1);
@@ -288,15 +295,21 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                       >
                         <div className="min-w-0 flex-1 pr-2">
                           <div className="font-semibold text-xs text-slate-200 truncate flex items-center gap-1.5">
-                            <span className={isSelected ? "text-sky-300 font-bold" : ""}>{plan.name}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />}
+                            <span className={isSelected ? "text-sky-300 font-bold" : ""}>
+                              {plan.name}
+                            </span>
+                            {isSelected && (
+                              <Check className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                            )}
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5 truncate">
                             <span className="text-sky-400 font-sans truncate">
                               {planSite?.name ?? "Site Principal"}
                             </span>
                             <span>•</span>
-                            <span className="shrink-0">{widthM}m × {heightM}m</span>
+                            <span className="shrink-0">
+                              {widthM}m × {heightM}m
+                            </span>
                           </div>
                         </div>
 
@@ -312,7 +325,11 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                             }`}
                             title={plan.visible ? "Masquer ce plan" : "Afficher ce plan"}
                           >
-                            {plan.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                            {plan.visible ? (
+                              <Eye className="w-3.5 h-3.5" />
+                            ) : (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            )}
                           </button>
                           <button
                             type="button"
@@ -325,7 +342,11 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                             }`}
                             title={plan.isLocked ? "Déverrouiller" : "Verrouiller"}
                           >
-                            {plan.isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                            {plan.isLocked ? (
+                              <Lock className="w-3.5 h-3.5" />
+                            ) : (
+                              <Unlock className="w-3.5 h-3.5" />
+                            )}
                           </button>
                         </div>
                       </div>
@@ -342,7 +363,9 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 {/* 1. Métadonnées du plan sélectionné */}
                 <div className="space-y-3 pb-4 border-b border-slate-800">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-300">Nom du Plan / Étage</label>
+                    <label className="text-xs font-semibold text-slate-300">
+                      Nom du Plan / Étage
+                    </label>
                     <button
                       type="button"
                       onClick={() => {
@@ -400,7 +423,8 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                         <span>Dimensionnement Métrique Réel</span>
                       </h3>
                       <p className="text-[11px] text-slate-400">
-                        Ajustez la largeur ou la longueur en mètres réels pour adapter instantanément le plan à l&apos;échelle du bâtiment.
+                        Ajustez la largeur ou la longueur en mètres réels pour adapter
+                        instantanément le plan à l&apos;échelle du bâtiment.
                       </p>
                     </div>
                     <button
@@ -410,7 +434,9 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                       title="Adapter le plan exactement aux dimensions du plateau"
                     >
                       <Maximize2 className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Ajuster à l&apos;Étage ({floorWidthMm / 1000}m × {floorHeightMm / 1000}m)</span>
+                      <span>
+                        Ajuster à l&apos;Étage ({floorWidthMm / 1000}m × {floorHeightMm / 1000}m)
+                      </span>
                     </button>
                   </div>
 
@@ -444,7 +470,9 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                           min="1"
                           max="500"
                           value={((currentPlan.heightMm ?? floorHeightMm) / 1000).toFixed(2)}
-                          onChange={(e) => handleHeightChangeMeters(parseFloat(e.target.value) || 1)}
+                          onChange={(e) =>
+                            handleHeightChangeMeters(parseFloat(e.target.value) || 1)
+                          }
                           className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-sky-500"
                         />
                         <span className="text-xs text-slate-400 font-mono font-bold">m</span>
@@ -486,7 +514,8 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                     <span>Positionnement Spatial (Multi-Sites / Multi-Étages)</span>
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    Déplacez l&apos;origine du plan pour disposer deux étages côte à côte sur le même écran et relier leurs baies par fibre optique.
+                    Déplacez l&apos;origine du plan pour disposer deux étages côte à côte sur le
+                    même écran et relier leurs baies par fibre optique.
                   </p>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -541,7 +570,9 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs text-slate-300">
                       <span>Transparence / Opacité</span>
-                      <span className="font-mono font-bold">{Math.round(currentPlan.opacity * 100)}%</span>
+                      <span className="font-mono font-bold">
+                        {Math.round(currentPlan.opacity * 100)}%
+                      </span>
                     </div>
                     <input
                       type="range"

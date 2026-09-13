@@ -1,4 +1,13 @@
-import { pgTable, uuid, varchar, integer, doublePrecision, jsonb, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  varchar,
+  integer,
+  doublePrecision,
+  jsonb,
+  timestamp,
+  pgEnum,
+} from "drizzle-orm/pg-core";
 import { floors } from "./floors";
 import { racks } from "./racks";
 

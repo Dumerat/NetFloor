@@ -4,11 +4,7 @@ import { useRef, useEffect, useState, useCallback, type FC } from "react";
 import { Stage, Layer, Rect } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
-import {
-  snapToGrid,
-  snapToNodeAlignments,
-  snapToOutletDocking,
-} from "@/engine/spatial/snapping";
+import { snapToGrid, snapToNodeAlignments, snapToOutletDocking } from "@/engine/spatial/snapping";
 import { GridLayer } from "./GridLayer";
 import { ZoneLayer } from "./ZoneLayer";
 import { CableLayer, CableData, CableFilterMode } from "./CableLayer";
@@ -19,10 +15,7 @@ import {
   ScaleCalibrationModal,
   CalibrationPoint,
 } from "./ScaleCalibrationTool";
-import {
-  MeasurementRulerLayer,
-  MeasurementRulerOverlay,
-} from "./MeasurementRulerTool";
+import { MeasurementRulerLayer, MeasurementRulerOverlay } from "./MeasurementRulerTool";
 import { VlanStyle } from "@/data/vlanStyles";
 import { FloorZone } from "@/types/zones";
 
@@ -41,7 +34,8 @@ interface FloorCanvasProps {
   selectedNodeIds?: string[] | undefined;
   onSelectNodeToggle?: ((node: NodeDisplay, isShift: boolean) => void) | undefined;
   onSelectNodeIds?: ((ids: string[]) => void) | undefined;
-  onGroupNodeMoveEnd?: ((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => void) | undefined;
+  onGroupNodeMoveEnd?:
+    ((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => void) | undefined;
   activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK" | undefined;
   cableFilterMode?: CableFilterMode | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
@@ -58,7 +52,14 @@ interface FloorCanvasProps {
   onBackgroundPlanPositionChange?: ((pos: { x: number; y: number }) => void) | undefined;
   isCalibratingScale?: boolean | undefined;
   onCloseCalibration?: (() => void) | undefined;
-  onCalibrateScale?: ((res: { pixelsPerMeter: number; realMeters: number; distPx: number; distWorldMm: number }) => void) | undefined;
+  onCalibrateScale?:
+    | ((res: {
+        pixelsPerMeter: number;
+        realMeters: number;
+        distPx: number;
+        distWorldMm: number;
+      }) => void)
+    | undefined;
   isRulerActive?: boolean | undefined;
   onCloseRuler?: (() => void) | undefined;
 }
@@ -131,14 +132,17 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     }
   }, [isCalibratingScale]);
 
-  const handleCalibPointSelect = useCallback((pt: CalibrationPoint) => {
-    if (!calibPoint1) {
-      setCalibPoint1(pt);
-    } else if (!calibPoint2) {
-      setCalibPoint2(pt);
-      setIsCalibModalOpen(true);
-    }
-  }, [calibPoint1, calibPoint2]);
+  const handleCalibPointSelect = useCallback(
+    (pt: CalibrationPoint) => {
+      if (!calibPoint1) {
+        setCalibPoint1(pt);
+      } else if (!calibPoint2) {
+        setCalibPoint2(pt);
+        setIsCalibModalOpen(true);
+      }
+    },
+    [calibPoint1, calibPoint2]
+  );
 
   const handleCalibHoverMove = useCallback((pt: CalibrationPoint) => {
     setCalibHoverPoint(pt);
@@ -228,12 +232,18 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     setRulerIsCompleted(false);
   }, []);
 
-  const effectiveRulerEnd = rulerIsCompleted ? rulerPointB : rulerMousePos ?? rulerPointB;
+  const effectiveRulerEnd = rulerIsCompleted ? rulerPointB : (rulerMousePos ?? rulerPointB);
   let rulerDistanceMm = 0;
   let rulerAngleDeg = 0;
   if (rulerPointA && effectiveRulerEnd) {
-    rulerDistanceMm = Math.hypot(effectiveRulerEnd.x - rulerPointA.x, effectiveRulerEnd.y - rulerPointA.y);
-    const rad = Math.atan2(effectiveRulerEnd.y - rulerPointA.y, effectiveRulerEnd.x - rulerPointA.x);
+    rulerDistanceMm = Math.hypot(
+      effectiveRulerEnd.x - rulerPointA.x,
+      effectiveRulerEnd.y - rulerPointA.y
+    );
+    const rad = Math.atan2(
+      effectiveRulerEnd.y - rulerPointA.y,
+      effectiveRulerEnd.x - rulerPointA.x
+    );
     rulerAngleDeg = Math.round((rad * 180) / Math.PI);
   }
   const rulerDistanceM = (rulerDistanceMm / 1000).toFixed(2);
@@ -310,7 +320,10 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             { x: w, y: h },
             { x: 0, y: h },
           ];
-          let cMinX = Infinity, cMaxX = -Infinity, cMinY = Infinity, cMaxY = -Infinity;
+          let cMinX = Infinity,
+            cMaxX = -Infinity,
+            cMinY = Infinity,
+            cMaxY = -Infinity;
           for (const c of corners) {
             const wx = n.xMm + c.x * cos - c.y * sin;
             const wy = n.yMm + c.x * sin + c.y * cos;
@@ -428,88 +441,96 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   };
 
   // Magnétisme d'accostage à la fin du déplacement (Bureaux bord-à-bord & Prises collées)
-  const handleNodeMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
-    const node = nodes.find((n) => n.id === id);
+  const handleNodeMoveEnd = useCallback(
+    (id: string, newPos: { x: number; y: number }) => {
+      const node = nodes.find((n) => n.id === id);
 
-    // 1. Accostage intelligent bord-à-bord (côte-à-côte ou face-à-face) pour les bureaux
-    if (node && node.type === "DESK") {
-      const nodeW = node.widthMm ?? 1600;
-      const nodeH = node.heightMm ?? 800;
-      const draggedBox = {
-        minX: newPos.x,
-        minY: newPos.y,
-        maxX: newPos.x + nodeW,
-        maxY: newPos.y + nodeH,
-        width: nodeW,
-        height: nodeH,
-      };
+      // 1. Accostage intelligent bord-à-bord (côte-à-côte ou face-à-face) pour les bureaux
+      if (node && node.type === "DESK") {
+        const nodeW = node.widthMm ?? 1600;
+        const nodeH = node.heightMm ?? 800;
+        const draggedBox = {
+          minX: newPos.x,
+          minY: newPos.y,
+          maxX: newPos.x + nodeW,
+          maxY: newPos.y + nodeH,
+          width: nodeW,
+          height: nodeH,
+        };
 
-      const otherDeskBoxes = nodes
-        .filter((n) => n.type === "DESK" && n.id !== id)
-        .map((d) => {
-          const w = d.widthMm ?? 1600;
-          const h = d.heightMm ?? 800;
-          return {
-            minX: d.xMm,
-            minY: d.yMm,
-            maxX: d.xMm + w,
-            maxY: d.yMm + h,
-            width: w,
-            height: h,
-          };
-        });
-
-      if (otherDeskBoxes.length > 0) {
-        const alignResult = snapToNodeAlignments(draggedBox, otherDeskBoxes, 200);
-        if (alignResult.hasSnappedX || alignResult.hasSnappedY) {
-          onNodePositionChange?.(id, {
-            x: alignResult.snappedX,
-            y: alignResult.snappedY,
+        const otherDeskBoxes = nodes
+          .filter((n) => n.type === "DESK" && n.id !== id)
+          .map((d) => {
+            const w = d.widthMm ?? 1600;
+            const h = d.heightMm ?? 800;
+            return {
+              minX: d.xMm,
+              minY: d.yMm,
+              maxX: d.xMm + w,
+              maxY: d.yMm + h,
+              width: w,
+              height: h,
+            };
           });
+
+        if (otherDeskBoxes.length > 0) {
+          const alignResult = snapToNodeAlignments(draggedBox, otherDeskBoxes, 200);
+          if (alignResult.hasSnappedX || alignResult.hasSnappedY) {
+            onNodePositionChange?.(id, {
+              x: alignResult.snappedX,
+              y: alignResult.snappedY,
+            });
+            return;
+          }
+        }
+      }
+
+      // 2. Accostage magnétique direct entre prises RJ45 (docking côte-à-côte)
+      if (node && node.type === "WALL_OUTLET") {
+        const otherOutlets = nodes
+          .filter((n) => n.type === "WALL_OUTLET" && n.id !== id)
+          .map((o) => ({ id: o.id, point: { x: o.xMm, y: o.yMm } }));
+
+        const dockResult = snapToOutletDocking(newPos, otherOutlets, 300, 260);
+        if (dockResult.dockedWithId) {
+          onNodePositionChange?.(id, dockResult.snappedPoint);
           return;
         }
       }
-    }
 
-    // 2. Accostage magnétique direct entre prises RJ45 (docking côte-à-côte)
-    if (node && node.type === "WALL_OUTLET") {
-      const otherOutlets = nodes
-        .filter((n) => n.type === "WALL_OUTLET" && n.id !== id)
-        .map((o) => ({ id: o.id, point: { x: o.xMm, y: o.yMm } }));
-
-      const dockResult = snapToOutletDocking(newPos, otherOutlets, 300, 260);
-      if (dockResult.dockedWithId) {
-        onNodePositionChange?.(id, dockResult.snappedPoint);
-        return;
-      }
-    }
-
-    // 3. Magnétisme standard sur la grille métrique
-    const snapResult = snapToGrid(newPos, gridConfig);
-    onNodePositionChange?.(id, snapResult.point);
-  }, [nodes, gridConfig, onNodePositionChange]);
+      // 3. Magnétisme standard sur la grille métrique
+      const snapResult = snapToGrid(newPos, gridConfig);
+      onNodePositionChange?.(id, snapResult.point);
+    },
+    [nodes, gridConfig, onNodePositionChange]
+  );
 
   // Déplacement libre du pivot orthogonal du câble
-  const handlePivotMove = useCallback((
-    cableId: string,
-    newPivot: { x: number; y: number }
-  ) => {
-    onPivotChange?.(cableId, newPivot);
-  }, [onPivotChange]);
+  const handlePivotMove = useCallback(
+    (cableId: string, newPivot: { x: number; y: number }) => {
+      onPivotChange?.(cableId, newPivot);
+    },
+    [onPivotChange]
+  );
 
-  const handleSelectNodeId = useCallback((id: string) => {
-    const node = nodes.find((n) => n.id === id);
-    if (node) {
-      if (node.type === "WALL_OUTLET") onSelectOutlet(node);
-      else onSelectNode?.(node);
-    }
-  }, [nodes, onSelectOutlet, onSelectNode]);
+  const handleSelectNodeId = useCallback(
+    (id: string) => {
+      const node = nodes.find((n) => n.id === id);
+      if (node) {
+        if (node.type === "WALL_OUTLET") onSelectOutlet(node);
+        else onSelectNode?.(node);
+      }
+    },
+    [nodes, onSelectOutlet, onSelectNode]
+  );
 
   return (
     <div
       ref={containerRef}
       className={`w-full h-full relative overflow-hidden bg-slate-950 ${
-        isCalibratingScale || isRulerActive ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
+        isCalibratingScale || isRulerActive
+          ? "cursor-crosshair"
+          : "cursor-grab active:cursor-grabbing"
       }`}
     >
       <Stage
@@ -549,23 +570,25 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
         </Layer>
 
         {/* Calque 1.2 : Fond de Plan Architectural Multi-plans (Image PNG/JPG ou PDF matriciel) */}
-        {backgroundPlan && (backgroundPlan.imageUrl || (backgroundPlan.plans && backgroundPlan.plans.length > 0)) && (
-          <Layer>
-            <BackgroundPlanLayer
-              imageUrl={backgroundPlan.imageUrl}
-              plans={backgroundPlan.plans}
-              opacity={backgroundPlan.opacity ?? 0.7}
-              isLocked={backgroundPlan.isLocked ?? true}
-              xMm={backgroundPlan.xMm ?? 0}
-              yMm={backgroundPlan.yMm ?? 0}
-              scale={backgroundPlan.scale ?? 1.0}
-              widthMm={backgroundPlan.widthMm}
-              heightMm={backgroundPlan.heightMm}
-              visible={backgroundPlan.visible ?? true}
-              onPositionChange={onBackgroundPlanPositionChange}
-            />
-          </Layer>
-        )}
+        {backgroundPlan &&
+          (backgroundPlan.imageUrl ||
+            (backgroundPlan.plans && backgroundPlan.plans.length > 0)) && (
+            <Layer>
+              <BackgroundPlanLayer
+                imageUrl={backgroundPlan.imageUrl}
+                plans={backgroundPlan.plans}
+                opacity={backgroundPlan.opacity ?? 0.7}
+                isLocked={backgroundPlan.isLocked ?? true}
+                xMm={backgroundPlan.xMm ?? 0}
+                yMm={backgroundPlan.yMm ?? 0}
+                scale={backgroundPlan.scale ?? 1.0}
+                widthMm={backgroundPlan.widthMm}
+                heightMm={backgroundPlan.heightMm}
+                visible={backgroundPlan.visible ?? true}
+                onPositionChange={onBackgroundPlanPositionChange}
+              />
+            </Layer>
+          )}
 
         {/* Calque 1.5 : Zones et Délimitations des Services RH / DSI / Pôles */}
         <Layer>

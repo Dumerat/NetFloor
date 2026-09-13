@@ -3,20 +3,10 @@
 import { memo, type FC } from "react";
 import { Line, Group, Circle } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
-import {
-  VlanStyle,
-  DEFAULT_VLAN_STYLES,
-  getKonvaStrokeConfig,
-} from "@/data/vlanStyles";
+import { VlanStyle, DEFAULT_VLAN_STYLES, getKonvaStrokeConfig } from "@/data/vlanStyles";
 
 export type CableFilterMode =
-  | "ALL"
-  | "HORIZONTAL_ONLY"
-  | "VLAN_20"
-  | "VLAN_30"
-  | "VLAN_40"
-  | "VLAN_50"
-  | "SELECTED_ONLY";
+  "ALL" | "HORIZONTAL_ONLY" | "VLAN_20" | "VLAN_30" | "VLAN_40" | "VLAN_50" | "SELECTED_ONLY";
 
 export interface CableData {
   id: string;
@@ -165,11 +155,16 @@ const CableLayerComponent: FC<CableLayerProps> = ({
         let points: number[] = [];
         if (cable.cableType === "HORIZONTAL_RUN") {
           points = simplifyOrthogonalPoints([
-            Ax, Ay,
-            Ax, pivot.y,
-            pivot.x, pivot.y,
-            pivot.x, By,
-            Bx, By,
+            Ax,
+            Ay,
+            Ax,
+            pivot.y,
+            pivot.x,
+            pivot.y,
+            pivot.x,
+            By,
+            Bx,
+            By,
           ]);
         } else {
           points = [Ax, Ay, Bx, By];
@@ -177,7 +172,7 @@ const CableLayerComponent: FC<CableLayerProps> = ({
 
         // Configuration du style personnalisé du câble (couleur, tirets/pointillés, épaisseur)
         const vlanStyle = cable.vlanId
-          ? vlanStyles?.[cable.vlanId] ?? DEFAULT_VLAN_STYLES[cable.vlanId]
+          ? (vlanStyles?.[cable.vlanId] ?? DEFAULT_VLAN_STYLES[cable.vlanId])
           : undefined;
         const { strokeColor, strokeWidth, dash } = getKonvaStrokeConfig(vlanStyle, isHighlighted);
 

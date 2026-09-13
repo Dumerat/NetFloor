@@ -12,7 +12,8 @@ export async function POST(req: Request) {
   const baseDn = config.baseDn || "dc=company,dc=com";
   const bindDn = config.bindDn || "cn=admin,dc=company,dc=com";
   const bindPassword = config.bindPassword || "adminpassword";
-  const userSearchFilter = config.userSearchFilter || "(&(objectClass=inetOrgPerson)(|(uid={0})(cn={0})))";
+  const userSearchFilter =
+    config.userSearchFilter || "(&(objectClass=inetOrgPerson)(|(uid={0})(cn={0})))";
 
   const steps: {
     step: number;
@@ -52,13 +53,16 @@ export async function POST(req: Request) {
 
     steps.push({
       step: 2,
-      title: encryption === "LDAPS" ? "Négociation Sécurisée TLS / LDAPS" : "Négociation de Session LDAP",
+      title:
+        encryption === "LDAPS"
+          ? "Négociation Sécurisée TLS / LDAPS"
+          : "Négociation de Session LDAP",
       detail:
         encryption === "LDAPS"
           ? "Canal chiffré LDAPS (TLS 1.3) validé"
           : encryption === "STARTTLS"
-          ? "Session STARTTLS négociée"
-          : "Session LDAP standard en clair (Port 389)",
+            ? "Session STARTTLS négociée"
+            : "Session LDAP standard en clair (Port 389)",
       status: "OK",
       latencyMs: Math.round(bindDuration * 0.2),
     });
@@ -126,7 +130,12 @@ export async function POST(req: Request) {
     steps.push({
       step: 5,
       title: "Résolution des Groupes d'Habilitations (memberOf)",
-      detail: `${groupEntries.length} groupes identifiés (${groupEntries.map((g) => g.cn).filter(Boolean).join(", ") || "DSI, Collaborateurs"})`,
+      detail: `${groupEntries.length} groupes identifiés (${
+        groupEntries
+          .map((g) => g.cn)
+          .filter(Boolean)
+          .join(", ") || "DSI, Collaborateurs"
+      })`,
       status: "OK",
       latencyMs: groupDuration,
     });
@@ -206,7 +215,7 @@ export async function POST(req: Request) {
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Erreur de connexion LDAP";
-    
+
     // Diagnostic de l'étape en échec
     if (steps.length === 0) {
       steps.push({

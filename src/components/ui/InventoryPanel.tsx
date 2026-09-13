@@ -20,10 +20,7 @@ import {
   Phone,
   Laptop,
 } from "lucide-react";
-import {
-  NodeDisplay,
-  RackDisplay,
-} from "@/components/canvas/EquipmentLayer";
+import { NodeDisplay, RackDisplay } from "@/components/canvas/EquipmentLayer";
 import { ENTERPRISE_DIRECTORY } from "@/data/directory";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 import { FloorZone } from "@/types/zones";
@@ -168,7 +165,8 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       const dataOutlet = assignedOutlets.find((o) => !o.isVoip);
       const userNum = user.id.replace(/\D/g, "") || "10";
       const userNumInt = Number(userNum) % 200 || 12;
-      const workstationIp = dataOutlet?.ipAddress || dataOutlet?.outlet.ipAddress || `10.42.20.${100 + userNumInt}`;
+      const workstationIp =
+        dataOutlet?.ipAddress || dataOutlet?.outlet.ipAddress || `10.42.20.${100 + userNumInt}`;
       const firstName = user.fullName.split(" ")[0] || "USER";
       const workstation = {
         name: `PC-${firstName.toUpperCase()}-${userNumInt}`,
@@ -180,7 +178,8 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
       // 4. Détection ou attribution du Téléphone IP relié au port Téléphonie (VLAN 30)
       const voipOutlet = assignedOutlets.find((o) => o.isVoip);
-      const calculatedVoipIp = voipOutlet?.ipAddress || voipOutlet?.outlet.ipAddress || `10.42.30.${100 + userNumInt}`;
+      const calculatedVoipIp =
+        voipOutlet?.ipAddress || voipOutlet?.outlet.ipAddress || `10.42.30.${100 + userNumInt}`;
       const ipPhone = {
         model: "Cisco IP Phone 8845 / Yealink T54W",
         phoneNumber: user.phone || `+33 1 42 68 01 ${user.id.slice(-2)}`,
@@ -370,8 +369,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       const matchDesk = assignedDesks.some((d) => d.desk.name.toLowerCase().includes(query));
       const matchOutlet = assignedOutlets.some(
         (o) =>
-          o.outlet.name.toLowerCase().includes(query) ||
-          o.portInfo.toLowerCase().includes(query)
+          o.outlet.name.toLowerCase().includes(query) || o.portInfo.toLowerCase().includes(query)
       );
       const matchPhone =
         ipPhone.phoneNumber.toLowerCase().includes(query) ||
@@ -412,13 +410,21 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   const filteredDevices = useMemo(() => {
     return deviceNodes.filter((node) => {
       // 1. Sous-filtre de type
-      if (deviceSubFilter === "PRINTER" && node.outletRole !== "PRINTER" && node.subType !== "PRINTER_STATION") {
+      if (
+        deviceSubFilter === "PRINTER" &&
+        node.outletRole !== "PRINTER" &&
+        node.subType !== "PRINTER_STATION"
+      ) {
         return false;
       }
       if (deviceSubFilter === "WIFI" && node.outletRole !== "WIFI" && node.subType !== "WIFI_AP") {
         return false;
       }
-      if (deviceSubFilter === "CAMERA" && node.outletRole !== "CAMERA" && node.subType !== "CAMERA_IP") {
+      if (
+        deviceSubFilter === "CAMERA" &&
+        node.outletRole !== "CAMERA" &&
+        node.subType !== "CAMERA_IP"
+      ) {
         return false;
       }
       if (
@@ -463,9 +469,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
             <h2 className="text-xs font-bold text-white tracking-wide uppercase">
               Inventaire Global
             </h2>
-            <span className="text-[10px] text-slate-400 font-mono">
-              Parc IT & Aménagement
-            </span>
+            <span className="text-[10px] text-slate-400 font-mono">Parc IT & Aménagement</span>
           </div>
         </div>
 
@@ -560,12 +564,12 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
               activeTab === "USERS"
                 ? "Rechercher un utilisateur, rôle..."
                 : activeTab === "DESKS"
-                ? "Rechercher un bureau, occupant..."
-                : activeTab === "PORTS"
-                ? "Rechercher un port, IP, MAC, VLAN..."
-                : activeTab === "DEVICES"
-                ? "Rechercher un équipement, IP..."
-                : "Rechercher une baie, switch..."
+                  ? "Rechercher un bureau, occupant..."
+                  : activeTab === "PORTS"
+                    ? "Rechercher un port, IP, MAC, VLAN..."
+                    : activeTab === "DEVICES"
+                      ? "Rechercher un équipement, IP..."
+                      : "Rechercher une baie, switch..."
             }
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -647,9 +651,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
           <div className="space-y-1.5">
             <div className="text-[10px] font-mono text-slate-400 px-1 flex justify-between">
               <span>{filteredUsers.length} utilisateur(s) listé(s)</span>
-              <span>
-                {filteredUsers.filter((u) => u.isAssigned).length} poste(s) actif(s)
-              </span>
+              <span>{filteredUsers.filter((u) => u.isAssigned).length} poste(s) actif(s)</span>
             </div>
 
             {filteredUsers.length === 0 ? (
@@ -657,257 +659,288 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 Aucun utilisateur trouvé pour cette recherche.
               </div>
             ) : (
-              filteredUsers.map(({ user, assignedDesks, assignedOutlets, workstation, ipPhone }) => {
-                const primaryDesk = assignedDesks[0];
+              filteredUsers.map(
+                ({ user, assignedDesks, assignedOutlets, workstation, ipPhone }) => {
+                  const primaryDesk = assignedDesks[0];
 
-                return (
-                  <div
-                    key={user.id}
-                    draggable={true}
-                    onDragStart={(e) => {
-                      const userPayload = {
-                        type: "DIRECTORY_USER",
-                        user: {
-                          id: user.id,
-                          fullName: user.fullName,
-                          jobTitle: user.jobTitle,
-                          department: user.department,
-                          email: user.email,
-                        },
-                      };
-                      e.dataTransfer.setData("application/json", JSON.stringify(userPayload));
-                      e.dataTransfer.effectAllowed = "copy";
+                  return (
+                    <div
+                      key={user.id}
+                      draggable={true}
+                      onDragStart={(e) => {
+                        const userPayload = {
+                          type: "DIRECTORY_USER",
+                          user: {
+                            id: user.id,
+                            fullName: user.fullName,
+                            jobTitle: user.jobTitle,
+                            department: user.department,
+                            email: user.email,
+                          },
+                        };
+                        e.dataTransfer.setData("application/json", JSON.stringify(userPayload));
+                        e.dataTransfer.effectAllowed = "copy";
 
-                      // Badge de drag flottant personnalisé épuré
-                      const dragEl = document.createElement("div");
-                      dragEl.style.position = "absolute";
-                      dragEl.style.top = "-1000px";
-                      dragEl.style.left = "-1000px";
-                      dragEl.style.padding = "6px 12px";
-                      dragEl.style.background = "#1e293b";
-                      dragEl.style.color = "#ffffff";
-                      dragEl.style.border = "1px solid #38bdf8";
-                      dragEl.style.borderRadius = "8px";
-                      dragEl.style.fontSize = "12px";
-                      dragEl.style.fontWeight = "bold";
-                      dragEl.style.display = "flex";
-                      dragEl.style.alignItems = "center";
-                      dragEl.style.gap = "6px";
-                      dragEl.style.boxShadow = "0 8px 16px rgba(0,0,0,0.5)";
-                      dragEl.innerHTML = `<span>👤</span> <span>${user.fullName}</span>`;
-                      document.body.appendChild(dragEl);
-                      e.dataTransfer.setDragImage(dragEl, 20, 15);
-                      setTimeout(() => document.body.removeChild(dragEl), 0);
-                    }}
-                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition flex flex-col gap-1.5 cursor-grab active:cursor-grabbing group hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 transition flex-shrink-0" />
-                        <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-inner flex-shrink-0 ${
-                            user.avatarColor || "bg-blue-600"
-                          }`}
-                        >
-                          {user.fullName.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300 transition flex items-center gap-1.5">
-                            {user.fullName}
-                            {assignedDesks.length > 0 ? (
-                              <span
-                                className="w-2 h-2 rounded-full bg-emerald-400"
-                                title={`Au bureau (${assignedDesks.length} poste${assignedDesks.length > 1 ? "s" : ""})`}
-                              />
-                            ) : (
-                              <span className="w-2 h-2 rounded-full bg-slate-500" title="Télétravail / Non assigné" />
-                            )}
+                        // Badge de drag flottant personnalisé épuré
+                        const dragEl = document.createElement("div");
+                        dragEl.style.position = "absolute";
+                        dragEl.style.top = "-1000px";
+                        dragEl.style.left = "-1000px";
+                        dragEl.style.padding = "6px 12px";
+                        dragEl.style.background = "#1e293b";
+                        dragEl.style.color = "#ffffff";
+                        dragEl.style.border = "1px solid #38bdf8";
+                        dragEl.style.borderRadius = "8px";
+                        dragEl.style.fontSize = "12px";
+                        dragEl.style.fontWeight = "bold";
+                        dragEl.style.display = "flex";
+                        dragEl.style.alignItems = "center";
+                        dragEl.style.gap = "6px";
+                        dragEl.style.boxShadow = "0 8px 16px rgba(0,0,0,0.5)";
+                        dragEl.innerHTML = `<span>👤</span> <span>${user.fullName}</span>`;
+                        document.body.appendChild(dragEl);
+                        e.dataTransfer.setDragImage(dragEl, 20, 15);
+                        setTimeout(() => document.body.removeChild(dragEl), 0);
+                      }}
+                      className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition flex flex-col gap-1.5 cursor-grab active:cursor-grabbing group hover:shadow-md"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 transition flex-shrink-0" />
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-inner flex-shrink-0 ${
+                              user.avatarColor || "bg-blue-600"
+                            }`}
+                          >
+                            {user.fullName.charAt(0)}
                           </div>
-                          <div className="text-[10px] text-slate-400">
-                            {user.jobTitle} • <span className="text-slate-300">{user.department}</span>
+                          <div>
+                            <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300 transition flex items-center gap-1.5">
+                              {user.fullName}
+                              {assignedDesks.length > 0 ? (
+                                <span
+                                  className="w-2 h-2 rounded-full bg-emerald-400"
+                                  title={`Au bureau (${assignedDesks.length} poste${assignedDesks.length > 1 ? "s" : ""})`}
+                                />
+                              ) : (
+                                <span
+                                  className="w-2 h-2 rounded-full bg-slate-500"
+                                  title="Télétravail / Non assigné"
+                                />
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {user.jobTitle} •{" "}
+                              <span className="text-slate-300">{user.department}</span>
+                            </div>
                           </div>
                         </div>
+
+                        {primaryDesk && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleItemClick(primaryDesk.desk);
+                            }}
+                            className="p-1 hover:bg-slate-800 text-slate-400 hover:text-blue-400 rounded transition"
+                            title="Localiser le bureau principal sur le plan"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
 
-                      {primaryDesk && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleItemClick(primaryDesk.desk);
-                          }}
-                          className="p-1 hover:bg-slate-800 text-slate-400 hover:text-blue-400 rounded transition"
-                          title="Localiser le bureau principal sur le plan"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
-                    {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
-                    <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex flex-col gap-1.5">
-                      {/* Section Bureaux */}
-                      {assignedDesks.length === 0 ? (
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
-                            <Monitor className="w-3 h-3 text-slate-500" />
-                            <span>Bureau&nbsp;:</span>
-                          </span>
-                          <span className="min-w-0 truncate text-slate-500 italic">Non assigné</span>
-                        </div>
-                      ) : (
-                        assignedDesks.map(({ desk, seatLabel }, dIdx) => (
-                          <div key={desk.id + dIdx} className="flex items-center justify-between gap-1">
+                      {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
+                      {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
+                      <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex flex-col gap-1.5">
+                        {/* Section Bureaux */}
+                        {assignedDesks.length === 0 ? (
+                          <div className="flex items-center justify-between gap-1">
                             <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
                               <Monitor className="w-3 h-3 text-slate-500" />
-                              <span>{assignedDesks.length > 1 ? `Bureau ${dIdx + 1}\u00A0:` : "Bureau\u00A0:"}</span>
+                              <span>Bureau&nbsp;:</span>
                             </span>
-                            <span
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleItemClick(desk);
-                              }}
-                              className="min-w-0 truncate font-medium text-blue-400 hover:underline cursor-pointer"
-                              title="Cliquer pour centrer sur le plan"
-                            >
-                              {desk.name} {seatLabel ? `• ${seatLabel}` : ""}
+                            <span className="min-w-0 truncate text-slate-500 italic">
+                              Non assigné
                             </span>
                           </div>
-                        ))
-                      )}
-
-                      {/* Section Prises & Ports RJ45 */}
-                      {assignedOutlets.length === 0 ? (
-                        <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-850">
-                          <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
-                            <Plug className="w-3 h-3 text-slate-500" />
-                            <span>Prise / Port&nbsp;:</span>
-                          </span>
-                          <span className="min-w-0 truncate text-slate-500 italic">Aucune prise raccordée</span>
-                        </div>
-                      ) : (
-                        assignedOutlets.map((ao, oIdx) => {
-                          const vStyle = ao.vlanId ? vlanStyles[ao.vlanId] : undefined;
-                          return (
-                            <div key={ao.outlet.id + oIdx} className="flex items-center justify-between gap-1 pt-1 border-t border-slate-850">
+                        ) : (
+                          assignedDesks.map(({ desk, seatLabel }, dIdx) => (
+                            <div
+                              key={desk.id + dIdx}
+                              className="flex items-center justify-between gap-1"
+                            >
                               <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
-                                <Plug className="w-3 h-3 text-slate-500" />
-                                <span>{assignedOutlets.length > 1 ? `Prise ${oIdx + 1}\u00A0:` : "Prise / Port\u00A0:"}</span>
-                              </span>
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleItemClick(ao.outlet);
-                                  }}
-                                  className="min-w-0 truncate font-medium text-emerald-400 hover:underline cursor-pointer"
-                                  title="Cliquer pour localiser sur le plan"
-                                >
-                                  {ao.outlet.name} {ao.portInfo ? `[${ao.portInfo}]` : ""}
+                                <Monitor className="w-3 h-3 text-slate-500" />
+                                <span>
+                                  {assignedDesks.length > 1
+                                    ? `Bureau ${dIdx + 1}\u00A0:`
+                                    : "Bureau\u00A0:"}
                                 </span>
-                                {ao.vlanId && (
-                                  <span
-                                    className="shrink-0 px-1 py-0.2 rounded text-[9px] font-mono border"
-                                    style={{
-                                      color: vStyle?.color ?? "#38bdf8",
-                                      borderColor: `${vStyle?.color ?? "#38bdf8"}40`,
-                                      backgroundColor: `${vStyle?.color ?? "#38bdf8"}15`,
-                                    }}
-                                  >
-                                    V{ao.vlanId}
+                              </span>
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleItemClick(desk);
+                                }}
+                                className="min-w-0 truncate font-medium text-blue-400 hover:underline cursor-pointer"
+                                title="Cliquer pour centrer sur le plan"
+                              >
+                                {desk.name} {seatLabel ? `• ${seatLabel}` : ""}
+                              </span>
+                            </div>
+                          ))
+                        )}
+
+                        {/* Section Prises & Ports RJ45 */}
+                        {assignedOutlets.length === 0 ? (
+                          <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-850">
+                            <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
+                              <Plug className="w-3 h-3 text-slate-500" />
+                              <span>Prise / Port&nbsp;:</span>
+                            </span>
+                            <span className="min-w-0 truncate text-slate-500 italic">
+                              Aucune prise raccordée
+                            </span>
+                          </div>
+                        ) : (
+                          assignedOutlets.map((ao, oIdx) => {
+                            const vStyle = ao.vlanId ? vlanStyles[ao.vlanId] : undefined;
+                            return (
+                              <div
+                                key={ao.outlet.id + oIdx}
+                                className="flex items-center justify-between gap-1 pt-1 border-t border-slate-850"
+                              >
+                                <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
+                                  <Plug className="w-3 h-3 text-slate-500" />
+                                  <span>
+                                    {assignedOutlets.length > 1
+                                      ? `Prise ${oIdx + 1}\u00A0:`
+                                      : "Prise / Port\u00A0:"}
                                   </span>
-                                )}
+                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleItemClick(ao.outlet);
+                                    }}
+                                    className="min-w-0 truncate font-medium text-emerald-400 hover:underline cursor-pointer"
+                                    title="Cliquer pour localiser sur le plan"
+                                  >
+                                    {ao.outlet.name} {ao.portInfo ? `[${ao.portInfo}]` : ""}
+                                  </span>
+                                  {ao.vlanId && (
+                                    <span
+                                      className="shrink-0 px-1 py-0.2 rounded text-[9px] font-mono border"
+                                      style={{
+                                        color: vStyle?.color ?? "#38bdf8",
+                                        borderColor: `${vStyle?.color ?? "#38bdf8"}40`,
+                                        backgroundColor: `${vStyle?.color ?? "#38bdf8"}15`,
+                                      }}
+                                    >
+                                      V{ao.vlanId}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+
+                        {/* Section Poste Utilisateur / PC (IP & Réseau Data) */}
+                        <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
+                              <Laptop className="w-3 h-3 text-sky-400" />
+                              <span>Poste / PC&nbsp;:</span>
+                            </span>
+                            <span className="min-w-0 truncate text-sky-300 font-mono font-medium">
+                              {workstation.name}
+                            </span>
+                          </div>
+
+                          {/* Bloc Réseau PC : Port raccordé & Adresse IP */}
+                          <div className="flex flex-col gap-1 text-[9px] font-mono bg-slate-900/90 p-1.5 rounded border border-slate-800/90">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="shrink-0 text-slate-400">Prise Data&nbsp;:</span>
+                              <span
+                                className={`min-w-0 truncate font-sans text-right ${workstation.hasDataPort ? "text-slate-200" : "text-amber-400 italic"}`}
+                              >
+                                {workstation.connectedPort || "Port Data par défaut"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-slate-850">
+                              <span className="shrink-0 text-slate-400">IP Poste&nbsp;:</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-cyan-300 font-semibold bg-cyan-950/80 border border-cyan-800/60 px-1.5 py-0.2 rounded">
+                                  {workstation.ipAddress}
+                                </span>
+                                <span
+                                  className="px-1 py-0.2 rounded border text-[8px] font-mono whitespace-nowrap"
+                                  style={{
+                                    color: vlanStyles[workstation.vlanId]?.color ?? "#38bdf8",
+                                    borderColor: `${vlanStyles[workstation.vlanId]?.color ?? "#38bdf8"}40`,
+                                    backgroundColor: `${vlanStyles[workstation.vlanId]?.color ?? "#38bdf8"}15`,
+                                  }}
+                                >
+                                  V{workstation.vlanId} DATA
+                                </span>
                               </div>
                             </div>
-                          );
-                        })
-                      )}
-
-                      {/* Section Poste Utilisateur / PC (IP & Réseau Data) */}
-                      <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
-                            <Laptop className="w-3 h-3 text-sky-400" />
-                            <span>Poste / PC&nbsp;:</span>
-                          </span>
-                          <span className="min-w-0 truncate text-sky-300 font-mono font-medium">
-                            {workstation.name}
-                          </span>
+                          </div>
                         </div>
 
-                        {/* Bloc Réseau PC : Port raccordé & Adresse IP */}
-                        <div className="flex flex-col gap-1 text-[9px] font-mono bg-slate-900/90 p-1.5 rounded border border-slate-800/90">
+                        {/* Section Téléphone IP dédié à l'utilisateur (VLAN 30) */}
+                        <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="shrink-0 text-slate-400">Prise Data&nbsp;:</span>
-                            <span className={`min-w-0 truncate font-sans text-right ${workstation.hasDataPort ? "text-slate-200" : "text-amber-400 italic"}`}>
-                              {workstation.connectedPort || "Port Data par défaut"}
+                            <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
+                              <Phone className="w-3 h-3 text-purple-400" />
+                              <span>Téléphone IP&nbsp;:</span>
+                            </span>
+                            <span className="min-w-0 truncate text-purple-300 font-mono font-medium">
+                              {ipPhone.phoneNumber}{" "}
+                              <span className="text-slate-400 font-sans text-[9px]">
+                                (Ext&nbsp;: {ipPhone.extension})
+                              </span>
                             </span>
                           </div>
-                          <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-slate-850">
-                            <span className="shrink-0 text-slate-400">IP Poste&nbsp;:</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono text-cyan-300 font-semibold bg-cyan-950/80 border border-cyan-800/60 px-1.5 py-0.2 rounded">
-                                {workstation.ipAddress}
-                              </span>
+
+                          {/* Bloc Réseau Téléphone : Prise/Relais VoIP & Adresse IP Phone */}
+                          <div className="flex flex-col gap-1 text-[9px] font-mono bg-purple-950/20 p-1.5 rounded border border-purple-900/40">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="shrink-0 text-slate-400">Relais&nbsp;:</span>
                               <span
-                                className="px-1 py-0.2 rounded border text-[8px] font-mono whitespace-nowrap"
-                                style={{
-                                  color: vlanStyles[workstation.vlanId]?.color ?? "#38bdf8",
-                                  borderColor: `${vlanStyles[workstation.vlanId]?.color ?? "#38bdf8"}40`,
-                                  backgroundColor: `${vlanStyles[workstation.vlanId]?.color ?? "#38bdf8"}15`,
-                                }}
+                                className={`min-w-0 truncate font-sans text-right ${ipPhone.hasVoipPort ? "text-purple-200" : "text-amber-400 italic"}`}
                               >
-                                V{workstation.vlanId} DATA
+                                {ipPhone.connectedPort || "Port VoIP dédié"}
                               </span>
                             </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Section Téléphone IP dédié à l'utilisateur (VLAN 30) */}
-                      <div className="pt-1.5 border-t border-slate-800/80 flex flex-col gap-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-purple-400" />
-                            <span>Téléphone IP&nbsp;:</span>
-                          </span>
-                          <span className="min-w-0 truncate text-purple-300 font-mono font-medium">
-                            {ipPhone.phoneNumber} <span className="text-slate-400 font-sans text-[9px]">(Ext&nbsp;: {ipPhone.extension})</span>
-                          </span>
-                        </div>
-
-                        {/* Bloc Réseau Téléphone : Prise/Relais VoIP & Adresse IP Phone */}
-                        <div className="flex flex-col gap-1 text-[9px] font-mono bg-purple-950/20 p-1.5 rounded border border-purple-900/40">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="shrink-0 text-slate-400">Relais&nbsp;:</span>
-                            <span className={`min-w-0 truncate font-sans text-right ${ipPhone.hasVoipPort ? "text-purple-200" : "text-amber-400 italic"}`}>
-                              {ipPhone.connectedPort || "Port VoIP dédié"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-purple-900/30">
-                            <span className="shrink-0 text-slate-400">IP Phone&nbsp;:</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono text-purple-200 font-semibold bg-purple-950/80 border border-purple-700/60 px-1.5 py-0.2 rounded">
-                                {ipPhone.ipAddress}
-                              </span>
-                              <span
-                                className="px-1 py-0.2 rounded border text-[8px] font-mono whitespace-nowrap"
-                                style={{
-                                  color: vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc",
-                                  borderColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}40`,
-                                  backgroundColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}15`,
-                                }}
-                              >
-                                V{ipPhone.vlanId} VoIP
-                              </span>
+                            <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-purple-900/30">
+                              <span className="shrink-0 text-slate-400">IP Phone&nbsp;:</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-purple-200 font-semibold bg-purple-950/80 border border-purple-700/60 px-1.5 py-0.2 rounded">
+                                  {ipPhone.ipAddress}
+                                </span>
+                                <span
+                                  className="px-1 py-0.2 rounded border text-[8px] font-mono whitespace-nowrap"
+                                  style={{
+                                    color: vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc",
+                                    borderColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}40`,
+                                    backgroundColor: `${vlanStyles[ipPhone.vlanId]?.color ?? "#c084fc"}15`,
+                                  }}
+                                >
+                                  V{ipPhone.vlanId} VoIP
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                }
+              )
             )}
           </div>
         )}
@@ -922,28 +955,33 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
             </div>
 
             {filteredDesks.length === 0 ? (
-              <div className="text-center py-8 text-xs text-slate-500">
-                Aucun bureau trouvé.
-              </div>
+              <div className="text-center py-8 text-xs text-slate-500">Aucun bureau trouvé.</div>
             ) : (
               filteredDesks.map((desk) => {
                 // Trouver les prises liées à ce bureau
-                const linkedOutlets = outletNodes.filter(
-                  (o) => o.attachedToDeskId === desk.id
-                );
+                const linkedOutlets = outletNodes.filter((o) => o.attachedToDeskId === desk.id);
 
                 // Trouver si un téléphone IP VoIP est présent sur ce bureau
                 const voipOutlet = linkedOutlets.find(
-                  (o) => o.outletRole === "VOIP" || o.vlanId === 30 || o.stackedPorts?.some((sp) => sp.outletRole === "VOIP" || sp.vlanId === 30)
+                  (o) =>
+                    o.outletRole === "VOIP" ||
+                    o.vlanId === 30 ||
+                    o.stackedPorts?.some((sp) => sp.outletRole === "VOIP" || sp.vlanId === 30)
                 );
-                const deskVoipIp = voipOutlet?.ipAddress || (voipOutlet?.stackedPorts?.find((sp) => sp.outletRole === "VOIP" || sp.vlanId === 30)?.ipAddress);
+                const deskVoipIp =
+                  voipOutlet?.ipAddress ||
+                  voipOutlet?.stackedPorts?.find(
+                    (sp) => sp.outletRole === "VOIP" || sp.vlanId === 30
+                  )?.ipAddress;
 
-                const seatCount = desk.seats?.length || (desk.subType === "BENCH_QUAD" ? 4 : desk.subType === "BENCH_DOUBLE" ? 2 : 1);
+                const seatCount =
+                  desk.seats?.length ||
+                  (desk.subType === "BENCH_QUAD" ? 4 : desk.subType === "BENCH_DOUBLE" ? 2 : 1);
                 const occupiedSeats = desk.seats
                   ? desk.seats.filter((s) => s.fullName && s.fullName.trim() !== "").length
                   : desk.assignedPerson && !desk.assignedPerson.includes("vacant")
-                  ? 1
-                  : 0;
+                    ? 1
+                    : 0;
 
                 // Trouver la zone contenant ce bureau
                 const parentZone = zones.find(
@@ -985,10 +1023,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             {desk.subType === "BENCH_QUAD"
                               ? "Bench 4 Postes"
                               : desk.subType === "BENCH_DOUBLE"
-                              ? "Bench 2 Postes"
-                              : desk.subType === "MEETING_TABLE"
-                              ? "Table Réunion"
-                              : "Bureau Solo"}
+                                ? "Bench 2 Postes"
+                                : desk.subType === "MEETING_TABLE"
+                                  ? "Table Réunion"
+                                  : "Bureau Solo"}
                             {" • "}
                             <span className="text-slate-300 font-mono">
                               {occupiedSeats}/{seatCount} places
@@ -1004,11 +1042,20 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     {desk.seats && desk.seats.length > 0 ? (
                       <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] space-y-1">
                         {desk.seats.map((seat, sIdx) => (
-                          <div key={sIdx} className="flex items-center justify-between text-slate-300 gap-1">
+                          <div
+                            key={sIdx}
+                            className="flex items-center justify-between text-slate-300 gap-1"
+                          >
                             <span className="shrink-0 whitespace-nowrap text-slate-400 font-mono">
                               <span>{`P${sIdx + 1} (${seat.seatLabel || "Poste"})\u00A0:`}</span>
                             </span>
-                            <span className={seat.fullName ? "min-w-0 truncate text-slate-200 font-medium" : "min-w-0 truncate text-slate-600 italic"}>
+                            <span
+                              className={
+                                seat.fullName
+                                  ? "min-w-0 truncate text-slate-200 font-medium"
+                                  : "min-w-0 truncate text-slate-600 italic"
+                              }
+                            >
                               {seat.fullName || "Place libre"}
                             </span>
                           </div>
@@ -1017,7 +1064,9 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     ) : desk.assignedPerson ? (
                       <div className="text-[10px] text-slate-400 flex items-center justify-between bg-slate-950/50 p-1 rounded gap-1">
                         <span className="shrink-0 whitespace-nowrap">Occupant&nbsp;:</span>
-                        <span className="min-w-0 truncate text-slate-200 font-medium">{desk.assignedPerson}</span>
+                        <span className="min-w-0 truncate text-slate-200 font-medium">
+                          {desk.assignedPerson}
+                        </span>
                       </div>
                     ) : null}
 
@@ -1069,9 +1118,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
           <div className="space-y-1.5">
             <div className="text-[10px] font-mono text-slate-400 px-1 flex justify-between">
               <span>{filteredPorts.length} port(s) RJ45 au total</span>
-              <span>
-                {filteredPorts.filter((p) => p.isPatched).length} brassé(s)
-              </span>
+              <span>{filteredPorts.filter((p) => p.isPatched).length} brassé(s)</span>
             </div>
 
             {filteredPorts.length === 0 ? (
@@ -1114,7 +1161,8 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             )}
                           </div>
                           <div className="text-[10px] text-slate-400">
-                            Type: <span className="text-slate-200 font-medium">{port.outletRole}</span>
+                            Type:{" "}
+                            <span className="text-slate-200 font-medium">{port.outletRole}</span>
                             {port.assignedPerson ? ` • ${port.assignedPerson}` : ""}
                           </div>
                         </div>
@@ -1134,21 +1182,30 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
                     {/* Brassage Baie / Switch / Port */}
                     <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono gap-1">
-                      <span className="shrink-0 whitespace-nowrap text-slate-400">Raccordement&nbsp;:</span>
+                      <span className="shrink-0 whitespace-nowrap text-slate-400">
+                        Raccordement&nbsp;:
+                      </span>
                       {port.isPatched && port.connectedSwitchPort ? (
                         <span className="min-w-0 truncate text-emerald-400 font-medium">
-                          {port.connectedRackId || "BAIE"} ➔ {port.connectedSwitchId || "SW"} / Port {port.connectedSwitchPort}
+                          {port.connectedRackId || "BAIE"} ➔ {port.connectedSwitchId || "SW"} / Port{" "}
+                          {port.connectedSwitchPort}
                         </span>
                       ) : (
-                        <span className="min-w-0 truncate text-slate-500 italic">Non brassé au switch</span>
+                        <span className="min-w-0 truncate text-slate-500 italic">
+                          Non brassé au switch
+                        </span>
                       )}
                     </div>
 
                     {/* IP & MAC le cas échéant */}
                     {(port.ipAddress || port.macAddress) && (
                       <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 gap-1">
-                        <span className="shrink-0 whitespace-nowrap">IP:&nbsp;{port.ipAddress || "DHCP"}</span>
-                        <span className="shrink-0 whitespace-nowrap">MAC:&nbsp;{port.macAddress || "--:--"}</span>
+                        <span className="shrink-0 whitespace-nowrap">
+                          IP:&nbsp;{port.ipAddress || "DHCP"}
+                        </span>
+                        <span className="shrink-0 whitespace-nowrap">
+                          MAC:&nbsp;{port.macAddress || "--:--"}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -1173,7 +1230,8 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
               </div>
             ) : (
               filteredDevices.map((node) => {
-                const isPrinter = node.outletRole === "PRINTER" || node.subType === "PRINTER_STATION";
+                const isPrinter =
+                  node.outletRole === "PRINTER" || node.subType === "PRINTER_STATION";
                 const isWifi = node.outletRole === "WIFI" || node.subType === "WIFI_AP";
                 const isCamera = node.outletRole === "CAMERA" || node.subType === "CAMERA_IP";
 
@@ -1190,10 +1248,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             isPrinter
                               ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
                               : isWifi
-                              ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
-                              : isCamera
-                              ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
-                              : "bg-purple-500/15 border-purple-500/30 text-purple-400"
+                                ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
+                                : isCamera
+                                  ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
+                                  : "bg-purple-500/15 border-purple-500/30 text-purple-400"
                           }`}
                         >
                           {isPrinter ? (
@@ -1214,10 +1272,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             {isPrinter
                               ? "Imprimante Réseau / MFP"
                               : isWifi
-                              ? "Borne Wi-Fi Haute Densité"
-                              : isCamera
-                              ? "Caméra de Surveillance IP"
-                              : node.description || "Périphérique IT"}
+                                ? "Borne Wi-Fi Haute Densité"
+                                : isCamera
+                                  ? "Caméra de Surveillance IP"
+                                  : node.description || "Périphérique IT"}
                           </div>
                         </div>
                       </div>
@@ -1226,9 +1284,12 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     </div>
 
                     <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono gap-1">
-                      <span className="shrink-0 whitespace-nowrap text-slate-400">IP / Statut&nbsp;:</span>
+                      <span className="shrink-0 whitespace-nowrap text-slate-400">
+                        IP / Statut&nbsp;:
+                      </span>
                       <span className="min-w-0 truncate text-cyan-400">
-                        {node.ipAddress || (isWifi ? "192.168.10.25" : isPrinter ? "192.168.20.150" : "DHCP")}
+                        {node.ipAddress ||
+                          (isWifi ? "192.168.10.25" : isPrinter ? "192.168.20.150" : "DHCP")}
                       </span>
                     </div>
                   </div>
@@ -1247,122 +1308,112 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
               {infraMetrics.length} baie(s) dans le local technique
             </div>
 
-            {infraMetrics.map(
-              ({
-                rack,
-                totalU,
-                occupiedU,
-                totalSwitchPorts,
-                usedSwitchPorts,
-              }) => {
-                const occupancyPercent = Math.round((occupiedU / totalU) * 100);
-                const switchPortPercent =
-                  totalSwitchPorts > 0
-                    ? Math.round((usedSwitchPorts / totalSwitchPorts) * 100)
-                    : 0;
+            {infraMetrics.map(({ rack, totalU, occupiedU, totalSwitchPorts, usedSwitchPorts }) => {
+              const occupancyPercent = Math.round((occupiedU / totalU) * 100);
+              const switchPortPercent =
+                totalSwitchPorts > 0 ? Math.round((usedSwitchPorts / totalSwitchPorts) * 100) : 0;
 
-                // Chercher le nœud correspondant sur le canvas
-                const rackNode = nodes.find((n) => n.id === rack.id) || {
-                  id: rack.id,
-                  name: rack.name,
-                  type: "PATCH_PANEL" as const,
-                  xMm: rack.xMm,
-                  yMm: rack.yMm,
-                  widthMm: rack.widthMm,
-                  heightMm: rack.depthMm,
-                };
+              // Chercher le nœud correspondant sur le canvas
+              const rackNode = nodes.find((n) => n.id === rack.id) || {
+                id: rack.id,
+                name: rack.name,
+                type: "PATCH_PANEL" as const,
+                xMm: rack.xMm,
+                yMm: rack.yMm,
+                widthMm: rack.widthMm,
+                heightMm: rack.depthMm,
+              };
 
-                return (
-                  <div
-                    key={rack.id}
-                    className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex flex-col gap-2.5"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                          <Server className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                            {rack.name}
-                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                              {totalU}U
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-slate-400">
-                            Local Technique • {rack.widthMm}×{rack.depthMm} mm
-                          </div>
-                        </div>
+              return (
+                <div
+                  key={rack.id}
+                  className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex flex-col gap-2.5"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                        <Server className="w-4 h-4" />
                       </div>
-
-                      <button
-                        onClick={() => handleItemClick(rackNode)}
-                        className="p-1 hover:bg-slate-800 text-slate-400 hover:text-purple-400 rounded transition"
-                        title="Localiser la baie sur le plan"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Jauges d'occupation */}
-                    <div className="grid grid-cols-2 gap-2 text-[10px]">
-                      <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
-                        <div className="flex justify-between text-slate-400 mb-1">
-                          <span>Hauteur U</span>
-                          <span className="font-mono text-slate-200">
-                            {occupiedU}/{totalU}U ({occupancyPercent}%)
+                      <div>
+                        <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                          {rack.name}
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            {totalU}U
                           </span>
                         </div>
-                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-purple-500 rounded-full transition-all"
-                            style={{ width: `${Math.min(100, occupancyPercent)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
-                        <div className="flex justify-between text-slate-400 mb-1">
-                          <span>Ports Switchs</span>
-                          <span className="font-mono text-slate-200">
-                            {usedSwitchPorts}/{totalSwitchPorts} ({switchPortPercent}%)
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-500 rounded-full transition-all"
-                            style={{ width: `${Math.min(100, switchPortPercent)}%` }}
-                          />
+                        <div className="text-[10px] text-slate-400">
+                          Local Technique • {rack.widthMm}×{rack.depthMm} mm
                         </div>
                       </div>
                     </div>
 
-                    {/* Liste des équipements raqués */}
-                    <div className="space-y-1 pt-1">
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                        Modules & Équipements ({rack.devices?.length ?? 0})
-                      </span>
-                      <div className="bg-slate-950/60 rounded border border-slate-800 divide-y divide-slate-850 text-[10px] font-mono">
-                        {(rack.devices ?? []).map((dev) => (
-                          <div
-                            key={dev.id}
-                            className="p-1.5 flex items-center justify-between hover:bg-slate-900 transition"
-                          >
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-slate-500">U{dev.slotU}</span>
-                              <span className="text-slate-200 font-sans font-medium">{dev.name}</span>
-                            </div>
-                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
-                              {dev.deviceType} ({dev.uSize ?? 1}U)
-                            </span>
-                          </div>
-                        ))}
+                    <button
+                      onClick={() => handleItemClick(rackNode)}
+                      className="p-1 hover:bg-slate-800 text-slate-400 hover:text-purple-400 rounded transition"
+                      title="Localiser la baie sur le plan"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Jauges d'occupation */}
+                  <div className="grid grid-cols-2 gap-2 text-[10px]">
+                    <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
+                      <div className="flex justify-between text-slate-400 mb-1">
+                        <span>Hauteur U</span>
+                        <span className="font-mono text-slate-200">
+                          {occupiedU}/{totalU}U ({occupancyPercent}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, occupancyPercent)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-950/70 p-2 rounded border border-slate-800">
+                      <div className="flex justify-between text-slate-400 mb-1">
+                        <span>Ports Switchs</span>
+                        <span className="font-mono text-slate-200">
+                          {usedSwitchPorts}/{totalSwitchPorts} ({switchPortPercent}%)
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, switchPortPercent)}%` }}
+                        />
                       </div>
                     </div>
                   </div>
-                );
-              }
-            )}
+
+                  {/* Liste des équipements raqués */}
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Modules & Équipements ({rack.devices?.length ?? 0})
+                    </span>
+                    <div className="bg-slate-950/60 rounded border border-slate-800 divide-y divide-slate-850 text-[10px] font-mono">
+                      {(rack.devices ?? []).map((dev) => (
+                        <div
+                          key={dev.id}
+                          className="p-1.5 flex items-center justify-between hover:bg-slate-900 transition"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-500">U{dev.slotU}</span>
+                            <span className="text-slate-200 font-sans font-medium">{dev.name}</span>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">
+                            {dev.deviceType} ({dev.uSize ?? 1}U)
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

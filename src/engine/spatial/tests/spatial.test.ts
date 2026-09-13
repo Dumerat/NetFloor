@@ -6,12 +6,7 @@ import {
   fitToBounds,
   distanceBetween,
 } from "../matrix";
-import {
-  snapToGrid,
-  snapToPort,
-  snapToNodeAlignments,
-  snapToJunctionDocking,
-} from "../snapping";
+import { snapToGrid, snapToPort, snapToNodeAlignments, snapToJunctionDocking } from "../snapping";
 import { useCameraStore } from "../useCameraStore";
 import { Viewport, BoundingBox } from "../types";
 import { generateBatchDesks } from "../batchSpawner";
@@ -89,14 +84,22 @@ async function runSpatialTests() {
   const worldPointBefore = screenToWorld(cursorScreenPos, initialViewport);
 
   // Zoom avant (facteur 2.5x)
-  const zoomedInViewport = zoomAtPointer(cursorScreenPos, initialViewport, initialViewport.scale * 2.5);
+  const zoomedInViewport = zoomAtPointer(
+    cursorScreenPos,
+    initialViewport,
+    initialViewport.scale * 2.5
+  );
   const worldPointAfterZoomIn = screenToWorld(cursorScreenPos, zoomedInViewport);
 
   assertClose(worldPointBefore.x, worldPointAfterZoomIn.x, 1e-6, "Zoom In invariant X");
   assertClose(worldPointBefore.y, worldPointAfterZoomIn.y, 1e-6, "Zoom In invariant Y");
 
   // Zoom arrière (facteur 0.4x)
-  const zoomedOutViewport = zoomAtPointer(cursorScreenPos, zoomedInViewport, zoomedInViewport.scale * 0.4);
+  const zoomedOutViewport = zoomAtPointer(
+    cursorScreenPos,
+    zoomedInViewport,
+    zoomedInViewport.scale * 0.4
+  );
   const worldPointAfterZoomOut = screenToWorld(cursorScreenPos, zoomedOutViewport);
 
   assertClose(worldPointBefore.x, worldPointAfterZoomOut.x, 1e-6, "Zoom Out invariant X");
@@ -110,8 +113,8 @@ async function runSpatialTests() {
   const floorBounds: BoundingBox = {
     minX: 0,
     minY: 0,
-    maxX: 80000,  // 80 mètres
-    maxY: 40000,  // 40 mètres
+    maxX: 80000, // 80 mètres
+    maxY: 40000, // 40 mètres
     width: 80000,
     height: 40000,
   };
@@ -138,14 +141,19 @@ async function runSpatialTests() {
   assertClose(projectedCenterY, screenHeight / 2, 1e-5, "Centrage vertical parfait");
   // Test de calcul des limites visibles dans le monde
   const visibleBounds = getVisibleWorldBounds(fitted, screenWidth, screenHeight);
-  assert(visibleBounds.width > 0 && visibleBounds.height > 0, "Dimensions du monde visible positives");
+  assert(
+    visibleBounds.width > 0 && visibleBounds.height > 0,
+    "Dimensions du monde visible positives"
+  );
   assert(visibleBounds.minX <= floorBounds.minX, "MinX visible englobe l'étage");
   assert(visibleBounds.maxX >= floorBounds.maxX, "MaxX visible englobe l'étage");
 
   // Test de distance euclidienne
   const d1 = distanceBetween({ x: 0, y: 0 }, { x: 3000, y: 4000 });
   assertClose(d1, 5000, 1e-6, "Distance 3-4-5 Pythagore exacte (5000mm)");
-  console.log(`   ✅ Cadrage parfait : échelle ${fitted.scale.toFixed(6)} px/mm, centrage écran exact, limites visibles validées.`);
+  console.log(
+    `   ✅ Cadrage parfait : échelle ${fitted.scale.toFixed(6)} px/mm, centrage écran exact, limites visibles validées.`
+  );
 
   // ---------------------------------------------------------------------------
   // Test 4 : Magnétisme sur Grille Métrique (snapToGrid)
@@ -239,9 +247,7 @@ async function runSpatialTests() {
   // Test 8 : Auto-clip et Docking des Jonctions de Câbles (snapToJunctionDocking)
   // ---------------------------------------------------------------------------
   console.log("\n🧪 8. Test de l'auto-clip des jonctions de câbles (snapToJunctionDocking)...");
-  const refJunctions = [
-    { id: "cable-01", point: { x: 15500, y: 9000 } },
-  ];
+  const refJunctions = [{ id: "cable-01", point: { x: 15500, y: 9000 } }];
 
   // Cas 1 : Fusion directe sur le même boîtier (< 90mm)
   const mergeResult = snapToJunctionDocking({ x: 15540, y: 9030 }, refJunctions, 350, 80, 90);
@@ -261,7 +267,12 @@ async function runSpatialTests() {
   const dockVResult = snapToJunctionDocking({ x: 15520, y: 9200 }, refJunctions, 350, 80, 90);
   assert(dockVResult.dockedWithId === "cable-01", "Jonction cible identifiée pour dock vertical");
   assert(dockVResult.dockType === "VERTICAL", "Type VERTICAL validé");
-  assertClose(dockVResult.snappedPoint.x, 15500, 1e-6, "X verrouillé sur la même colonne technique");
+  assertClose(
+    dockVResult.snappedPoint.x,
+    15500,
+    1e-6,
+    "X verrouillé sur la même colonne technique"
+  );
   assertClose(dockVResult.snappedPoint.y, 9080, 1e-6, "Y calé avec espacement 80mm");
 
   // Cas 4 : Alignement sur l'axe du couloir (Y)
@@ -317,7 +328,10 @@ async function runSpatialTests() {
 
   assert(batchResult.desks.length === 4, "4 bureaux quad_4 générés");
   assert(batchResult.totalSeats === 16, "16 sièges/postes de travail créés (4 par quad)");
-  assert(batchResult.outlets.length === 32, "32 prises RJ45 solidaires créées (8 par quad: 4 Data + 4 VoIP)");
+  assert(
+    batchResult.outlets.length === 32,
+    "32 prises RJ45 solidaires créées (8 par quad: 4 Data + 4 VoIP)"
+  );
   assert(batchResult.totalOutlets === 32, "Total de 32 prises conformes");
 
   const firstDesk = batchResult.desks[0]!;
@@ -378,7 +392,10 @@ async function runSpatialTests() {
 
   assert(routeResult.routedCount === 10, "10 prises raccordées avec succès");
   assert(routeResult.assignments.length === 10, "10 affectations détaillées produites");
-  assert(Object.keys(routeResult.updatedCustomPivots).length > 0, "Pivot orthogonal 90° calculé pour le ruban");
+  assert(
+    Object.keys(routeResult.updatedCustomPivots).length > 0,
+    "Pivot orthogonal 90° calculé pour le ruban"
+  );
 
   routeResult.updatedNodes.forEach((node, idx) => {
     assert(node.isPatched === true, `Nœud ${node.id} est maintenant brassé`);
@@ -423,11 +440,18 @@ PRISE-ERR2;DESK-999;User Erreur 2;10.42.20.50;INVALID_MAC_ADDR;20;BAIE-01;SW-01;
 
   const applyResult = applyMatrixImport(auditValid.validRows, []);
   assert(applyResult.unpositionedNodes.length > 0, "Éléments non positionnés créés pour le tiroir");
-  const unplacedDesk = applyResult.unpositionedNodes.find((n) => n.id === "unpositioned-desk-DESK-101");
+  const unplacedDesk = applyResult.unpositionedNodes.find(
+    (n) => n.id === "unpositioned-desk-DESK-101"
+  );
   assert(unplacedDesk !== undefined, "Bureau non positionné présent");
-  assert(unplacedDesk?.assignedPerson === "Alice Dupont", "Utilisateur Alice Dupont rattaché au bureau");
+  assert(
+    unplacedDesk?.assignedPerson === "Alice Dupont",
+    "Utilisateur Alice Dupont rattaché au bureau"
+  );
 
-  console.log("   ✅ Audit CSV matriciel DSI, validation IPv4/MAC et génération de tiroir d'éléments certifiés.");
+  console.log(
+    "   ✅ Audit CSV matriciel DSI, validation IPv4/MAC et génération de tiroir d'éléments certifiés."
+  );
 
   // ---------------------------------------------------------------------------
   // Test 13 : Architecture Cuivre Passif & Héritage Dynamique de Profil Switch
@@ -507,20 +531,14 @@ PRISE-ERR2;DESK-999;User Erreur 2;10.42.20.50;INVALID_MAC_ADDR;20;BAIE-01;SW-01;
   // Test 14 : Anti-Collision Stricte des Ports Commutateur (1:1 exclusif)
   // ---------------------------------------------------------------------------
   console.log("\n🧪 14. Test d'anti-collision stricte sur les ports de switch...");
-  const isOccupied = isSwitchPortOccupied(
-    "rack-heritage-01",
-    "sw-heritage-01",
-    "Gi1/0/18",
-    [patchedVoipOutlet]
-  );
+  const isOccupied = isSwitchPortOccupied("rack-heritage-01", "sw-heritage-01", "Gi1/0/18", [
+    patchedVoipOutlet,
+  ]);
   assert(isOccupied === true, "Le port Gi1/0/18 est correctement détecté comme occupé");
 
-  const isFree = isSwitchPortOccupied(
-    "rack-heritage-01",
-    "sw-heritage-01",
-    "Gi1/0/1",
-    [patchedVoipOutlet]
-  );
+  const isFree = isSwitchPortOccupied("rack-heritage-01", "sw-heritage-01", "Gi1/0/1", [
+    patchedVoipOutlet,
+  ]);
   assert(isFree === false, "Le port Gi1/0/1 est disponible");
   console.log("   ✅ Exclusivité 1:1 stricte validée contre tout doublon de port.");
 
@@ -575,7 +593,10 @@ PRISE-ERR2;DESK-999;User Erreur 2;10.42.20.50;INVALID_MAC_ADDR;20;BAIE-01;SW-01;
   });
 
   routedToSecondary.updatedNodes.forEach((node) => {
-    assert(node.connectedSwitchId === "sw-aruba-secondary", "Raccordé spécifiquement au switch Aruba secondaire");
+    assert(
+      node.connectedSwitchId === "sw-aruba-secondary",
+      "Raccordé spécifiquement au switch Aruba secondaire"
+    );
     assert(node.connectedRackId === "rack-multi-sw", "Baie cible correcte");
   });
   console.log("   ✅ Auto-Route avec sélection de commutateur spécifique validé.");
@@ -583,22 +604,36 @@ PRISE-ERR2;DESK-999;User Erreur 2;10.42.20.50;INVALID_MAC_ADDR;20;BAIE-01;SW-01;
   // ---------------------------------------------------------------------------
   // Test 16 : Cadrage et Dézoom Profond pour Très Grands Campus Multi-Bâtiments
   // ---------------------------------------------------------------------------
-  console.log("\n🧪 16. Test de dézoom profond pour très grand campus multi-bâtiments (2km × 1.5km)...");
+  console.log(
+    "\n🧪 16. Test de dézoom profond pour très grand campus multi-bâtiments (2km × 1.5km)..."
+  );
   const megaCampusBounds: BoundingBox = {
     minX: 0,
     minY: 0,
-    maxX: 2000000,  // 2 kilomètres (2 000 m)
-    maxY: 1500000,  // 1.5 kilomètres (1 500 m)
+    maxX: 2000000, // 2 kilomètres (2 000 m)
+    maxY: 1500000, // 1.5 kilomètres (1 500 m)
     width: 2000000,
     height: 1500000,
   };
 
   const megaFit = fitToBounds(megaCampusBounds, 1920, 1080, 50);
-  assert(megaFit.scale >= 0.0002, "L'échelle reste au-dessus ou égale à la borne minimale de sécurité (0.0002)");
-  assert(megaFit.scale < 0.001, "L'échelle descend en-dessous de 0.001 pour afficher l'intégralité du site");
+  assert(
+    megaFit.scale >= 0.0002,
+    "L'échelle reste au-dessus ou égale à la borne minimale de sécurité (0.0002)"
+  );
+  assert(
+    megaFit.scale < 0.001,
+    "L'échelle descend en-dessous de 0.001 pour afficher l'intégralité du site"
+  );
 
-  const megaTopLeft = worldToScreen({ x: megaCampusBounds.minX, y: megaCampusBounds.minY }, megaFit);
-  const megaBottomRight = worldToScreen({ x: megaCampusBounds.maxX, y: megaCampusBounds.maxY }, megaFit);
+  const megaTopLeft = worldToScreen(
+    { x: megaCampusBounds.minX, y: megaCampusBounds.minY },
+    megaFit
+  );
+  const megaBottomRight = worldToScreen(
+    { x: megaCampusBounds.maxX, y: megaCampusBounds.maxY },
+    megaFit
+  );
 
   assert(megaTopLeft.x >= 49, "Campus TopLeft visible dans l'écran");
   assert(megaBottomRight.x <= 1920 - 49, "Campus BottomRight visible dans l'écran");
@@ -606,8 +641,13 @@ PRISE-ERR2;DESK-999;User Erreur 2;10.42.20.50;INVALID_MAC_ADDR;20;BAIE-01;SW-01;
 
   // Vérification que le zoom arrière manuel peut descendre jusqu'à la limite 0.0002
   const maxDezoomViewport = zoomAtPointer({ x: 960, y: 540 }, megaFit, 0.0001);
-  assert(maxDezoomViewport.scale === 0.0002, "Le zoom arrière manuel atteint exactement la borne minScale de 0.0002");
-  console.log("   ✅ Dézoom macro 0.0002 certifié : vision globale jusqu'à 5 km multi-bâtiments validée.");
+  assert(
+    maxDezoomViewport.scale === 0.0002,
+    "Le zoom arrière manuel atteint exactement la borne minScale de 0.0002"
+  );
+  console.log(
+    "   ✅ Dézoom macro 0.0002 certifié : vision globale jusqu'à 5 km multi-bâtiments validée."
+  );
 
   console.log("\n🎉 TOUS LES TESTS DU MOTEUR SPATIAL 2D SONT VALIDÉS AVEC SUCCÈS !");
 }

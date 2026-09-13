@@ -23,16 +23,16 @@ export const connectorTypeEnum = pgEnum("connector_type", [
 
 export const portDirectionEnum = pgEnum("port_direction", [
   "FRONT", // Front-facing port (RJ45 patch, switch front, etc.)
-  "REAR",  // Rear-facing port (Punchdown block 110/Krone on patch panel)
-  "BI",    // Bidirectional / Wall jack outlet faceplate
+  "REAR", // Rear-facing port (Punchdown block 110/Krone on patch panel)
+  "BI", // Bidirectional / Wall jack outlet faceplate
 ]);
 
 export const portModeEnum = pgEnum("port_mode", [
-  "ACCESS",      // Single untagged VLAN
-  "TRUNK",       // Native VLAN + 802.1Q tagged VLANs
-  "ROUTED",      // Direct IP layer 3 port
-  "PASSIVE",     // Passive physical pass-through (Wall outlet, patch panel)
-  "DISABLED",    // Administratively down
+  "ACCESS", // Single untagged VLAN
+  "TRUNK", // Native VLAN + 802.1Q tagged VLANs
+  "ROUTED", // Direct IP layer 3 port
+  "PASSIVE", // Passive physical pass-through (Wall outlet, patch panel)
+  "DISABLED", // Administratively down
 ]);
 
 export const ports = pgTable(
@@ -76,9 +76,7 @@ export const portVlans = pgTable(
       .references(() => vlans.id, { onDelete: "cascade" }),
     tagged: boolean("tagged").notNull().default(true),
   },
-  (table) => [
-    primaryKey({ columns: [table.portId, table.vlanId] }),
-  ]
+  (table) => [primaryKey({ columns: [table.portId, table.vlanId] })]
 );
 
 export type PortVlan = typeof portVlans.$inferSelect;

@@ -13,7 +13,12 @@ import {
   Check,
   X,
 } from "lucide-react";
-import { FloorSite, StoredBackgroundPlan, DEFAULT_SITE_ID, generateSiteId } from "@/engine/storage/planStorage";
+import {
+  FloorSite,
+  StoredBackgroundPlan,
+  DEFAULT_SITE_ID,
+  generateSiteId,
+} from "@/engine/storage/planStorage";
 import { RackDisplay, NodeDisplay } from "@/components/canvas/EquipmentLayer";
 
 export interface SitesPanelProps {
@@ -120,7 +125,8 @@ export const SitesPanel: FC<SitesPanelProps> = ({
               Sites & Campus
             </h2>
             <p className="text-[10px] text-slate-400">
-              {sites.length} site{sites.length > 1 ? "s" : ""} configuré{sites.length > 1 ? "s" : ""}
+              {sites.length} site{sites.length > 1 ? "s" : ""} configuré
+              {sites.length > 1 ? "s" : ""}
             </p>
           </div>
         </div>
@@ -192,7 +198,9 @@ export const SitesPanel: FC<SitesPanelProps> = ({
                 <input
                   type="number"
                   value={formSurface ?? ""}
-                  onChange={(e) => setFormSurface(e.target.value ? parseFloat(e.target.value) : undefined)}
+                  onChange={(e) =>
+                    setFormSurface(e.target.value ? parseFloat(e.target.value) : undefined)
+                  }
                   placeholder="ex: 1200"
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
                 />
@@ -251,16 +259,10 @@ export const SitesPanel: FC<SitesPanelProps> = ({
           const isActive = site.id === activeSiteId;
 
           // Calcul des statistiques associées à ce site
-          const sitePlans = plans.filter(
-            (p) => (p.siteId ?? DEFAULT_SITE_ID) === site.id
-          );
+          const sitePlans = plans.filter((p) => (p.siteId ?? DEFAULT_SITE_ID) === site.id);
           // Racks et nodes associés à ce site
-          const siteRacks = racks.filter(
-            (r) => (r.siteId ?? DEFAULT_SITE_ID) === site.id
-          );
-          const siteNodes = nodes.filter(
-            (n) => (n.siteId ?? DEFAULT_SITE_ID) === site.id
-          );
+          const siteRacks = racks.filter((r) => (r.siteId ?? DEFAULT_SITE_ID) === site.id);
+          const siteNodes = nodes.filter((n) => (n.siteId ?? DEFAULT_SITE_ID) === site.id);
           const siteRacksCount = siteRacks.length;
           const siteDesksCount = siteNodes.filter((n) => n.type === "DESK").length;
           const siteOutletsCount = siteNodes.filter(
@@ -344,9 +346,7 @@ export const SitesPanel: FC<SitesPanelProps> = ({
                     <Layers className="w-2.5 h-2.5 text-amber-400" />
                     <span>Plans</span>
                   </div>
-                  <div className="text-xs font-bold text-amber-300 mt-0.5">
-                    {sitePlans.length}
-                  </div>
+                  <div className="text-xs font-bold text-amber-300 mt-0.5">{sitePlans.length}</div>
                 </div>
 
                 <div>
@@ -354,9 +354,7 @@ export const SitesPanel: FC<SitesPanelProps> = ({
                     <Server className="w-2.5 h-2.5 text-purple-400" />
                     <span>Baies</span>
                   </div>
-                  <div className="text-xs font-bold text-purple-300 mt-0.5">
-                    {siteRacksCount}
-                  </div>
+                  <div className="text-xs font-bold text-purple-300 mt-0.5">{siteRacksCount}</div>
                 </div>
 
                 <div>
@@ -364,9 +362,7 @@ export const SitesPanel: FC<SitesPanelProps> = ({
                     <Building2 className="w-2.5 h-2.5 text-sky-400" />
                     <span>Bureaux</span>
                   </div>
-                  <div className="text-xs font-bold text-sky-300 mt-0.5">
-                    {siteDesksCount}
-                  </div>
+                  <div className="text-xs font-bold text-sky-300 mt-0.5">{siteDesksCount}</div>
                 </div>
 
                 <div>
@@ -394,7 +390,8 @@ export const SitesPanel: FC<SitesPanelProps> = ({
                       >
                         <span className="truncate">{p.name}</span>
                         <span className="text-[10px] text-slate-500 font-mono">
-                          {((p.widthMm ?? 60000) / 1000).toFixed(0)}m × {((p.heightMm ?? 35000) / 1000).toFixed(0)}m
+                          {((p.widthMm ?? 60000) / 1000).toFixed(0)}m ×{" "}
+                          {((p.heightMm ?? 35000) / 1000).toFixed(0)}m
                         </span>
                       </div>
                     ))}

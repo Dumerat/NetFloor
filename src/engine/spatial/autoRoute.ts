@@ -149,7 +149,10 @@ export function autoRoutePortsToRack({
   };
   const rawSwitches = switches.length > 0 ? switches : [fallbackSwitch];
   const activeSwitches = switchId
-    ? [...rawSwitches.filter((s) => s.id === switchId), ...rawSwitches.filter((s) => s.id !== switchId)]
+    ? [
+        ...rawSwitches.filter((s) => s.id === switchId),
+        ...rawSwitches.filter((s) => s.id !== switchId),
+      ]
     : rawSwitches;
 
   // 2. Recenser tous les ports déjà occupés
@@ -259,8 +262,7 @@ export function autoRoutePortsToRack({
 
   // 5. Calcul géométrique du tracé orthogonal à 90° et du faisceau commun
   // Calcul du barycentre (centre géométrique) de toutes les prises raccordées
-  const avgOutletX =
-    outletsToRoute.reduce((sum, o) => sum + o.xMm, 0) / outletsToRoute.length;
+  const avgOutletX = outletsToRoute.reduce((sum, o) => sum + o.xMm, 0) / outletsToRoute.length;
 
   const rackCenterPos = {
     x: targetRack.xMm + (targetRack.widthMm ?? 800) / 2,

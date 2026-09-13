@@ -44,7 +44,7 @@ const DEFAULT_GRID: GridConfig = {
 export const useCameraStore = create<CameraState>()((set, get) => ({
   viewport: DEFAULT_VIEWPORT,
   minScale: 0.0002, // 1m = 0.2px (vision globale très grands sites / campus multi-bâtiments)
-  maxScale: 2.0,   // 1mm = 2px (zoom chirurgical sur baie/connecteurs)
+  maxScale: 2.0, // 1mm = 2px (zoom chirurgical sur baie/connecteurs)
   isPanning: false,
   gridConfig: DEFAULT_GRID,
   pixelsPerMeter: DEFAULT_VIEWPORT.scale * 1000,

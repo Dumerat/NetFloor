@@ -242,7 +242,9 @@ export async function POST(req: Request) {
       warning: liveDevices.filter((d) => d.status === "WARNING").length,
       offline: liveDevices.filter((d) => d.status === "OFFLINE").length,
       isLiveSnmp,
-      source: isLiveSnmp ? "Lab Docker SNMPsim (127.0.0.1:161/udp)" : "Télémétrie de secours simulée",
+      source: isLiveSnmp
+        ? "Lab Docker SNMPsim (127.0.0.1:161/udp)"
+        : "Télémétrie de secours simulée",
     };
 
     return NextResponse.json({

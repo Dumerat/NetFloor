@@ -1,16 +1,7 @@
 "use client";
 
 import { useState, useMemo, type FC } from "react";
-import {
-  X,
-  Boxes,
-  Sparkles,
-  ArrowRight,
-  Layers,
-  Server,
-  Grid,
-  Users,
-} from "lucide-react";
+import { X, Boxes, Sparkles, ArrowRight, Layers, Server, Grid, Users } from "lucide-react";
 import { FloorZone } from "@/types/zones";
 import { RackDisplay } from "@/components/canvas/EquipmentLayer";
 import { generateBatchDesks, BatchSpawnResult } from "@/engine/spatial/batchSpawner";
@@ -56,7 +47,17 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
       },
       zones
     );
-  }, [deskType, rows, columns, spacingX, spacingY, selectedZoneId, selectedRackId, startNumber, zones]);
+  }, [
+    deskType,
+    rows,
+    columns,
+    spacingX,
+    spacingY,
+    selectedZoneId,
+    selectedRackId,
+    startNumber,
+    zones,
+  ]);
 
   if (!isOpen) return null;
 
@@ -129,9 +130,7 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
                     <span className="font-bold text-xs">Îlot Quad (4 postes)</span>
                     <Users className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
-                  <span className="text-[10px] text-slate-400">
-                    3.20m × 1.60m • 8 ports RJ45
-                  </span>
+                  <span className="text-[10px] text-slate-400">3.20m × 1.60m • 8 ports RJ45</span>
                 </button>
 
                 <button
@@ -147,9 +146,7 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
                     <span className="font-bold text-xs">Bench Double (2 postes)</span>
                     <Users className="w-3.5 h-3.5 text-blue-400" />
                   </div>
-                  <span className="text-[10px] text-slate-400">
-                    1.60m × 1.60m • 4 ports RJ45
-                  </span>
+                  <span className="text-[10px] text-slate-400">1.60m × 1.60m • 4 ports RJ45</span>
                 </button>
               </div>
             </div>
@@ -379,7 +376,8 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
                 </div>
               </div>
               <p className="text-[10px] text-slate-500 italic">
-                Chaque collaborateur recevra 1 port Data (VLAN 20) et 1 port VoIP (VLAN 30) solidaires.
+                Chaque collaborateur recevra 1 port Data (VLAN 20) et 1 port VoIP (VLAN 30)
+                solidaires.
               </p>
             </div>
           </div>
@@ -400,7 +398,9 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
             className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 transition text-xs"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Générer l&apos;Îlot ({totalDesks} Bureaux • {totalOutlets} RJ45)</span>
+            <span>
+              Générer l&apos;Îlot ({totalDesks} Bureaux • {totalOutlets} RJ45)
+            </span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>

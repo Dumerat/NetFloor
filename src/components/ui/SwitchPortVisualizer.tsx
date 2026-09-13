@@ -24,17 +24,24 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
   const portConnections = React.useMemo(() => {
     const map = new Map<string, InternalRackPatch>();
     rackPatches.forEach((patch) => {
-      if (patch.targetDevice.includes(device.name) || patch.targetDevice.includes(`U${device.slotU}`)) {
+      if (
+        patch.targetDevice.includes(device.name) ||
+        patch.targetDevice.includes(`U${device.slotU}`)
+      ) {
         map.set(patch.targetPort, patch);
       }
-      if (patch.sourceDevice.includes(device.name) || patch.sourceDevice.includes(`U${device.slotU}`)) {
+      if (
+        patch.sourceDevice.includes(device.name) ||
+        patch.sourceDevice.includes(`U${device.slotU}`)
+      ) {
         map.set(patch.sourcePort, patch);
       }
     });
     return map;
   }, [rackPatches, device]);
 
-  const selectedPatch = selectedPortNum !== null ? portConnections.get(`Gi1/0/${selectedPortNum}`) : null;
+  const selectedPatch =
+    selectedPortNum !== null ? portConnections.get(`Gi1/0/${selectedPortNum}`) : null;
 
   return (
     <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-3 font-sans">
@@ -45,10 +52,13 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
           <div>
             <div className="text-xs font-bold text-slate-100 font-mono flex items-center gap-1.5">
               <span>{device.name}</span>
-              <span className="text-[10px] text-blue-400 font-normal">({device.model || "Commutateur Gigabit"})</span>
+              <span className="text-[10px] text-blue-400 font-normal">
+                ({device.model || "Commutateur Gigabit"})
+              </span>
             </div>
             <div className="text-[10px] text-slate-400 font-mono">
-              IP: {device.ipAddress ?? "DHCP/Non configurée"} • {totalPorts} Ports RJ45 + {sfpCount} Uplinks SFP+
+              IP: {device.ipAddress ?? "DHCP/Non configurée"} • {totalPorts} Ports RJ45 + {sfpCount}{" "}
+              Uplinks SFP+
             </div>
           </div>
         </div>
@@ -67,11 +77,19 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
         {/* Voyants d'état globaux du switch */}
         <div className="flex items-center justify-between text-[8px] font-mono text-slate-500 px-1 border-b border-slate-800/80 pb-1">
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> PWR</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-600" /> FAULT</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> PoE MAX</span>
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> PWR
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-600" /> FAULT
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> PoE MAX
+            </span>
           </div>
-          <span className="text-slate-400 uppercase tracking-wider font-semibold">{device.brand} NETWORKING</span>
+          <span className="text-slate-400 uppercase tracking-wider font-semibold">
+            {device.brand} NETWORKING
+          </span>
         </div>
 
         {/* Panneau RJ45 étagé */}
@@ -88,7 +106,7 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
               const isWifi = patch?.vlanId === 50;
 
               const vColor = patch
-                ? DEFAULT_VLAN_STYLES[patch.vlanId]?.color ?? "#38bdf8"
+                ? (DEFAULT_VLAN_STYLES[patch.vlanId]?.color ?? "#38bdf8")
                 : "#475569";
 
               return (
@@ -99,21 +117,27 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
                     isSelected
                       ? "border-sky-400 ring-2 ring-sky-400/40 bg-slate-800"
                       : isConnected
-                      ? "border-slate-600 bg-slate-950 hover:border-slate-500"
-                      : "border-slate-800/80 bg-slate-950/60 hover:border-slate-700 opacity-60"
+                        ? "border-slate-600 bg-slate-950 hover:border-slate-500"
+                        : "border-slate-800/80 bg-slate-950/60 hover:border-slate-700 opacity-60"
                   }`}
                   title={`${portId} ${isConnected ? `(Actif - VLAN ${patch?.vlanId} : ${patch?.serviceName})` : "(Libre)"}`}
                 >
                   <div className="flex items-center justify-between w-full px-0.5">
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${
-                        isConnected ? "bg-emerald-400 animate-pulse shadow-[0_0_4px_#22c55e]" : "bg-slate-700"
+                        isConnected
+                          ? "bg-emerald-400 animate-pulse shadow-[0_0_4px_#22c55e]"
+                          : "bg-slate-700"
                       }`}
                     />
                     {isTrunk ? (
-                      <span className="text-[7px] text-rose-400 font-mono font-bold leading-none">T</span>
+                      <span className="text-[7px] text-rose-400 font-mono font-bold leading-none">
+                        T
+                      </span>
                     ) : isWifi ? (
-                      <span className="text-[7px] text-indigo-400 font-mono font-bold leading-none">W</span>
+                      <span className="text-[7px] text-indigo-400 font-mono font-bold leading-none">
+                        W
+                      </span>
                     ) : null}
                   </div>
 
@@ -130,7 +154,9 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
 
           {/* Bloc SFP+ Uplinks (10G Fiber / DAC) */}
           <div className="flex flex-col gap-1 bg-slate-900/90 p-1.5 rounded border border-purple-900/50">
-            <span className="text-[7px] font-mono text-purple-400 uppercase text-center font-semibold">10G SFP+</span>
+            <span className="text-[7px] font-mono text-purple-400 uppercase text-center font-semibold">
+              10G SFP+
+            </span>
             <div className="grid grid-rows-2 grid-flow-col gap-1">
               {Array.from({ length: sfpCount }).map((_, sfpIdx) => {
                 const sfpPortId = `Te1/0/${sfpIdx + 1}`;
@@ -147,7 +173,9 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
                     }`}
                     title={`${sfpPortId} (Uplink 10G SFP+) ${isConnected ? `- Lié à ${patch?.targetDevice}` : ""}`}
                   >
-                    <div className={`w-1.5 h-1.5 rounded-full mb-0.5 ${isConnected ? "bg-purple-400" : "bg-slate-700"}`} />
+                    <div
+                      className={`w-1.5 h-1.5 rounded-full mb-0.5 ${isConnected ? "bg-purple-400" : "bg-slate-700"}`}
+                    />
                     <span className="text-[7px] font-bold text-purple-300">SFP{sfpIdx + 1}</span>
                   </div>
                 );
@@ -182,8 +210,12 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
           {selectedPatch ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-slate-300 font-mono text-[10px]">
-                <span>Service : <strong>{selectedPatch.serviceName}</strong></span>
-                <span className="text-emerald-400 font-semibold">{selectedPatch.speedGbps} Gbps • UP</span>
+                <span>
+                  Service : <strong>{selectedPatch.serviceName}</strong>
+                </span>
+                <span className="text-emerald-400 font-semibold">
+                  {selectedPatch.speedGbps} Gbps • UP
+                </span>
               </div>
               <div className="p-1.5 bg-slate-950 rounded border border-slate-850 flex items-center justify-between font-mono text-[10px]">
                 <div>
@@ -193,11 +225,15 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
                 <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
                 <div className="text-right">
                   <div className="text-[9px] text-slate-500">Destination (Prise / Switch)</div>
-                  <div className="text-purple-300 font-bold">{selectedPatch.sourceDevice} : {selectedPatch.sourcePort}</div>
+                  <div className="text-purple-300 font-bold">
+                    {selectedPatch.sourceDevice} : {selectedPatch.sourcePort}
+                  </div>
                 </div>
               </div>
               <div className="text-[10px] text-slate-400 flex items-center gap-2 font-mono">
-                <span>Câble : {selectedPatch.cableType} ({selectedPatch.lengthM}m)</span>
+                <span>
+                  Câble : {selectedPatch.cableType} ({selectedPatch.lengthM}m)
+                </span>
                 {selectedPatch.vlanId === 99 && (
                   <span className="text-rose-400 flex items-center gap-1">
                     <Shield className="w-3 h-3" /> Trunk 802.1Q Inter-Switch

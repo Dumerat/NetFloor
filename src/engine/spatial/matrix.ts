@@ -43,7 +43,7 @@ export function zoomAtPointer(
   currentViewport: Viewport,
   newScale: number,
   minScale = 0.0002, // 1m = 0.2px (vue d'ensemble très grand campus multi-bâtiments)
-  maxScale = 2.0     // 1mm = 2px (vue ultra détaillée port RJ45)
+  maxScale = 2.0 // 1mm = 2px (vue ultra détaillée port RJ45)
 ): Viewport {
   const clampedScale = Math.min(Math.max(newScale, minScale), maxScale);
 

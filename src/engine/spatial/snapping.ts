@@ -252,7 +252,8 @@ export function snapToOutletDocking(
   return { snappedPoint: draggedPoint, dockedWithId: null };
 }
 
-export type JunctionDockType = "MERGE" | "HORIZONTAL" | "VERTICAL" | "CORRIDOR_Y" | "COLUMN_X" | "NONE";
+export type JunctionDockType =
+  "MERGE" | "HORIZONTAL" | "VERTICAL" | "CORRIDOR_Y" | "COLUMN_X" | "NONE";
 
 export interface JunctionDockResult {
   readonly snappedPoint: Point2D;
@@ -387,4 +388,3 @@ export function snapToJunctionDocking(
     guide: null,
   };
 }
-

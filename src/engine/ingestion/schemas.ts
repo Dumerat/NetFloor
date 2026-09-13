@@ -56,7 +56,8 @@ export const CablingRowSchema = z
     ...row,
     // Conversion automatique de mètres en entiers millimétriques
     lengthMm: Math.round(row.cableLengthM * 1000),
-    resolvedVlanName: row.vlanName && row.vlanName.length > 0 ? row.vlanName : `VLAN_${row.vlanVid}`,
+    resolvedVlanName:
+      row.vlanName && row.vlanName.length > 0 ? row.vlanName : `VLAN_${row.vlanVid}`,
   }));
 
 export type CablingRow = z.infer<typeof CablingRowSchema>;

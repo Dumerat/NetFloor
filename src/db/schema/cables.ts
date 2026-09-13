@@ -14,7 +14,7 @@ import { ports } from "./ports";
 
 export const cableTypeEnum = pgEnum("cable_type", [
   "HORIZONTAL_RUN", // Rigid structural cabling (Plenum/Wall/Ceiling Cat6A)
-  "PATCH_CORD",     // Flexible cord (Bay to switch, desk to wall jack)
+  "PATCH_CORD", // Flexible cord (Bay to switch, desk to wall jack)
   "BACKBONE_TRUNK", // High-capacity backbone trunk (Fiber or 10G copper)
 ]);
 

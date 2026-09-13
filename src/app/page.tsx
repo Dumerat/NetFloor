@@ -11,7 +11,14 @@ import { NetworkTopologyPanel } from "@/components/ui/NetworkTopologyPanel";
 import { InventoryPanel } from "@/components/ui/InventoryPanel";
 import { DeviceTelemetry } from "@/data/settingsStore";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
-import { NodeDisplay, RackDisplay, RackDeviceItem, OutletRole, StackedPortItem, getDefaultSeatLabels } from "@/components/canvas/EquipmentLayer";
+import {
+  NodeDisplay,
+  RackDisplay,
+  RackDeviceItem,
+  OutletRole,
+  StackedPortItem,
+  getDefaultSeatLabels,
+} from "@/components/canvas/EquipmentLayer";
 import { CableData, CableFilterMode } from "@/components/canvas/CableLayer";
 import { FloorDimensionsModal } from "@/components/ui/FloorDimensionsModal";
 import { FloorZone, DEFAULT_ZONES } from "@/types/zones";
@@ -148,9 +155,7 @@ export function getNaturalCableWaypoints(
 ): { x: number; y: number }[] {
   // Cheminement naturel par défaut : le câble monte verticalement depuis la prise
   // puis part horizontalement direct vers la baie informatique (1 seul angle droit net)
-  return [
-    { x: sourcePos.x, y: targetPos.y },
-  ];
+  return [{ x: sourcePos.x, y: targetPos.y }];
 }
 
 export default function NetFloorApp() {
@@ -280,13 +285,14 @@ export default function NetFloorApp() {
   // Mise à jour d'un style de VLAN avec persistance
   const handleUpdateVlanStyle = useCallback((vlanId: number, updates: Partial<VlanStyle>) => {
     setVlanStyles((prev) => {
-      const existing = prev[vlanId] ?? DEFAULT_VLAN_STYLES[vlanId] ?? {
-        vlanId,
-        vlanName: `VLAN ${vlanId}`,
-        color: "#3b82f6",
-        strokePattern: "SOLID",
-        thickness: "NORMAL",
-      };
+      const existing = prev[vlanId] ??
+        DEFAULT_VLAN_STYLES[vlanId] ?? {
+          vlanId,
+          vlanName: `VLAN ${vlanId}`,
+          color: "#3b82f6",
+          strokePattern: "SOLID",
+          thickness: "NORMAL",
+        };
       const updated = {
         ...prev,
         [vlanId]: { ...existing, ...updates },
@@ -366,33 +372,35 @@ export default function NetFloorApp() {
     });
   }, [activeSiteId]);
 
-  const handleUpdateBackgroundPlan = useCallback(
-    (updates: Partial<typeof backgroundPlan>) => {
-      setBackgroundPlan((prev) => {
-        const updated = { ...prev, ...updates };
-        if (updated.imageUrl) {
-          saveBackgroundPlan({
-            name: updated.name,
-            imageData: updated.imageUrl,
-            opacity: updated.opacity,
-            isLocked: updated.isLocked,
-            xMm: updated.xMm,
-            yMm: updated.yMm,
-            scale: updated.scale,
-            widthMm: updated.widthMm,
-            heightMm: updated.heightMm,
-            visible: updated.visible,
-          });
-        }
-        return updated;
-      });
-      loadAllBackgroundPlans().then(setAllBackgroundPlans);
-    },
-    []
-  );
+  const handleUpdateBackgroundPlan = useCallback((updates: Partial<typeof backgroundPlan>) => {
+    setBackgroundPlan((prev) => {
+      const updated = { ...prev, ...updates };
+      if (updated.imageUrl) {
+        saveBackgroundPlan({
+          name: updated.name,
+          imageData: updated.imageUrl,
+          opacity: updated.opacity,
+          isLocked: updated.isLocked,
+          xMm: updated.xMm,
+          yMm: updated.yMm,
+          scale: updated.scale,
+          widthMm: updated.widthMm,
+          heightMm: updated.heightMm,
+          visible: updated.visible,
+        });
+      }
+      return updated;
+    });
+    loadAllBackgroundPlans().then(setAllBackgroundPlans);
+  }, []);
 
   const handleCalibrateScale = useCallback(
-    (result: { pixelsPerMeter: number; realMeters: number; distPx: number; distWorldMm: number }) => {
+    (result: {
+      pixelsPerMeter: number;
+      realMeters: number;
+      distPx: number;
+      distWorldMm: number;
+    }) => {
       setBackgroundPlan((prev) => {
         if (prev.imageUrl && result.distWorldMm > 0) {
           const targetWorldMm = result.realMeters * 1000;
@@ -468,7 +476,8 @@ export default function NetFloorApp() {
       widthMm: 800,
       heightMm: 1000,
       subType: "RACK_42U",
-      description: "Baie principale de brassage & serveurs 42U avec commutateur Cisco Catalyst 9300 et bandeau Cat6A.",
+      description:
+        "Baie principale de brassage & serveurs 42U avec commutateur Cisco Catalyst 9300 et bandeau Cat6A.",
       ipAddress: "10.42.0.10",
       macAddress: "00:0A:41:88:99:A1",
       pingStatus: "ONLINE",
@@ -487,7 +496,8 @@ export default function NetFloorApp() {
       subType: "BENCH_QUAD",
       assignedPerson: "Thomas Roux, Sarah Benali, Lucas Vidal, Sophie Mercier",
       department: "Pôle Collaboratif Tech & RH",
-      description: "Îlot central 4 postes avec cloisonnettes acoustiques croisées et colonnes de câblage intégrées.",
+      description:
+        "Îlot central 4 postes avec cloisonnettes acoustiques croisées et colonnes de câblage intégrées.",
       chairPosition: "BOTTOM",
       seats: [
         {
@@ -564,7 +574,8 @@ export default function NetFloorApp() {
       assignedPerson: "Alexandre Martin",
       assignedUserId: "usr-001",
       department: "Tech Lab",
-      description: "Station de développement double écran 27\", station d'accueil Thunderbolt USB-C.",
+      description:
+        "Station de développement double écran 27\", station d'accueil Thunderbolt USB-C.",
       chairPosition: "BOTTOM",
       seats: [
         {
@@ -787,7 +798,8 @@ export default function NetFloorApp() {
       assignedPerson: "Léa Bernard",
       assignedUserId: "usr-008",
       department: "Direction Juridique",
-      description: "Bureau de direction spacieux avec retour d'angle et station d'accueil double moniteur.",
+      description:
+        "Bureau de direction spacieux avec retour d'angle et station d'accueil double moniteur.",
       chairPosition: "BOTTOM",
       seats: [
         {
@@ -988,7 +1000,8 @@ export default function NetFloorApp() {
       widthMm: 800,
       heightMm: 800,
       subType: "RACK_18U",
-      description: "Baie de sous-répartition 24U dédiée au banc d'essais et aux développeurs du Tech Lab.",
+      description:
+        "Baie de sous-répartition 24U dédiée au banc d'essais et aux développeurs du Tech Lab.",
       ipAddress: "10.42.0.13",
       macAddress: "00:0A:41:88:99:C3",
       pingStatus: "ONLINE",
@@ -1234,7 +1247,8 @@ export default function NetFloorApp() {
       heightMm: 1400,
       subType: "MEETING_TABLE",
       department: "Tech Lab",
-      description: "Table de réunion 8 personnes équipée d'un boîtier de sol HDMI/RJ45 et pieuvre audio.",
+      description:
+        "Table de réunion 8 personnes équipée d'un boîtier de sol HDMI/RJ45 et pieuvre audio.",
       chairPosition: "NONE",
     },
     // Boîte de sol pour la table de réunion reliée à BAIE-OUEST-R&D (rack-03)
@@ -1300,16 +1314,28 @@ export default function NetFloorApp() {
   ]);
 
   // Filtrage des éléments par site actif
-  const visibleRacks = useMemo(() =>
-    racks.filter((r) => !activeSiteId || activeSiteId === "ALL" || (r.siteId ?? DEFAULT_SITE_ID) === activeSiteId),
+  const visibleRacks = useMemo(
+    () =>
+      racks.filter(
+        (r) =>
+          !activeSiteId || activeSiteId === "ALL" || (r.siteId ?? DEFAULT_SITE_ID) === activeSiteId
+      ),
     [racks, activeSiteId]
   );
-  const visibleNodes = useMemo(() =>
-    nodes.filter((n) => !activeSiteId || activeSiteId === "ALL" || (n.siteId ?? DEFAULT_SITE_ID) === activeSiteId),
+  const visibleNodes = useMemo(
+    () =>
+      nodes.filter(
+        (n) =>
+          !activeSiteId || activeSiteId === "ALL" || (n.siteId ?? DEFAULT_SITE_ID) === activeSiteId
+      ),
     [nodes, activeSiteId]
   );
-  const visibleZones = useMemo(() =>
-    zones.filter((z) => !activeSiteId || activeSiteId === "ALL" || (z.siteId ?? DEFAULT_SITE_ID) === activeSiteId),
+  const visibleZones = useMemo(
+    () =>
+      zones.filter(
+        (z) =>
+          !activeSiteId || activeSiteId === "ALL" || (z.siteId ?? DEFAULT_SITE_ID) === activeSiteId
+      ),
     [zones, activeSiteId]
   );
 
@@ -1322,15 +1348,9 @@ export default function NetFloorApp() {
       const sitePlans = allBackgroundPlans.filter(
         (p) => (p.siteId ?? DEFAULT_SITE_ID) === siteId && p.visible
       );
-      const siteRacks = racks.filter(
-        (r) => (r.siteId ?? DEFAULT_SITE_ID) === siteId
-      );
-      const siteNodes = nodes.filter(
-        (n) => (n.siteId ?? DEFAULT_SITE_ID) === siteId
-      );
-      const siteZones = zones.filter(
-        (z) => (z.siteId ?? DEFAULT_SITE_ID) === siteId
-      );
+      const siteRacks = racks.filter((r) => (r.siteId ?? DEFAULT_SITE_ID) === siteId);
+      const siteNodes = nodes.filter((n) => (n.siteId ?? DEFAULT_SITE_ID) === siteId);
+      const siteZones = zones.filter((z) => (z.siteId ?? DEFAULT_SITE_ID) === siteId);
 
       let minX = Infinity;
       let minY = Infinity;
@@ -1398,15 +1418,18 @@ export default function NetFloorApp() {
     [allBackgroundPlans, racks, nodes, zones, floorData, fitFloor]
   );
 
-  const handleBatchSpawn = useCallback((result: BatchSpawnResult) => {
-    const siteTag = activeSiteId || DEFAULT_SITE_ID;
-    const taggedDesks = result.desks.map((d) => ({ ...d, siteId: d.siteId ?? siteTag }));
-    const taggedOutlets = result.outlets.map((o) => ({ ...o, siteId: o.siteId ?? siteTag }));
-    setNodes((prev) => [...prev, ...taggedDesks, ...taggedOutlets]);
-    if (taggedDesks.length > 0) {
-      setSelectedNodeId(taggedDesks[0]!.id);
-    }
-  }, [activeSiteId]);
+  const handleBatchSpawn = useCallback(
+    (result: BatchSpawnResult) => {
+      const siteTag = activeSiteId || DEFAULT_SITE_ID;
+      const taggedDesks = result.desks.map((d) => ({ ...d, siteId: d.siteId ?? siteTag }));
+      const taggedOutlets = result.outlets.map((o) => ({ ...o, siteId: o.siteId ?? siteTag }));
+      setNodes((prev) => [...prev, ...taggedDesks, ...taggedOutlets]);
+      if (taggedDesks.length > 0) {
+        setSelectedNodeId(taggedDesks[0]!.id);
+      }
+    },
+    [activeSiteId]
+  );
 
   const handleAutoRoute = useCallback(
     (portIds: string[], targetRackId: string, targetSwitchId?: string) => {
@@ -1430,7 +1453,9 @@ export default function NetFloorApp() {
     setSelectedZoneId(null);
     if (isShift) {
       setSelectedNodeIds((prev) => {
-        const next = prev.includes(node.id) ? prev.filter((id) => id !== node.id) : [...prev, node.id];
+        const next = prev.includes(node.id)
+          ? prev.filter((id) => id !== node.id)
+          : [...prev, node.id];
         if (next.length === 1 && next[0]) setSelectedNodeId(next[0]);
         else setSelectedNodeId(null);
         return next;
@@ -1451,38 +1476,45 @@ export default function NetFloorApp() {
     }
   }, []);
 
-  const handleGroupNodeMoveEnd = useCallback((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => {
-    if (nodeIds.length === 0 || (delta.deltaX === 0 && delta.deltaY === 0)) return;
-    const idSet = new Set(nodeIds);
-    setNodes((prev) =>
-      prev.map((n) => {
-        if (idSet.has(n.id) || (n.attachedToDeskId && idSet.has(n.attachedToDeskId))) {
-          return {
-            ...n,
-            xMm: Math.round(n.xMm + delta.deltaX),
-            yMm: Math.round(n.yMm + delta.deltaY),
-          };
-        }
-        return n;
-      })
-    );
-    setRacks((prev) =>
-      prev.map((r) => {
-        if (idSet.has(r.id)) {
-          return {
-            ...r,
-            xMm: Math.round(r.xMm + delta.deltaX),
-            yMm: Math.round(r.yMm + delta.deltaY),
-          };
-        }
-        return r;
-      })
-    );
-  }, []);
+  const handleGroupNodeMoveEnd = useCallback(
+    (nodeIds: string[], delta: { deltaX: number; deltaY: number }) => {
+      if (nodeIds.length === 0 || (delta.deltaX === 0 && delta.deltaY === 0)) return;
+      const idSet = new Set(nodeIds);
+      setNodes((prev) =>
+        prev.map((n) => {
+          if (idSet.has(n.id) || (n.attachedToDeskId && idSet.has(n.attachedToDeskId))) {
+            return {
+              ...n,
+              xMm: Math.round(n.xMm + delta.deltaX),
+              yMm: Math.round(n.yMm + delta.deltaY),
+            };
+          }
+          return n;
+        })
+      );
+      setRacks((prev) =>
+        prev.map((r) => {
+          if (idSet.has(r.id)) {
+            return {
+              ...r,
+              xMm: Math.round(r.xMm + delta.deltaX),
+              yMm: Math.round(r.yMm + delta.deltaY),
+            };
+          }
+          return r;
+        })
+      );
+    },
+    []
+  );
 
   const handleBulkDelete = useCallback((ids: string[]) => {
     const idSet = new Set(ids);
-    setNodes((prev) => prev.filter((n) => !idSet.has(n.id) && (!n.attachedToDeskId || !idSet.has(n.attachedToDeskId))));
+    setNodes((prev) =>
+      prev.filter(
+        (n) => !idSet.has(n.id) && (!n.attachedToDeskId || !idSet.has(n.attachedToDeskId))
+      )
+    );
     setRacks((prev) => prev.filter((r) => !idSet.has(r.id)));
     setSelectedNodeIds([]);
     setSelectedNodeId(null);
@@ -1537,15 +1569,11 @@ export default function NetFloorApp() {
   }, []);
 
   const handleZoneMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
-    setZones((prev) =>
-      prev.map((z) => (z.id === id ? { ...z, xMm: newPos.x, yMm: newPos.y } : z))
-    );
+    setZones((prev) => prev.map((z) => (z.id === id ? { ...z, xMm: newPos.x, yMm: newPos.y } : z)));
   }, []);
 
   const handleUpdateZone = useCallback((zoneId: string, updates: Partial<FloorZone>) => {
-    setZones((prev) =>
-      prev.map((z) => (z.id === zoneId ? { ...z, ...updates } : z))
-    );
+    setZones((prev) => prev.map((z) => (z.id === zoneId ? { ...z, ...updates } : z)));
   }, []);
 
   const handleDeleteZone = useCallback((zoneId: string) => {
@@ -1553,26 +1581,29 @@ export default function NetFloorApp() {
     setSelectedZoneId((prev) => (prev === zoneId ? null : prev));
   }, []);
 
-  const handleAddZone = useCallback((newZone?: Partial<FloorZone>) => {
-    const nextIdx = zones.length + 1;
-    const createdZone: FloorZone = {
-      id: `zone-${Date.now()}`,
-      name: newZone?.name || `Zone de Service ${nextIdx}`,
-      serviceCode: newZone?.serviceCode || `S${nextIdx}`,
-      department: newZone?.department,
-      color: newZone?.color || "#0284c7",
-      xMm: newZone?.xMm ?? 15000,
-      yMm: newZone?.yMm ?? 15000,
-      widthMm: newZone?.widthMm ?? 12000,
-      heightMm: newZone?.heightMm ?? 8000,
-      opacity: newZone?.opacity ?? 0.12,
-      description: newZone?.description || "Nouvelle zone de service délimitée.",
-      siteId: newZone?.siteId || activeSiteId || DEFAULT_SITE_ID,
-    };
-    setZones((prev) => [...prev, createdZone]);
-    setSelectedZoneId(createdZone.id);
-    setSelectedNodeId(null);
-  }, [zones.length, activeSiteId]);
+  const handleAddZone = useCallback(
+    (newZone?: Partial<FloorZone>) => {
+      const nextIdx = zones.length + 1;
+      const createdZone: FloorZone = {
+        id: `zone-${Date.now()}`,
+        name: newZone?.name || `Zone de Service ${nextIdx}`,
+        serviceCode: newZone?.serviceCode || `S${nextIdx}`,
+        department: newZone?.department,
+        color: newZone?.color || "#0284c7",
+        xMm: newZone?.xMm ?? 15000,
+        yMm: newZone?.yMm ?? 15000,
+        widthMm: newZone?.widthMm ?? 12000,
+        heightMm: newZone?.heightMm ?? 8000,
+        opacity: newZone?.opacity ?? 0.12,
+        description: newZone?.description || "Nouvelle zone de service délimitée.",
+        siteId: newZone?.siteId || activeSiteId || DEFAULT_SITE_ID,
+      };
+      setZones((prev) => [...prev, createdZone]);
+      setSelectedZoneId(createdZone.id);
+      setSelectedNodeId(null);
+    },
+    [zones.length, activeSiteId]
+  );
 
   // Calcul dynamique des câbles : regroupement en faisceau par colonnette + baie cible avec décalage ruban parallèle
   const cables: CableData[] = useMemo(() => {
@@ -1587,7 +1618,8 @@ export default function NetFloorApp() {
     );
 
     wallOutlets.forEach((outlet) => {
-      const isStacked = outlet.subType === "FLOOR_BOX" || (outlet.stackedPorts && outlet.stackedPorts.length > 0);
+      const isStacked =
+        outlet.subType === "FLOOR_BOX" || (outlet.stackedPorts && outlet.stackedPorts.length > 0);
 
       if (isStacked && outlet.stackedPorts && outlet.stackedPorts.length > 0) {
         // Filtrer les ports branchés de la colonnette
@@ -1598,7 +1630,8 @@ export default function NetFloorApp() {
         // Regroupement par baie cible pour former les faisceaux communs (split si baies différentes)
         const portsByRack: Record<string, typeof patchedPorts> = {};
         patchedPorts.forEach((item) => {
-          const targetRackId = item.sp.connectedRackId || outlet.connectedRackId || visibleRacks[0]?.id || "rack-01";
+          const targetRackId =
+            item.sp.connectedRackId || outlet.connectedRackId || visibleRacks[0]?.id || "rack-01";
           if (!portsByRack[targetRackId]) {
             portsByRack[targetRackId] = [];
           }
@@ -1633,19 +1666,17 @@ export default function NetFloorApp() {
             const cableColor = customColor
               ? customColor
               : isVoip
-              ? `rgba(168, 85, 247, ${baseAlpha})`
-              : isPrinter
-              ? `rgba(245, 158, 11, ${baseAlpha})`
-              : isWifi
-              ? `rgba(99, 102, 241, ${baseAlpha})`
-              : `rgba(59, 130, 246, ${baseAlpha})`;
+                ? `rgba(168, 85, 247, ${baseAlpha})`
+                : isPrinter
+                  ? `rgba(245, 158, 11, ${baseAlpha})`
+                  : isWifi
+                    ? `rgba(99, 102, 241, ${baseAlpha})`
+                    : `rgba(59, 130, 246, ${baseAlpha})`;
 
             const cableId = `cable-run-${outlet.id}-p${originalIdx}`;
 
             // Écart parallèle régulier (ruban plat / ribbon) : 6mm d'écartement constant
-            const offsetDistanceMm = totalInBundle > 1
-              ? (bIdx - (totalInBundle - 1) / 2) * 6
-              : 0;
+            const offsetDistanceMm = totalInBundle > 1 ? (bIdx - (totalInBundle - 1) / 2) * 6 : 0;
 
             list.push({
               id: cableId,
@@ -1670,7 +1701,10 @@ export default function NetFloorApp() {
         });
       } else if (outlet.isPatched) {
         // Prise simple standard
-        const rack = visibleRacks.find((r) => r.id === outlet.connectedRackId) ?? visibleRacks.find((r) => r.id === "rack-01") ?? visibleRacks[0];
+        const rack =
+          visibleRacks.find((r) => r.id === outlet.connectedRackId) ??
+          visibleRacks.find((r) => r.id === "rack-01") ??
+          visibleRacks[0];
         if (!rack) return;
         const isVoip = outlet.outletRole === "VOIP";
         const isPrinter = outlet.outletRole === "PRINTER";
@@ -1682,12 +1716,12 @@ export default function NetFloorApp() {
         const cableColor = customColor
           ? customColor
           : isVoip
-          ? `rgba(168, 85, 247, ${baseAlpha})`
-          : isPrinter
-          ? `rgba(245, 158, 11, ${baseAlpha})`
-          : isWifi
-          ? `rgba(99, 102, 241, ${baseAlpha})`
-          : `rgba(59, 130, 246, ${baseAlpha})`;
+            ? `rgba(168, 85, 247, ${baseAlpha})`
+            : isPrinter
+              ? `rgba(245, 158, 11, ${baseAlpha})`
+              : isWifi
+                ? `rgba(99, 102, 241, ${baseAlpha})`
+                : `rgba(59, 130, 246, ${baseAlpha})`;
 
         const cableId = `cable-run-${outlet.id}`;
         const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + globalIndex * 25 };
@@ -1723,18 +1757,15 @@ export default function NetFloorApp() {
   }, [visibleNodes, visibleRacks, activeViewMode, customPivots, vlanStyles]);
 
   // Déplacement interactif libre 2D du pivot orthogonal unique
-  const handlePivotChange = useCallback(
-    (cableId: string, newPivot: { x: number; y: number }) => {
-      setCustomPivots((prev) => ({
-        ...prev,
-        [cableId]: {
-          x: Math.max(0, Math.round(newPivot.x)),
-          y: Math.max(0, Math.round(newPivot.y)),
-        },
-      }));
-    },
-    []
-  );
+  const handlePivotChange = useCallback((cableId: string, newPivot: { x: number; y: number }) => {
+    setCustomPivots((prev) => ({
+      ...prev,
+      [cableId]: {
+        x: Math.max(0, Math.round(newPivot.x)),
+        y: Math.max(0, Math.round(newPivot.y)),
+      },
+    }));
+  }, []);
 
   // Traçage CTE récursif lors du clic sur une prise murale
   const handleSelectOutlet = useCallback(async (outletNode: NodeDisplay) => {
@@ -1745,8 +1776,8 @@ export default function NetFloorApp() {
       outletNode.portId && outletNode.portId.length > 10
         ? outletNode.portId
         : outletNode.outletRole === "VOIP"
-        ? "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d"
-        : "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c";
+          ? "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d"
+          : "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c";
 
     try {
       const res = await fetch("/api/trace", {
@@ -1769,15 +1800,15 @@ export default function NetFloorApp() {
   const handleFocusNode = useCallback(
     (nodeId: string) => {
       setSelectedNodeId(nodeId);
-      const target =
-        nodes.find((n) => n.id === nodeId) || racks.find((r) => r.id === nodeId);
+      const target = nodes.find((n) => n.id === nodeId) || racks.find((r) => r.id === nodeId);
       if (!target) return;
 
       const currentScale = useCameraStore.getState().viewport.scale;
       const targetScale = Math.max(currentScale, 0.035);
 
-      const canvasLeft = (isPaletteOpen || isTopologyOpen || isInventoryOpen) ? leftPanelWidth : 56;
-      const canvasWidth = typeof window !== "undefined" ? window.innerWidth - canvasLeft - inspectorWidth : 800;
+      const canvasLeft = isPaletteOpen || isTopologyOpen || isInventoryOpen ? leftPanelWidth : 56;
+      const canvasWidth =
+        typeof window !== "undefined" ? window.innerWidth - canvasLeft - inspectorWidth : 800;
       const canvasHeight = typeof window !== "undefined" ? window.innerHeight - 56 : 600;
 
       const panX = canvasLeft + canvasWidth / 2 - target.xMm * targetScale;
@@ -1814,7 +1845,9 @@ export default function NetFloorApp() {
   const rafNodeDragRef = useRef<number | null>(null);
   const pendingRackDragRef = useRef<{ id: string; pos: { x: number; y: number } } | null>(null);
   const rafRackDragRef = useRef<number | null>(null);
-  const pendingPivotDragRef = useRef<{ cableId: string; pos: { x: number; y: number } } | null>(null);
+  const pendingPivotDragRef = useRef<{ cableId: string; pos: { x: number; y: number } } | null>(
+    null
+  );
   const rafPivotDragRef = useRef<number | null>(null);
 
   // Déplacement d'un nœud (bureau ou prise)
@@ -1845,17 +1878,20 @@ export default function NetFloorApp() {
   }, []);
 
   // Déplacement direct d'un nœud cadencé à 60 FPS par requestAnimationFrame
-  const handleThrottledNodeDragMove = useCallback((id: string, newPos: { x: number; y: number }) => {
-    pendingNodeDragRef.current = { id, pos: newPos };
-    if (!rafNodeDragRef.current) {
-      rafNodeDragRef.current = requestAnimationFrame(() => {
-        if (pendingNodeDragRef.current) {
-          handleNodeUpdate(pendingNodeDragRef.current.id, pendingNodeDragRef.current.pos);
-        }
-        rafNodeDragRef.current = null;
-      });
-    }
-  }, [handleNodeUpdate]);
+  const handleThrottledNodeDragMove = useCallback(
+    (id: string, newPos: { x: number; y: number }) => {
+      pendingNodeDragRef.current = { id, pos: newPos };
+      if (!rafNodeDragRef.current) {
+        rafNodeDragRef.current = requestAnimationFrame(() => {
+          if (pendingNodeDragRef.current) {
+            handleNodeUpdate(pendingNodeDragRef.current.id, pendingNodeDragRef.current.pos);
+          }
+          rafNodeDragRef.current = null;
+        });
+      }
+    },
+    [handleNodeUpdate]
+  );
 
   // Déplacement d'une baie informatique
   const handleRackUpdate = useCallback((id: string, newPos: { x: number; y: number }) => {
@@ -1872,104 +1908,111 @@ export default function NetFloorApp() {
   }, []);
 
   // Fin du déplacement d'un nœud ou d'une baie (liaison automatique si lâché sur un bureau, ou détachement fluide)
-  const handleNodeMoveEnd = useCallback((id: string, newPos: { x: number; y: number }) => {
-    if (rafNodeDragRef.current) {
-      cancelAnimationFrame(rafNodeDragRef.current);
-      rafNodeDragRef.current = null;
-    }
-    if (rafRackDragRef.current) {
-      cancelAnimationFrame(rafRackDragRef.current);
-      rafRackDragRef.current = null;
-    }
-    pendingNodeDragRef.current = null;
-    pendingRackDragRef.current = null;
+  const handleNodeMoveEnd = useCallback(
+    (id: string, newPos: { x: number; y: number }) => {
+      if (rafNodeDragRef.current) {
+        cancelAnimationFrame(rafNodeDragRef.current);
+        rafNodeDragRef.current = null;
+      }
+      if (rafRackDragRef.current) {
+        cancelAnimationFrame(rafRackDragRef.current);
+        rafRackDragRef.current = null;
+      }
+      pendingNodeDragRef.current = null;
+      pendingRackDragRef.current = null;
 
-    setNodes((prev) => {
-      const node = prev.find((n) => n.id === id);
-      if (node && node.type === "WALL_OUTLET") {
-        // 1. Détection si la prise est déposée sur un bureau
-        const hitDesk = prev.find((d) => {
-          if (d.type !== "DESK") return false;
-          const deskW = d.widthMm ?? 1600;
-          const deskH = d.heightMm ?? 800;
-          return (
-            newPos.x >= d.xMm &&
-            newPos.x <= d.xMm + deskW &&
-            newPos.y >= d.yMm &&
-            newPos.y <= d.yMm + deskH
-          );
-        });
+      setNodes((prev) => {
+        const node = prev.find((n) => n.id === id);
+        if (node && node.type === "WALL_OUTLET") {
+          // 1. Détection si la prise est déposée sur un bureau
+          const hitDesk = prev.find((d) => {
+            if (d.type !== "DESK") return false;
+            const deskW = d.widthMm ?? 1600;
+            const deskH = d.heightMm ?? 800;
+            return (
+              newPos.x >= d.xMm &&
+              newPos.x <= d.xMm + deskW &&
+              newPos.y >= d.yMm &&
+              newPos.y <= d.yMm + deskH
+            );
+          });
 
-        if (hitDesk) {
-          let seatIdx: number | undefined = undefined;
-          if (hitDesk.subType === "BENCH_QUAD") {
-            const w = hitDesk.widthMm ?? 3200;
-            const h = hitDesk.heightMm ?? 1600;
-            const relX = newPos.x - hitDesk.xMm;
-            const relY = newPos.y - hitDesk.yMm;
-            const isRight = relX > w / 2;
-            const isBottom = relY > h / 2;
-            seatIdx = !isRight && !isBottom ? 0 : isRight && !isBottom ? 1 : !isRight && isBottom ? 2 : 3;
-          } else if (hitDesk.subType === "BENCH_DOUBLE") {
-            const h = hitDesk.heightMm ?? 1600;
-            const relY = newPos.y - hitDesk.yMm;
-            seatIdx = relY < h / 2 ? 0 : 1;
-          }
+          if (hitDesk) {
+            let seatIdx: number | undefined = undefined;
+            if (hitDesk.subType === "BENCH_QUAD") {
+              const w = hitDesk.widthMm ?? 3200;
+              const h = hitDesk.heightMm ?? 1600;
+              const relX = newPos.x - hitDesk.xMm;
+              const relY = newPos.y - hitDesk.yMm;
+              const isRight = relX > w / 2;
+              const isBottom = relY > h / 2;
+              seatIdx =
+                !isRight && !isBottom ? 0 : isRight && !isBottom ? 1 : !isRight && isBottom ? 2 : 3;
+            } else if (hitDesk.subType === "BENCH_DOUBLE") {
+              const h = hitDesk.heightMm ?? 1600;
+              const relY = newPos.y - hitDesk.yMm;
+              seatIdx = relY < h / 2 ? 0 : 1;
+            }
 
-          // Si la prise est DÉJÀ liée à un AUTRE meuble, demander confirmation avant transfert
-          if (node.attachedToDeskId && node.attachedToDeskId !== hitDesk.id) {
-            setPendingAttachmentTransfer({
-              outletId: id,
-              currentDeskId: node.attachedToDeskId,
-              targetDeskId: hitDesk.id,
-              newPos,
-              seatIdx,
-            });
-            // Déplacer la prise mais conserver la liaison d'origine en attendant la confirmation utilisateur
+            // Si la prise est DÉJÀ liée à un AUTRE meuble, demander confirmation avant transfert
+            if (node.attachedToDeskId && node.attachedToDeskId !== hitDesk.id) {
+              setPendingAttachmentTransfer({
+                outletId: id,
+                currentDeskId: node.attachedToDeskId,
+                targetDeskId: hitDesk.id,
+                newPos,
+                seatIdx,
+              });
+              // Déplacer la prise mais conserver la liaison d'origine en attendant la confirmation utilisateur
+              return prev.map((n) =>
+                n.id === id
+                  ? {
+                      ...n,
+                      xMm: newPos.x,
+                      yMm: newPos.y,
+                    }
+                  : n
+              );
+            }
+
+            // Sinon (non liée ou déjà sur ce meuble) : liaison directe
             return prev.map((n) =>
               n.id === id
                 ? {
                     ...n,
                     xMm: newPos.x,
                     yMm: newPos.y,
+                    attachedToDeskId: hitDesk.id,
+                    attachedSeatIndex: seatIdx,
                   }
                 : n
             );
           }
-
-          // Sinon (non liée ou déjà sur ce meuble) : liaison directe
-          return prev.map((n) =>
-            n.id === id
-              ? {
-                  ...n,
-                  xMm: newPos.x,
-                  yMm: newPos.y,
-                  attachedToDeskId: hitDesk.id,
-                  attachedSeatIndex: seatIdx,
-                }
-              : n
-          );
         }
-      }
-      return prev;
-    });
+        return prev;
+      });
 
-    handleNodeUpdate(id, newPos);
-    handleRackUpdate(id, newPos);
-  }, [handleNodeUpdate, handleRackUpdate]);
+      handleNodeUpdate(id, newPos);
+      handleRackUpdate(id, newPos);
+    },
+    [handleNodeUpdate, handleRackUpdate]
+  );
 
   // Déplacement d'une baie throttlé par RAF
-  const handleThrottledRackDragMove = useCallback((id: string, newPos: { x: number; y: number }) => {
-    pendingRackDragRef.current = { id, pos: newPos };
-    if (!rafRackDragRef.current) {
-      rafRackDragRef.current = requestAnimationFrame(() => {
-        if (pendingRackDragRef.current) {
-          handleRackUpdate(pendingRackDragRef.current.id, pendingRackDragRef.current.pos);
-        }
-        rafRackDragRef.current = null;
-      });
-    }
-  }, [handleRackUpdate]);
+  const handleThrottledRackDragMove = useCallback(
+    (id: string, newPos: { x: number; y: number }) => {
+      pendingRackDragRef.current = { id, pos: newPos };
+      if (!rafRackDragRef.current) {
+        rafRackDragRef.current = requestAnimationFrame(() => {
+          if (pendingRackDragRef.current) {
+            handleRackUpdate(pendingRackDragRef.current.id, pendingRackDragRef.current.pos);
+          }
+          rafRackDragRef.current = null;
+        });
+      }
+    },
+    [handleRackUpdate]
+  );
 
   // Déplacement fluide du pivot de câble cadencé par RAF à 60 FPS
   const handleThrottledPivotChange = useCallback(
@@ -1978,10 +2021,7 @@ export default function NetFloorApp() {
       if (!rafPivotDragRef.current) {
         rafPivotDragRef.current = requestAnimationFrame(() => {
           if (pendingPivotDragRef.current) {
-            handlePivotChange(
-              pendingPivotDragRef.current.cableId,
-              pendingPivotDragRef.current.pos
-            );
+            handlePivotChange(pendingPivotDragRef.current.cableId, pendingPivotDragRef.current.pos);
           }
           rafPivotDragRef.current = null;
         });
@@ -2165,7 +2205,14 @@ export default function NetFloorApp() {
   // Option : Mise à jour libre des propriétés (RH, Dimensions réelles ou fausses mesures, Rotation, Baies)
   const handleUpdateNodeProperties = (nodeId: string, updates: Partial<NodeDisplay>) => {
     // Si mise à jour du nom, dimensions, équipements ou site d'une baie, synchroniser racks
-    if (updates.name || updates.devices || updates.widthMm || updates.heightMm || updates.uHeight || updates.siteId) {
+    if (
+      updates.name ||
+      updates.devices ||
+      updates.widthMm ||
+      updates.heightMm ||
+      updates.uHeight ||
+      updates.siteId
+    ) {
       setRacks((prevRacks) =>
         prevRacks.map((r) =>
           r.id === nodeId
@@ -2213,8 +2260,10 @@ export default function NetFloorApp() {
         const deltaRad = (deltaDeg * Math.PI) / 180;
 
         // Centre réel actuel du bureau en coordonnées monde
-        const centerX = target.xMm + (deskW / 2) * Math.cos(oldRad) - (deskH / 2) * Math.sin(oldRad);
-        const centerY = target.yMm + (deskW / 2) * Math.sin(oldRad) + (deskH / 2) * Math.cos(oldRad);
+        const centerX =
+          target.xMm + (deskW / 2) * Math.cos(oldRad) - (deskH / 2) * Math.sin(oldRad);
+        const centerY =
+          target.yMm + (deskW / 2) * Math.sin(oldRad) + (deskH / 2) * Math.cos(oldRad);
 
         // Nouvelle position (x, y) de l'origine du bureau pour que son centre reste identique en place
         const newDeskX = centerX - (deskW / 2) * Math.cos(newRad) + (deskH / 2) * Math.sin(newRad);
@@ -2275,12 +2324,7 @@ export default function NetFloorApp() {
         if (d.type !== "DESK") return false;
         const deskW = d.widthMm ?? 1600;
         const deskH = d.heightMm ?? 800;
-        return (
-          newX >= d.xMm &&
-          newX <= d.xMm + deskW &&
-          newY >= d.yMm &&
-          newY <= d.yMm + deskH
-        );
+        return newX >= d.xMm && newX <= d.xMm + deskW && newY >= d.yMm && newY <= d.yMm + deskH;
       });
 
       if (hitDesk) {
@@ -2292,7 +2336,8 @@ export default function NetFloorApp() {
           const relY = newY - hitDesk.yMm;
           const isRight = relX > w / 2;
           const isBottom = relY > h / 2;
-          seatIndex = !isRight && !isBottom ? 0 : isRight && !isBottom ? 1 : !isRight && isBottom ? 2 : 3;
+          seatIndex =
+            !isRight && !isBottom ? 0 : isRight && !isBottom ? 1 : !isRight && isBottom ? 2 : 3;
         } else if (hitDesk.subType === "BENCH_DOUBLE") {
           const h = hitDesk.heightMm ?? 1600;
           const relY = newY - hitDesk.yMm;
@@ -2328,7 +2373,9 @@ export default function NetFloorApp() {
         return count > 0 ? `${item.name} (${count + 1})` : item.name;
       }
       if (isGenericPort) {
-        const count = nodes.filter((n) => n.subType === "GENERIC_PORT" || n.name.startsWith("Port-")).length + 1;
+        const count =
+          nodes.filter((n) => n.subType === "GENERIC_PORT" || n.name.startsWith("Port-")).length +
+          1;
         return `Port-${count.toString().padStart(2, "0")}`;
       }
       if (isRack) {
@@ -2392,7 +2439,9 @@ export default function NetFloorApp() {
       xMm: newX,
       yMm: newY,
       widthMm: item.widthMm,
-      heightMm: isRack ? Math.max(item.heightMm ?? 1000, 320 + (item.subType === "RACK_18U" ? 18 : 42) * 36) : item.heightMm,
+      heightMm: isRack
+        ? Math.max(item.heightMm ?? 1000, 320 + (item.subType === "RACK_18U" ? 18 : 42) * 36)
+        : item.heightMm,
       subType: item.subType,
       uHeight: isRack ? (item.subType === "RACK_18U" ? 18 : 42) : undefined,
       devices: isRack ? createDefaultRackDevices(newId, finalName) : undefined,
@@ -2520,16 +2569,12 @@ export default function NetFloorApp() {
         dev.deviceType === "SERVER_RACK"
           ? "RACK_42U"
           : dev.deviceType === "WIFI_AP"
-          ? "WIFI_AP"
-          : dev.deviceType === "PRINTER"
-          ? "PRINTER_STATION"
-          : undefined;
+            ? "WIFI_AP"
+            : dev.deviceType === "PRINTER"
+              ? "PRINTER_STATION"
+              : undefined;
       const outletRole =
-        dev.deviceType === "WIFI_AP"
-          ? "WIFI"
-          : dev.deviceType === "PRINTER"
-          ? "PRINTER"
-          : "DATA";
+        dev.deviceType === "WIFI_AP" ? "WIFI" : dev.deviceType === "PRINTER" ? "PRINTER" : "DATA";
 
       const newNode: NodeDisplay = {
         id: dev.id,
@@ -2538,7 +2583,8 @@ export default function NetFloorApp() {
         xMm: 24000 + Math.floor(Math.random() * 8000),
         yMm: 12000 + Math.floor(Math.random() * 8000),
         widthMm: dev.deviceType === "SERVER_RACK" ? 800 : dev.deviceType === "PRINTER" ? 800 : 350,
-        heightMm: dev.deviceType === "SERVER_RACK" ? 1000 : dev.deviceType === "PRINTER" ? 700 : 350,
+        heightMm:
+          dev.deviceType === "SERVER_RACK" ? 1000 : dev.deviceType === "PRINTER" ? 700 : 350,
         subType,
         outletRole,
         ipAddress: dev.ip,
@@ -2589,17 +2635,19 @@ export default function NetFloorApp() {
       const vlanName = isVoip
         ? "VLAN_VOIP"
         : isPrinter
-        ? "VLAN_PRINT"
-        : isWifi
-        ? "VLAN_WIFI_INFRA"
-        : "VLAN_CORP_DATA";
+          ? "VLAN_PRINT"
+          : isWifi
+            ? "VLAN_WIFI_INFRA"
+            : "VLAN_CORP_DATA";
 
       const directDist = linkedDesk
         ? Math.round(
             Math.hypot(
               outlet.xMm - (primaryRack.xMm ?? 12000),
               outlet.yMm - (primaryRack.yMm ?? 14000)
-            ) / 1000 + 4
+            ) /
+              1000 +
+              4
           )
         : 25.0;
 
@@ -2652,7 +2700,9 @@ export default function NetFloorApp() {
                 Multi-Métiers
               </span>
             </h1>
-            <p className="text-[11px] text-slate-400">Plateau R+4 • RH & Espace • Maintenance & Câblage • DSI Réseau</p>
+            <p className="text-[11px] text-slate-400">
+              Plateau R+4 • RH & Espace • Maintenance & Câblage • DSI Réseau
+            </p>
           </div>
         </div>
 
@@ -2688,8 +2738,7 @@ export default function NetFloorApp() {
                 : "text-slate-400 hover:text-blue-400"
             }`}
           >
-            <Network className="w-3.5 h-3.5" />
-            ⚡ Vue DSI & Câblage
+            <Network className="w-3.5 h-3.5" />⚡ Vue DSI & Câblage
           </button>
         </div>
 
@@ -2713,7 +2762,9 @@ export default function NetFloorApp() {
           </button>
 
           <div className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1 flex items-center gap-2 text-slate-400">
-            <span>Échelle : <CameraScaleIndicator /></span>
+            <span>
+              Échelle : <CameraScaleIndicator />
+            </span>
           </div>
 
           {/* Bouton Création d'une nouvelle Zone */}
@@ -2742,7 +2793,14 @@ export default function NetFloorApp() {
               <ZoomOut className="w-4 h-4" />
             </button>
             <button
-              onClick={() => fitFloor(floorData.widthMm, floorData.heightMm, window.innerWidth, window.innerHeight)}
+              onClick={() =>
+                fitFloor(
+                  floorData.widthMm,
+                  floorData.heightMm,
+                  window.innerWidth,
+                  window.innerHeight
+                )
+              }
               title="Cadrer l'Étage"
               className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition"
             >
@@ -2791,10 +2849,7 @@ export default function NetFloorApp() {
 
             {isFileMenuOpen && (
               <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setIsFileMenuOpen(false)}
-                />
+                <div className="fixed inset-0 z-40" onClick={() => setIsFileMenuOpen(false)} />
                 <div className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 text-xs text-slate-200 animate-in fade-in slide-in-from-top-1 font-sans">
                   <div className="px-2.5 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
                     Gestion des données
@@ -2811,7 +2866,9 @@ export default function NetFloorApp() {
                     <UploadCloud className="w-4 h-4 text-sky-400 shrink-0" />
                     <div>
                       <div className="font-semibold text-xs">Importer CSV / Matrice</div>
-                      <div className="text-[10px] text-slate-400">Carnet de câblage, baies et prises</div>
+                      <div className="text-[10px] text-slate-400">
+                        Carnet de câblage, baies et prises
+                      </div>
                     </div>
                   </button>
 
@@ -2826,7 +2883,9 @@ export default function NetFloorApp() {
                     <Download className="w-4 h-4 text-emerald-400 shrink-0" />
                     <div>
                       <div className="font-semibold text-xs">Exporter Carnet CSV</div>
-                      <div className="text-[10px] text-slate-400">Inventaire et raccordements complets</div>
+                      <div className="text-[10px] text-slate-400">
+                        Inventaire et raccordements complets
+                      </div>
                     </div>
                   </button>
                 </div>
@@ -2953,7 +3012,12 @@ export default function NetFloorApp() {
 
         {/* Main Canvas Area */}
         <div
-          style={{ marginLeft: (isPaletteOpen || isTopologyOpen || isInventoryOpen || isSitesOpen) ? `${leftPanelWidth}px` : "56px" }}
+          style={{
+            marginLeft:
+              isPaletteOpen || isTopologyOpen || isInventoryOpen || isSitesOpen
+                ? `${leftPanelWidth}px`
+                : "56px",
+          }}
           className="flex-1 h-full relative min-w-0"
           onDragOver={(e) => {
             e.preventDefault();
@@ -3023,7 +3087,14 @@ export default function NetFloorApp() {
                         if (node.subType === "BENCH_QUAD") {
                           const isRight = relX > deskW / 2;
                           const isBottom = relY > deskH / 2;
-                          targetSeatIdx = !isRight && !isBottom ? 0 : isRight && !isBottom ? 1 : !isRight && isBottom ? 2 : 3;
+                          targetSeatIdx =
+                            !isRight && !isBottom
+                              ? 0
+                              : isRight && !isBottom
+                                ? 1
+                                : !isRight && isBottom
+                                  ? 2
+                                  : 3;
                         } else if (node.subType === "BENCH_DOUBLE") {
                           targetSeatIdx = relY < deskH / 2 ? 0 : 1;
                         }
@@ -3106,7 +3177,10 @@ export default function NetFloorApp() {
                     : "text-blue-400 hover:bg-slate-800"
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: vlanStyles[20]?.color ?? "#3b82f6" }} />
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: vlanStyles[20]?.color ?? "#3b82f6" }}
+                />
                 VLAN 20 (Data)
               </button>
               <button
@@ -3117,7 +3191,10 @@ export default function NetFloorApp() {
                     : "text-purple-400 hover:bg-slate-800"
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: vlanStyles[30]?.color ?? "#a855f7" }} />
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: vlanStyles[30]?.color ?? "#a855f7" }}
+                />
                 VLAN 30 (VoIP)
               </button>
               <button
@@ -3128,7 +3205,10 @@ export default function NetFloorApp() {
                     : "text-amber-400 hover:bg-slate-800"
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: vlanStyles[40]?.color ?? "#f59e0b" }} />
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: vlanStyles[40]?.color ?? "#f59e0b" }}
+                />
                 VLAN 40 (Print)
               </button>
               <button
@@ -3139,7 +3219,10 @@ export default function NetFloorApp() {
                     : "text-indigo-400 hover:bg-slate-800"
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: vlanStyles[50]?.color ?? "#6366f1" }} />
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: vlanStyles[50]?.color ?? "#6366f1" }}
+                />
                 VLAN 50 (Wi-Fi)
               </button>
               <button
@@ -3192,11 +3275,19 @@ export default function NetFloorApp() {
             onPivotChange={handleThrottledPivotChange}
             backgroundPlan={{
               ...backgroundPlan,
-              plans: allBackgroundPlans.length > 0
-                ? allBackgroundPlans.filter((p) => !activeSiteId || activeSiteId === "ALL" || (p.siteId ?? DEFAULT_SITE_ID) === activeSiteId)
-                : undefined,
+              plans:
+                allBackgroundPlans.length > 0
+                  ? allBackgroundPlans.filter(
+                      (p) =>
+                        !activeSiteId ||
+                        activeSiteId === "ALL" ||
+                        (p.siteId ?? DEFAULT_SITE_ID) === activeSiteId
+                    )
+                  : undefined,
             }}
-            onBackgroundPlanPositionChange={(pos) => handleUpdateBackgroundPlan({ xMm: pos.x, yMm: pos.y })}
+            onBackgroundPlanPositionChange={(pos) =>
+              handleUpdateBackgroundPlan({ xMm: pos.x, yMm: pos.y })
+            }
             onCalibrateScale={handleCalibrateScale}
             isRulerActive={isRulerActive}
             onCloseRuler={() => setIsRulerActive(false)}
@@ -3205,7 +3296,9 @@ export default function NetFloorApp() {
           {/* Tiroir des Éléments Non Positionnés (importés par CSV) */}
           <UnpositionedElementsDrawer
             unpositionedNodes={unpositionedNodes}
-            onRemoveItem={(id: string) => setUnpositionedNodes((prev) => prev.filter((n) => n.id !== id))}
+            onRemoveItem={(id: string) =>
+              setUnpositionedNodes((prev) => prev.filter((n) => n.id !== id))
+            }
             onClearAll={() => setUnpositionedNodes([])}
           />
 
@@ -3213,7 +3306,9 @@ export default function NetFloorApp() {
           <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-800 backdrop-blur rounded-lg p-2.5 text-[11px] text-slate-400 shadow-xl font-mono flex items-center gap-2 pointer-events-none z-10">
             <Sparkles className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
             <span>
-              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Colonnettes RJ45 stackées jusqu&apos;à 8 ports • Tracés orthogonaux 90° avec pivot unique ajustable.
+              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Colonnettes
+              RJ45 stackées jusqu&apos;à 8 ports • Tracés orthogonaux 90° avec pivot unique
+              ajustable.
             </span>
           </div>
         </div>
@@ -3348,7 +3443,8 @@ export default function NetFloorApp() {
           await saveBackgroundPlan(newPlan);
           const updatedPlans = await loadAllBackgroundPlans();
           setAllBackgroundPlans(updatedPlans);
-          const created = updatedPlans.find((p) => p.id === newPlan.id) ?? updatedPlans[updatedPlans.length - 1];
+          const created =
+            updatedPlans.find((p) => p.id === newPlan.id) ?? updatedPlans[updatedPlans.length - 1];
           if (created) {
             setActivePlanId(created.id);
             setBackgroundPlan({
@@ -3448,8 +3544,12 @@ export default function NetFloorApp() {
                   <Palette className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-slate-100">Personnalisation des Tracés par VLAN</h3>
-                  <p className="text-[10px] text-slate-400">Couleurs, motifs (plein, pointillés, tirets) et épaisseurs</p>
+                  <h3 className="text-xs font-bold text-slate-100">
+                    Personnalisation des Tracés par VLAN
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Couleurs, motifs (plein, pointillés, tirets) et épaisseurs
+                  </p>
                 </div>
               </div>
               <button
@@ -3483,14 +3583,26 @@ export default function NetFloorApp() {
         <div
           className="fixed z-50 bg-slate-900/95 border border-slate-700/80 rounded-xl shadow-2xl backdrop-blur-md p-1.5 min-w-[220px] animate-in fade-in zoom-in-95 duration-100 font-sans"
           style={{
-            left: Math.min(contextMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 230),
-            top: Math.min(contextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 800) - 160),
+            left: Math.min(
+              contextMenu.x,
+              (typeof window !== "undefined" ? window.innerWidth : 1200) - 230
+            ),
+            top: Math.min(
+              contextMenu.y,
+              (typeof window !== "undefined" ? window.innerHeight : 800) - 160
+            ),
           }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-2.5 py-1.5 border-b border-slate-800 text-[11px] font-semibold text-slate-300 flex items-center justify-between">
             <div className="flex items-center gap-1.5 truncate">
-              <span>{contextMenu.node.type === "DESK" ? "🖥️" : contextMenu.node.type === "PATCH_PANEL" ? "⚡" : "🔌"}</span>
+              <span>
+                {contextMenu.node.type === "DESK"
+                  ? "🖥️"
+                  : contextMenu.node.type === "PATCH_PANEL"
+                    ? "⚡"
+                    : "🔌"}
+              </span>
               <span className="truncate">{contextMenu.node.name}</span>
             </div>
             <button
@@ -3537,69 +3649,77 @@ export default function NetFloorApp() {
         </div>
       )}
       {/* 7. Modal de Confirmation de Transfert de Liaison (prise déjà rattachée à un autre bureau) */}
-      {pendingAttachmentTransfer && (() => {
-        const currentDesk = nodes.find((n) => n.id === pendingAttachmentTransfer.currentDeskId);
-        const targetDesk = nodes.find((n) => n.id === pendingAttachmentTransfer.targetDeskId);
-        const outlet = nodes.find((n) => n.id === pendingAttachmentTransfer.outletId);
+      {pendingAttachmentTransfer &&
+        (() => {
+          const currentDesk = nodes.find((n) => n.id === pendingAttachmentTransfer.currentDeskId);
+          const targetDesk = nodes.find((n) => n.id === pendingAttachmentTransfer.targetDeskId);
+          const outlet = nodes.find((n) => n.id === pendingAttachmentTransfer.outletId);
 
-        return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-slate-950 border border-amber-700/60 rounded-xl w-[420px] max-w-[95vw] p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
-                <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                  <AlertCircle className="w-5 h-5" />
+          return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-slate-950 border border-amber-700/60 rounded-xl w-[420px] max-w-[95vw] p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+                  <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-100">Transférer la liaison ?</h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Cette prise est déjà rattachée à un bureau.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-100">Transférer la liaison ?</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Cette prise est déjà rattachée à un bureau.
+
+                <div className="py-4 space-y-2 text-xs text-slate-300">
+                  <p>
+                    <strong className="text-slate-100">{outlet?.name ?? "Prise"}</strong> est
+                    actuellement rattachée à{" "}
+                    <strong className="text-amber-400">
+                      {currentDesk?.name ?? "Bureau actuel"}
+                    </strong>
+                    .
+                  </p>
+                  <p>
+                    Souhaitez-vous la transférer sur{" "}
+                    <strong className="text-blue-400">
+                      {targetDesk?.name ?? "Nouveau bureau"}
+                    </strong>{" "}
+                    ?
                   </p>
                 </div>
-              </div>
 
-              <div className="py-4 space-y-2 text-xs text-slate-300">
-                <p>
-                  <strong className="text-slate-100">{outlet?.name ?? "Prise"}</strong> est actuellement rattachée à{" "}
-                  <strong className="text-amber-400">{currentDesk?.name ?? "Bureau actuel"}</strong>.
-                </p>
-                <p>
-                  Souhaitez-vous la transférer sur{" "}
-                  <strong className="text-blue-400">{targetDesk?.name ?? "Nouveau bureau"}</strong> ?
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  onClick={() => setPendingAttachmentTransfer(null)}
-                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition"
-                >
-                  Conserver le rattachement actuel
-                </button>
-                <button
-                  onClick={() => {
-                    const transfer = pendingAttachmentTransfer;
-                    setNodes((prev) =>
-                      prev.map((n) =>
-                        n.id === transfer.outletId
-                          ? {
-                              ...n,
-                              attachedToDeskId: transfer.targetDeskId,
-                              attachedSeatIndex: transfer.seatIdx,
-                            }
-                          : n
-                      )
-                    );
-                    setPendingAttachmentTransfer(null);
-                  }}
-                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow transition"
-                >
-                  Transférer la prise
-                </button>
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                  <button
+                    onClick={() => setPendingAttachmentTransfer(null)}
+                    className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition"
+                  >
+                    Conserver le rattachement actuel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const transfer = pendingAttachmentTransfer;
+                      setNodes((prev) =>
+                        prev.map((n) =>
+                          n.id === transfer.outletId
+                            ? {
+                                ...n,
+                                attachedToDeskId: transfer.targetDeskId,
+                                attachedSeatIndex: transfer.seatIdx,
+                              }
+                            : n
+                        )
+                      );
+                      setPendingAttachmentTransfer(null);
+                    }}
+                    className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow transition"
+                  >
+                    Transférer la prise
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
     </div>
   );
 }

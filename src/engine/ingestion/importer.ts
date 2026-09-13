@@ -35,10 +35,7 @@ export async function importCablingLedger(
     const floorMap = new Map<string, Floor>();
     for (const record of validRecords) {
       if (!floorMap.has(record.floorName)) {
-        const [existing] = await tx
-          .select()
-          .from(floors)
-          .where(eq(floors.name, record.floorName));
+        const [existing] = await tx.select().from(floors).where(eq(floors.name, record.floorName));
 
         if (existing) {
           floorMap.set(record.floorName, existing);
@@ -67,10 +64,7 @@ export async function importCablingLedger(
 
       const rackKey = `${floor.id}::${record.rackName}`;
       if (!rackMap.has(rackKey)) {
-        const [existing] = await tx
-          .select()
-          .from(racks)
-          .where(eq(racks.name, record.rackName));
+        const [existing] = await tx.select().from(racks).where(eq(racks.name, record.rackName));
 
         if (existing) {
           rackMap.set(rackKey, existing);
@@ -94,10 +88,7 @@ export async function importCablingLedger(
     const vlanMap = new Map<number, Vlan>();
     for (const record of validRecords) {
       if (!vlanMap.has(record.vlanVid)) {
-        const [existing] = await tx
-          .select()
-          .from(vlans)
-          .where(eq(vlans.vid, record.vlanVid));
+        const [existing] = await tx.select().from(vlans).where(eq(vlans.vid, record.vlanVid));
 
         if (existing) {
           vlanMap.set(record.vlanVid, existing);

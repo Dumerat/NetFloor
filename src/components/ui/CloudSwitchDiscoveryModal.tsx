@@ -1,17 +1,7 @@
 "use client";
 
 import { useState, type FC } from "react";
-import {
-  X,
-  Search,
-  Radio,
-  Cloud,
-  Check,
-  Plus,
-  Activity,
-  RefreshCw,
-  Zap,
-} from "lucide-react";
+import { X, Search, Radio, Cloud, Check, Plus, Activity, RefreshCw, Zap } from "lucide-react";
 import { RackDeviceItem, RackDeviceBrand } from "@/components/canvas/EquipmentLayer";
 
 interface CloudSwitchDiscoveryModalProps {
@@ -330,7 +320,9 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
         if (discovered.length > 0) {
           setSnmpDiscoveredSwitches(discovered);
         }
-        setSnmpResultMsg(`Scan SNMP terminé sur ${snmpSubnet} (${data.summary?.online ?? 2} switchs en ligne).`);
+        setSnmpResultMsg(
+          `Scan SNMP terminé sur ${snmpSubnet} (${data.summary?.online ?? 2} switchs en ligne).`
+        );
       } else {
         setSnmpResultMsg(`Scan SNMP terminé sur ${snmpSubnet} (2 commutateurs détectés).`);
       }
@@ -464,7 +456,9 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
               <div>
                 <div className="text-[11px] font-semibold text-slate-300 mb-2 flex items-center justify-between">
                   <span>Commutateurs gérés par Aruba Central ({arubaSwitches.length}) :</span>
-                  <span className="text-slate-500 text-[10px]">1 clic pour intégrer dans la baie</span>
+                  <span className="text-slate-500 text-[10px]">
+                    1 clic pour intégrer dans la baie
+                  </span>
                 </div>
                 <div className="space-y-2">
                   {arubaSwitches.map((sw) => (

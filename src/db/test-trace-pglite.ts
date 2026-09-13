@@ -19,7 +19,7 @@ async function runStandaloneTraceValidation() {
   console.log("📜 2. Application de la migration DDL (drizzle/0000_conscious_naoko.sql)...");
   const migrationPath = path.resolve(process.cwd(), "drizzle", "0000_conscious_naoko.sql");
   const migrationRaw = fs.readFileSync(migrationPath, "utf-8");
-  
+
   // Exécution des déclarations séparées par --> statement-breakpoint
   const statements = migrationRaw
     .split("--> statement-breakpoint")
@@ -29,11 +29,15 @@ async function runStandaloneTraceValidation() {
   for (const stmt of statements) {
     await client.exec(stmt);
   }
-  console.log(`   ✅ ${statements.length} déclarations DDL exécutées avec succès (Types, Tables, FKs, Indexes).`);
+  console.log(
+    `   ✅ ${statements.length} déclarations DDL exécutées avec succès (Types, Tables, FKs, Indexes).`
+  );
 
   // 3. Déploiement de la topologie
-  console.log("\n🌱 3. Déploiement de la topologie de référence (Entreprise 800+ collaborateurs)...");
-  
+  console.log(
+    "\n🌱 3. Déploiement de la topologie de référence (Entreprise 800+ collaborateurs)..."
+  );
+
   // Étage
   const [floor] = await db
     .insert(schema.floors)
@@ -392,11 +396,19 @@ async function runStandaloneTraceValidation() {
 
   console.log("\n📊 RÉSULTAT DU TRAÇAGE :");
   console.log(`   Nombre total de sauts : ${traceResult.hops.length}`);
-  console.log(`   Longueur totale de câble : ${traceResult.totalCableLengthMeters} m (${traceResult.totalCableLengthMm} mm)`);
-  console.log(`   Terminé sur équipement actif : ${traceResult.isTerminatedAtActiveDevice ? "OUI" : "NON"}`);
-  console.log(`   Équipement terminal : ${traceResult.terminalNode?.name} (${traceResult.terminalNode?.type})`);
+  console.log(
+    `   Longueur totale de câble : ${traceResult.totalCableLengthMeters} m (${traceResult.totalCableLengthMm} mm)`
+  );
+  console.log(
+    `   Terminé sur équipement actif : ${traceResult.isTerminatedAtActiveDevice ? "OUI" : "NON"}`
+  );
+  console.log(
+    `   Équipement terminal : ${traceResult.terminalNode?.name} (${traceResult.terminalNode?.type})`
+  );
   console.log(`   Port d'arrivée : ${traceResult.terminalNode?.portLabel}`);
-  console.log(`   VLAN Actif Résolu : VID ${traceResult.resolvedVlan?.vid} — "${traceResult.resolvedVlan?.name}"`);
+  console.log(
+    `   VLAN Actif Résolu : VID ${traceResult.resolvedVlan?.vid} — "${traceResult.resolvedVlan?.name}"`
+  );
 
   console.log("\n📋 DÉTAIL DES ÉTAPES TRAVERSÉES :");
   traceResult.hops.forEach((h) => {
@@ -417,7 +429,9 @@ async function runStandaloneTraceValidation() {
   if (traceResult.resolvedVlan?.vid !== 20) throw new Error("VLAN non résolu");
   console.log("   ✅ Résolution logique exacte : VLAN 20 (VLAN_CORP_DATA)");
 
-  console.log("\n🏆 SUCCÈS TOTAL : La CTE récursive et le schéma relationnel sont validés sans dette technique !");
+  console.log(
+    "\n🏆 SUCCÈS TOTAL : La CTE récursive et le schéma relationnel sont validés sans dette technique !"
+  );
 }
 
 runStandaloneTraceValidation().catch((err) => {

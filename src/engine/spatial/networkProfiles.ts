@@ -11,7 +11,12 @@
  * Règle d'exclusivité stricte : Un port de switch ne peut alimenter qu'une seule prise à la fois (1:1).
  */
 
-import { NodeDisplay, RackDisplay, RackDeviceItem, OutletRole } from "@/components/canvas/EquipmentLayer";
+import {
+  NodeDisplay,
+  RackDisplay,
+  RackDeviceItem,
+  OutletRole,
+} from "@/components/canvas/EquipmentLayer";
 
 export interface SwitchPortProfile {
   portName: string; // ex: "Gi1/0/1"
@@ -145,9 +150,7 @@ export function resolveEffectiveOutletNetwork(
     rack = racks.find((r) => r.id === outlet.connectedRackId);
     const switches = (rack?.devices ?? []).filter((d) => d.deviceType === "SWITCH");
     targetSwitch =
-      switches.find((s) => s.id === outlet.connectedSwitchId) ??
-      switches[0] ??
-      undefined;
+      switches.find((s) => s.id === outlet.connectedSwitchId) ?? switches[0] ?? undefined;
   }
 
   const profile = getSwitchPortProfile(targetSwitch, outlet.connectedSwitchPort);
