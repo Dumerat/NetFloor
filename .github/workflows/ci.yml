@@ -63,7 +63,7 @@ jobs:
 
       # Étape 9 (5/6) : Scan SonarQube officiel
       - name: 5. SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@v5
+        uses: sonarsource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
