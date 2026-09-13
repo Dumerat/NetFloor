@@ -135,16 +135,22 @@ const CableLayerComponent: FC<CableLayerProps> = ({
         );
 
         // Décalage géométrique perpendiculaire pour faisceau parallèle (ruban / flat cable)
-        const offset = cable.offsetDistanceMm ?? 0;
-        const Ax = cable.sourcePos.x + offset;
-        const Ay = cable.sourcePos.y;
-        const Bx = cable.targetPos.x;
-        const By = cable.targetPos.y + offset;
+        const offset = Number.isFinite(cable.offsetDistanceMm) ? (cable.offsetDistanceMm ?? 0) : 0;
+        const srcX = Number.isFinite(cable.sourcePos?.x) ? cable.sourcePos.x : 0;
+        const srcY = Number.isFinite(cable.sourcePos?.y) ? cable.sourcePos.y : 0;
+        const tgtX = Number.isFinite(cable.targetPos?.x) ? cable.targetPos.x : 0;
+        const tgtY = Number.isFinite(cable.targetPos?.y) ? cable.targetPos.y : 0;
+
+        const Ax = srcX + offset;
+        const Ay = srcY;
+        const Bx = tgtX;
+        const By = tgtY + offset;
 
         // 1. Source de Vérité Unique : coordonnées absolues du pivot (avec décalage de faisceau)
-        const basePivot = cable.pivot ?? {
-          x: Math.round((cable.sourcePos.x + cable.targetPos.x) / 2),
-          y: cable.targetPos.y,
+        const rawPivot = cable.pivot;
+        const basePivot = {
+          x: Number.isFinite(rawPivot?.x) ? rawPivot!.x : Math.round((srcX + tgtX) / 2),
+          y: Number.isFinite(rawPivot?.y) ? rawPivot!.y : tgtY,
         };
         const pivot = {
           x: basePivot.x + offset,
@@ -179,7 +185,10 @@ const CableLayerComponent: FC<CableLayerProps> = ({
         // Un seul pivot par faisceau (bundleKey) pour éviter la superposition de cercles
         const pivotKey = cable.bundleKey || cable.id;
         const shouldRenderPivot =
-          cable.cableType === "HORIZONTAL_RUN" && !renderedPivotKeys.has(pivotKey);
+          cable.cableType === "HORIZONTAL_RUN" &&
+          !renderedPivotKeys.has(pivotKey) &&
+          Number.isFinite(basePivot.x) &&
+          Number.isFinite(basePivot.y);
         if (shouldRenderPivot) {
           renderedPivotKeys.add(pivotKey);
         }
