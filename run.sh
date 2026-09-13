@@ -32,11 +32,17 @@ NO_DOCKER=false
 
 # Résolution automatique du binaire pnpm
 resolve_pnpm() {
-    if command -v pnpm >/dev/null 2>&1; then
-        PNPM_CMD="pnpm"
-    elif [ -x "$HOME/.local/share/pnpm/bin/pnpm" ]; then
+    export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+    local CACHED_CJS
+    CACHED_CJS=$(find "$HOME/.npm/_npx" -name "pnpm.cjs" 2>/dev/null | head -n 1 || true)
+
+    if [ -x "$HOME/.local/share/pnpm/bin/pnpm" ]; then
         export PATH="$HOME/.local/share/pnpm/bin:$PATH"
         PNPM_CMD="$HOME/.local/share/pnpm/bin/pnpm"
+    elif [ -n "$CACHED_CJS" ] && [ -f "$CACHED_CJS" ]; then
+        PNPM_CMD="node $CACHED_CJS"
+    elif command -v pnpm >/dev/null 2>&1; then
+        PNPM_CMD="pnpm"
     elif command -v corepack >/dev/null 2>&1; then
         PNPM_CMD="corepack pnpm"
     elif command -v npx >/dev/null 2>&1; then
