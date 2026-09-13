@@ -43,7 +43,9 @@ export interface RackDisplay {
   widthMm: number;
   depthMm: number;
   uHeight: number;
+  description?: string | undefined;
   devices?: RackDeviceItem[] | undefined;
+  patches?: any[] | undefined;
   siteId?: string | undefined;
 }
 
@@ -151,6 +153,7 @@ export interface NodeDisplay {
   connectedSwitchId?: string | undefined;
   connectedSwitchPort?: string | undefined;
   devices?: RackDeviceItem[] | undefined;
+  patches?: any[] | undefined;
   uHeight?: number | undefined;
   siteId?: string | undefined;
 }
@@ -575,8 +578,12 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             yMm: rack.yMm,
             widthMm: rWidth,
             heightMm: rDepth,
-            subType: "RACK_42U",
-            description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
+            subType: rack.uHeight === 18 ? "RACK_18U" : "RACK_42U",
+            uHeight: rack.uHeight,
+            description: rack.description ?? "",
+            devices: rack.devices ?? [],
+            patches: rack.patches ?? [],
+            siteId: rack.siteId,
           };
 
           return (
@@ -612,20 +619,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               onContextMenu={(e) => {
                 e.evt.preventDefault();
                 e.cancelBubble = true;
-                onNodeContextMenu?.(
-                  {
-                    id: rack.id,
-                    type: "PATCH_PANEL",
-                    name: rack.name,
-                    xMm: rack.xMm,
-                    yMm: rack.yMm,
-                    widthMm: rWidth,
-                    heightMm: rDepth,
-                    subType: "RACK_42U",
-                    description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
-                  },
-                  { x: e.evt.clientX, y: e.evt.clientY }
-                );
+                onNodeContextMenu?.(rackNodeDisplay, { x: e.evt.clientX, y: e.evt.clientY });
               }}
             >
               {/* Châssis extérieur métallique de la baie 19" */}

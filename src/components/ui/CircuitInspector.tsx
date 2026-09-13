@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, memo, type FC } from "react";
+import { useState, useEffect, useMemo, useCallback, memo, type FC } from "react";
 import { CircuitTraceResult } from "@/db/queries/trace-link";
 import {
   NodeDisplay,
@@ -160,151 +160,7 @@ export interface InternalRackPatch {
   speedGbps: number;
 }
 
-const DEFAULT_RACK_PATCHES: InternalRackPatch[] = [
-  {
-    id: "patch-01",
-    sourceDevice: "PP-24P-CAT6A (U24)",
-    sourcePort: "Port 01",
-    targetDevice: "SW-ACCESS-4A (U22)",
-    targetPort: "Gi1/0/1",
-    vlanId: 20,
-    serviceName: "Poste Bureau 408-A (Data PC)",
-    cableType: "CAT6A_RJ45",
-    lengthM: 1.0,
-    status: "UP",
-    speedGbps: 1,
-  },
-  {
-    id: "patch-02",
-    sourceDevice: "PP-24P-CAT6A (U24)",
-    sourcePort: "Port 02",
-    targetDevice: "SW-ACCESS-4A (U22)",
-    targetPort: "Gi1/0/2",
-    vlanId: 30,
-    serviceName: "IP Phone Bureau 408-B (VoIP)",
-    cableType: "CAT6A_RJ45",
-    lengthM: 1.0,
-    status: "UP",
-    speedGbps: 1,
-  },
-  {
-    id: "patch-03",
-    sourceDevice: "PP-24P-CAT6A (U24)",
-    sourcePort: "Port 03",
-    targetDevice: "SW-ACCESS-4A (U22)",
-    targetPort: "Gi1/0/3",
-    vlanId: 20,
-    serviceName: "Colonnette 402 - RJ45-1 (Data)",
-    cableType: "CAT6A_RJ45",
-    lengthM: 1.0,
-    status: "UP",
-    speedGbps: 1,
-  },
-  {
-    id: "patch-04",
-    sourceDevice: "PP-24P-CAT6A (U24)",
-    sourcePort: "Port 04",
-    targetDevice: "SW-ACCESS-4A (U22)",
-    targetPort: "Gi1/0/4",
-    vlanId: 30,
-    serviceName: "Colonnette 402 - RJ45-2 (VoIP)",
-    cableType: "CAT6A_RJ45",
-    lengthM: 1.0,
-    status: "UP",
-    speedGbps: 1,
-  },
-  {
-    id: "patch-05",
-    sourceDevice: "PP-24P-CAT6A (U24)",
-    sourcePort: "Port 05",
-    targetDevice: "SW-ACCESS-4A (U22)",
-    targetPort: "Gi1/0/5",
-    vlanId: 20,
-    serviceName: "Boîte Sol 1 (Data)",
-    cableType: "CAT6A_RJ45",
-    lengthM: 1.5,
-    status: "UP",
-    speedGbps: 1,
-  },
-  {
-    id: "patch-06",
-    sourceDevice: "PP-24P-CAT6A (U24)",
-    sourcePort: "Port 06",
-    targetDevice: "SW-ACCESS-4A (U22)",
-    targetPort: "Gi1/0/6",
-    vlanId: 50,
-    serviceName: "Borne Wi-Fi 04 Plafond (PoE+)",
-    cableType: "CAT6A_RJ45",
-    lengthM: 1.5,
-    status: "UP",
-    speedGbps: 2.5,
-  },
-  {
-    id: "patch-07",
-    sourceDevice: "PP-24P-CAT6A (U24)",
-    sourcePort: "Port 07",
-    targetDevice: "SW-ACCESS-4A (U22)",
-    targetPort: "Gi1/0/7",
-    vlanId: 40,
-    serviceName: "Copieur RH (Impression)",
-    cableType: "CAT6A_RJ45",
-    lengthM: 1.0,
-    status: "UP",
-    speedGbps: 1,
-  },
-  {
-    id: "patch-08",
-    sourceDevice: "SW-ACCESS-4A (U22)",
-    sourcePort: "Te1/0/1",
-    targetDevice: "SW-DISTRIB-4B (U20)",
-    targetPort: "Te1/0/1",
-    vlanId: 99,
-    serviceName: "Trunk Inter-Switch 802.1Q (LACP)",
-    cableType: "DAC_10G",
-    lengthM: 0.5,
-    status: "UP",
-    speedGbps: 10,
-  },
-  {
-    id: "patch-09",
-    sourceDevice: "SW-ACCESS-4A (U22)",
-    sourcePort: "Te1/0/2",
-    targetDevice: "FW-FORTIGATE (U15)",
-    targetPort: "port1",
-    vlanId: 99,
-    serviceName: "Uplink Cœur Sécurité Pare-feu",
-    cableType: "DAC_10G",
-    lengthM: 1.0,
-    status: "UP",
-    speedGbps: 10,
-  },
-  {
-    id: "patch-10",
-    sourceDevice: "SW-DISTRIB-4B (U20)",
-    sourcePort: "Te1/0/2",
-    targetDevice: "SRV-ESXI (U10)",
-    targetPort: "vmnic0",
-    vlanId: 10,
-    serviceName: "Cluster Hyperviseur & Stockage NAS",
-    cableType: "DAC_10G",
-    lengthM: 1.0,
-    status: "UP",
-    speedGbps: 10,
-  },
-  {
-    id: "patch-11",
-    sourceDevice: "FW-FORTIGATE (U15)",
-    sourcePort: "WAN1",
-    targetDevice: "Tiroir Optique Orange (U05)",
-    targetPort: "Port 1",
-    vlanId: 100,
-    serviceName: "Accès Internet Entreprise FTTO",
-    cableType: "FIBER_LC",
-    lengthM: 2.0,
-    status: "UP",
-    speedGbps: 1,
-  },
-];
+export const DEFAULT_RACK_PATCHES: InternalRackPatch[] = [];
 
 export interface CircuitInspectorProps {
   traceResult: CircuitTraceResult | null;
@@ -435,11 +291,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [autoRouteTargetSwitchId, setAutoRouteTargetSwitchId] = useState<string>("AUTO");
 
   const getSwitchesForRack = (rackId: string | undefined): RackDeviceItem[] => {
-    const targetRack = availableRacks.find((r) => r.id === rackId) ?? availableRacks[0];
-    const devs: RackDeviceItem[] =
-      targetRack?.devices && targetRack.devices.length > 0
-        ? targetRack.devices
-        : DEFAULT_RACK_DEVICES;
+    const targetRack = availableRacks.find((r) => r.id === rackId);
+    if (!targetRack) return [];
+    const devs: RackDeviceItem[] = targetRack.devices ?? [];
     return devs.filter((d: RackDeviceItem) => d.deviceType === "SWITCH");
   };
 
@@ -493,7 +347,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     },
     [occupiedPortsMap]
   );
-  const [rackPatches, setRackPatches] = useState<InternalRackPatch[]>(DEFAULT_RACK_PATCHES);
+  const [rackPatches, setRackPatches] = useState<InternalRackPatch[]>([]);
+
+  useEffect(() => {
+    setRackPatches(selectedNode?.patches ?? []);
+  }, [selectedNode?.id, selectedNode?.patches]);
   const [isAddingPatch, setIsAddingPatch] = useState(false);
   const [newPatchSourcePort, setNewPatchSourcePort] = useState("Port 08");
   const [newPatchTargetPort, setNewPatchTargetPort] = useState("Gi1/0/8");
@@ -3448,11 +3306,13 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     });
 
     const handleCreatePatch = () => {
+      const defaultPP = rackDevices.find((d) => d.deviceType === "PATCH_PANEL");
+      const defaultSW = rackDevices.find((d) => d.deviceType === "SWITCH");
       const newPatch: InternalRackPatch = {
         id: `patch-${Date.now()}`,
-        sourceDevice: "PP-24P-CAT6A (U24)",
+        sourceDevice: defaultPP ? `${defaultPP.name} (U${defaultPP.slotU})` : "Panneau RJ45",
         sourcePort: newPatchSourcePort,
-        targetDevice: "SW-ACCESS-4A (U22)",
+        targetDevice: defaultSW ? `${defaultSW.name} (U${defaultSW.slotU})` : "Switch",
         targetPort: newPatchTargetPort,
         vlanId: newPatchVlan,
         serviceName: newPatchRole || "Cordon de brassage interne",
@@ -3461,12 +3321,16 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         status: "UP",
         speedGbps: newPatchVlan === 99 ? 10 : 1,
       };
-      setRackPatches((prev) => [...prev, newPatch]);
+      const updated = [...rackPatches, newPatch];
+      setRackPatches(updated);
+      onUpdateNodeProperties?.(selectedNode.id, { patches: updated });
       setIsAddingPatch(false);
     };
 
     const handleDeletePatch = (patchId: string) => {
-      setRackPatches((prev) => prev.filter((p) => p.id !== patchId));
+      const updated = rackPatches.filter((p) => p.id !== patchId);
+      setRackPatches(updated);
+      onUpdateNodeProperties?.(selectedNode.id, { patches: updated });
     };
 
     return (
@@ -3500,9 +3364,19 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 </div>
                 <div className="bg-slate-950 p-2 rounded border border-slate-850">
                   <div className="text-slate-400 text-[10px]">Liaisons brassées :</div>
-                  <div className="text-emerald-400 font-bold mt-0.5 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    {rackPatches.length} cordons actifs
+                  <div
+                    className={`${
+                      rackPatches.length > 0 ? "text-emerald-400" : "text-slate-500"
+                    } font-bold mt-0.5 flex items-center gap-1.5`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        rackPatches.length > 0 ? "bg-emerald-400 animate-pulse" : "bg-slate-600"
+                      }`}
+                    />
+                    {rackPatches.length === 0
+                      ? "Aucun cordon actif"
+                      : `${rackPatches.length} cordon(s) actif(s)`}
                   </div>
                 </div>
               </div>
@@ -3537,44 +3411,52 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
               {/* Liste des patchs */}
               <div className="space-y-1.5">
-                {filteredPatches.map((patch) => {
-                  const vColor =
-                    vlanStyles?.[patch.vlanId]?.color ??
-                    DEFAULT_VLAN_STYLES[patch.vlanId]?.color ??
-                    "#c084fc";
+                {filteredPatches.length === 0 ? (
+                  <div className="p-3 text-center text-slate-500 bg-slate-950/40 rounded border border-slate-850">
+                    <p className="text-[10px] text-slate-400">
+                      Aucun cordon brassé dans cette baie
+                    </p>
+                  </div>
+                ) : (
+                  filteredPatches.map((patch) => {
+                    const vColor =
+                      vlanStyles?.[patch.vlanId]?.color ??
+                      DEFAULT_VLAN_STYLES[patch.vlanId]?.color ??
+                      "#c084fc";
 
-                  return (
-                    <div
-                      key={patch.id}
-                      className="p-2 rounded bg-slate-950/70 border border-slate-850 space-y-1"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-slate-200 text-[11px]">
-                          {patch.serviceName}
-                        </span>
-                        <span
-                          className="text-[9px] font-mono px-1.5 py-0.2 rounded border font-bold"
-                          style={{
-                            borderColor: `${vColor}60`,
-                            backgroundColor: `${vColor}20`,
-                            color: vColor,
-                          }}
-                        >
-                          VLAN {patch.vlanId}
-                        </span>
+                    return (
+                      <div
+                        key={patch.id}
+                        className="p-2 rounded bg-slate-950/70 border border-slate-850 space-y-1"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-slate-200 text-[11px]">
+                            {patch.serviceName}
+                          </span>
+                          <span
+                            className="text-[9px] font-mono px-1.5 py-0.2 rounded border font-bold"
+                            style={{
+                              borderColor: `${vColor}60`,
+                              backgroundColor: `${vColor}20`,
+                              color: vColor,
+                            }}
+                          >
+                            VLAN {patch.vlanId}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                          <span>
+                            {patch.sourceDevice} [{patch.sourcePort}]
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-slate-600" />
+                          <span>
+                            {patch.targetDevice} [{patch.targetPort}]
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-                        <span>
-                          {patch.sourceDevice} [{patch.sourcePort}]
-                        </span>
-                        <ArrowRight className="w-3 h-3 text-slate-600" />
-                        <span>
-                          {patch.targetDevice} [{patch.targetPort}]
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -3933,160 +3815,172 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
                   {/* Liste détaillée des cordons de brassage internes */}
                   <div className="space-y-1.5">
-                    {filteredPatches.map((patch) => {
-                      const isEditingThisPatch = editingPatchId === patch.id;
-                      const isVlan30 = patch.vlanId === 30;
-                      const isVlan50 = patch.vlanId === 50;
-                      const isVlan40 = patch.vlanId === 40;
-                      const isTrunk = patch.vlanId === 99;
-                      const isInfra = patch.vlanId === 10;
+                    {filteredPatches.length === 0 ? (
+                      <div className="p-4 text-center text-slate-500 bg-slate-950/40 rounded-lg border border-slate-800/60">
+                        <ArrowLeftRight className="w-5 h-5 mx-auto mb-1.5 opacity-40 text-slate-400" />
+                        <p className="text-[11px] font-medium text-slate-400">
+                          Aucun cordon de brassage
+                        </p>
+                        <p className="text-[9px] text-slate-600 mt-0.5">
+                          Cliquez sur &quot;Nouveau&quot; pour interconnecter vos équipements.
+                        </p>
+                      </div>
+                    ) : (
+                      filteredPatches.map((patch) => {
+                        const isEditingThisPatch = editingPatchId === patch.id;
+                        const isVlan30 = patch.vlanId === 30;
+                        const isVlan50 = patch.vlanId === 50;
+                        const isVlan40 = patch.vlanId === 40;
+                        const isTrunk = patch.vlanId === 99;
+                        const isInfra = patch.vlanId === 10;
 
-                      const vlanColorClass = isVlan30
-                        ? "text-purple-400 bg-purple-500/10 border-purple-500/30"
-                        : isVlan50
-                          ? "text-indigo-400 bg-indigo-500/10 border-indigo-500/30"
-                          : isVlan40
-                            ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
-                            : isTrunk
-                              ? "text-rose-400 bg-rose-500/10 border-rose-500/30"
-                              : isInfra
-                                ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
-                                : "text-blue-400 bg-blue-500/10 border-blue-500/30";
+                        const vlanColorClass = isVlan30
+                          ? "text-purple-400 bg-purple-500/10 border-purple-500/30"
+                          : isVlan50
+                            ? "text-indigo-400 bg-indigo-500/10 border-indigo-500/30"
+                            : isVlan40
+                              ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+                              : isTrunk
+                                ? "text-rose-400 bg-rose-500/10 border-rose-500/30"
+                                : isInfra
+                                  ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                                  : "text-blue-400 bg-blue-500/10 border-blue-500/30";
 
-                      if (isEditingThisPatch) {
-                        return (
-                          <div
-                            key={patch.id}
-                            className="p-2.5 bg-slate-950 rounded-lg border border-purple-500 space-y-2"
-                          >
-                            <div className="flex items-center justify-between text-[10px] text-purple-300 font-semibold">
-                              <span className="flex items-center gap-1">
-                                <Edit3 className="w-3 h-3" /> Modifier le cordon
-                              </span>
-                              <span className="font-mono text-[9px] text-slate-400">
-                                {patch.id}
-                              </span>
-                            </div>
+                        if (isEditingThisPatch) {
+                          return (
+                            <div
+                              key={patch.id}
+                              className="p-2.5 bg-slate-950 rounded-lg border border-purple-500 space-y-2"
+                            >
+                              <div className="flex items-center justify-between text-[10px] text-purple-300 font-semibold">
+                                <span className="flex items-center gap-1">
+                                  <Edit3 className="w-3 h-3" /> Modifier le cordon
+                                </span>
+                                <span className="font-mono text-[9px] text-slate-400">
+                                  {patch.id}
+                                </span>
+                              </div>
 
-                            <div className="grid grid-cols-2 gap-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[9px] text-slate-400 block mb-0.5">
+                                    Port Origine
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editPatchSourcePort}
+                                    onChange={(e) => setEditPatchSourcePort(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-400 block mb-0.5">
+                                    Port Destination
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editPatchTargetPort}
+                                    onChange={(e) => setEditPatchTargetPort(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[9px] text-slate-400 block mb-0.5">
+                                    VLAN Assigné
+                                  </label>
+                                  <select
+                                    value={editPatchVlan}
+                                    onChange={(e) => setEditPatchVlan(Number(e.target.value))}
+                                    className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                                  >
+                                    <option value={20}>VLAN 20 (Corp Data)</option>
+                                    <option value={30}>VLAN 30 (VoIP)</option>
+                                    <option value={40}>VLAN 40 (Print)</option>
+                                    <option value={50}>VLAN 50 (WiFi)</option>
+                                    <option value={99}>VLAN 99 (Trunk)</option>
+                                    <option value={10}>VLAN 10 (Infra)</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-400 block mb-0.5">
+                                    Statut Liaison
+                                  </label>
+                                  <select
+                                    value={editPatchStatus}
+                                    onChange={(e) =>
+                                      setEditPatchStatus(
+                                        e.target.value as "UP" | "DOWN" | "TESTING"
+                                      )
+                                    }
+                                    className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                                  >
+                                    <option value="UP">UP (Actif)</option>
+                                    <option value="DOWN">DOWN (Inactif)</option>
+                                    <option value="TESTING">TESTING (Test)</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[9px] text-slate-400 block mb-0.5">
+                                    Type de média
+                                  </label>
+                                  <select
+                                    value={editPatchCableType}
+                                    onChange={(e) =>
+                                      setEditPatchCableType(
+                                        e.target.value as "CAT6A_RJ45" | "DAC_10G" | "FIBER_LC"
+                                      )
+                                    }
+                                    className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
+                                  >
+                                    <option value="CAT6A_RJ45">Cat6A RJ45 (1G/10G)</option>
+                                    <option value="DAC_10G">DAC 10G SFP+</option>
+                                    <option value="FIBER_LC">Fibre Optique LC</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] text-slate-400 block mb-0.5">
+                                    Débit (Gbps)
+                                  </label>
+                                  <select
+                                    value={editPatchSpeed}
+                                    onChange={(e) => setEditPatchSpeed(Number(e.target.value))}
+                                    className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+                                  >
+                                    <option value={1}>1 Gbps</option>
+                                    <option value={2.5}>2.5 Gbps (mGig)</option>
+                                    <option value={10}>10 Gbps (10G)</option>
+                                  </select>
+                                </div>
+                              </div>
+
                               <div>
                                 <label className="text-[9px] text-slate-400 block mb-0.5">
-                                  Port Origine
+                                  Libellé / Service
                                 </label>
                                 <input
                                   type="text"
-                                  value={editPatchSourcePort}
-                                  onChange={(e) => setEditPatchSourcePort(e.target.value)}
-                                  className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[9px] text-slate-400 block mb-0.5">
-                                  Port Destination
-                                </label>
-                                <input
-                                  type="text"
-                                  value={editPatchTargetPort}
-                                  onChange={(e) => setEditPatchTargetPort(e.target.value)}
-                                  className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[9px] text-slate-400 block mb-0.5">
-                                  VLAN Assigné
-                                </label>
-                                <select
-                                  value={editPatchVlan}
-                                  onChange={(e) => setEditPatchVlan(Number(e.target.value))}
-                                  className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
-                                >
-                                  <option value={20}>VLAN 20 (Corp Data)</option>
-                                  <option value={30}>VLAN 30 (VoIP)</option>
-                                  <option value={40}>VLAN 40 (Print)</option>
-                                  <option value={50}>VLAN 50 (WiFi)</option>
-                                  <option value={99}>VLAN 99 (Trunk)</option>
-                                  <option value={10}>VLAN 10 (Infra)</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="text-[9px] text-slate-400 block mb-0.5">
-                                  Statut Liaison
-                                </label>
-                                <select
-                                  value={editPatchStatus}
-                                  onChange={(e) =>
-                                    setEditPatchStatus(e.target.value as "UP" | "DOWN" | "TESTING")
-                                  }
-                                  className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
-                                >
-                                  <option value="UP">UP (Actif)</option>
-                                  <option value="DOWN">DOWN (Inactif)</option>
-                                  <option value="TESTING">TESTING (Test)</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[9px] text-slate-400 block mb-0.5">
-                                  Type de média
-                                </label>
-                                <select
-                                  value={editPatchCableType}
-                                  onChange={(e) =>
-                                    setEditPatchCableType(
-                                      e.target.value as "CAT6A_RJ45" | "DAC_10G" | "FIBER_LC"
-                                    )
-                                  }
+                                  value={editPatchServiceName}
+                                  onChange={(e) => setEditPatchServiceName(e.target.value)}
                                   className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
-                                >
-                                  <option value="CAT6A_RJ45">Cat6A RJ45 (1G/10G)</option>
-                                  <option value="DAC_10G">DAC 10G SFP+</option>
-                                  <option value="FIBER_LC">Fibre Optique LC</option>
-                                </select>
+                                />
                               </div>
-                              <div>
-                                <label className="text-[9px] text-slate-400 block mb-0.5">
-                                  Débit (Gbps)
-                                </label>
-                                <select
-                                  value={editPatchSpeed}
-                                  onChange={(e) => setEditPatchSpeed(Number(e.target.value))}
-                                  className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200 font-mono"
+
+                              <div className="flex justify-end gap-1.5 pt-1 border-t border-slate-900">
+                                <button
+                                  onClick={() => setEditingPatchId(null)}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
                                 >
-                                  <option value={1}>1 Gbps</option>
-                                  <option value={2.5}>2.5 Gbps (mGig)</option>
-                                  <option value={10}>10 Gbps (10G)</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="text-[9px] text-slate-400 block mb-0.5">
-                                Libellé / Service
-                              </label>
-                              <input
-                                type="text"
-                                value={editPatchServiceName}
-                                onChange={(e) => setEditPatchServiceName(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-[10px] text-slate-200"
-                              />
-                            </div>
-
-                            <div className="flex justify-end gap-1.5 pt-1 border-t border-slate-900">
-                              <button
-                                onClick={() => setEditingPatchId(null)}
-                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
-                              >
-                                Annuler
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setRackPatches((prev) =>
-                                    prev.map((p) =>
+                                  Annuler
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const updated = rackPatches.map((p) =>
                                       p.id === patch.id
                                         ? {
                                             ...p,
@@ -4099,110 +3993,112 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                                             speedGbps: editPatchSpeed,
                                           }
                                         : p
-                                    )
-                                  );
-                                  setEditingPatchId(null);
-                                }}
-                                className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-semibold flex items-center gap-1"
-                              >
-                                <Check className="w-3 h-3" /> Enregistrer
-                              </button>
+                                    );
+                                    setRackPatches(updated);
+                                    onUpdateNodeProperties?.(selectedNode.id, { patches: updated });
+                                    setEditingPatchId(null);
+                                  }}
+                                  className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[10px] font-semibold flex items-center gap-1"
+                                >
+                                  <Check className="w-3 h-3" /> Enregistrer
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={patch.id}
+                            className="p-2 bg-slate-950 rounded-lg border border-slate-800/80 hover:border-slate-700 transition space-y-1.5 group"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-slate-200 text-[11px] truncate flex items-center gap-1.5">
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    patch.status === "UP"
+                                      ? "bg-emerald-400 animate-pulse"
+                                      : "bg-rose-400"
+                                  }`}
+                                />
+                                {patch.serviceName}
+                              </span>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <span
+                                  className={`text-[9px] font-mono px-1 py-0.5 rounded border ${vlanColorClass}`}
+                                >
+                                  VID {patch.vlanId}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setEditingPatchId(patch.id);
+                                    setEditPatchSourcePort(patch.sourcePort);
+                                    setEditPatchTargetPort(patch.targetPort);
+                                    setEditPatchVlan(patch.vlanId);
+                                    setEditPatchServiceName(patch.serviceName);
+                                    setEditPatchStatus(patch.status);
+                                    setEditPatchCableType(patch.cableType as any);
+                                    setEditPatchSpeed(patch.speedGbps);
+                                  }}
+                                  className="text-slate-500 hover:text-purple-300 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+                                  title="Modifier ce cordon de brassage"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePatch(patch.id)}
+                                  className="text-slate-600 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+                                  title="Débrancher ce cordon de brassage"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Cheminement Ports */}
+                            <div className="flex items-center justify-between font-mono text-[10px] bg-slate-900/60 p-1.5 rounded border border-slate-900">
+                              <div className="flex flex-col">
+                                <span className="text-slate-400 text-[9px]">
+                                  {patch.sourceDevice}
+                                </span>
+                                <span className="text-blue-300 font-semibold">
+                                  {patch.sourcePort}
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-center px-1 text-slate-500">
+                                <span className="text-[8px] uppercase tracking-wider text-slate-400">
+                                  {patch.cableType === "DAC_10G"
+                                    ? "DAC 10G"
+                                    : patch.cableType === "FIBER_LC"
+                                      ? "Fibre LC"
+                                      : "Cat6A RJ45"}
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                              </div>
+                              <div className="flex flex-col items-end">
+                                <span className="text-slate-400 text-[9px]">
+                                  {patch.targetDevice}
+                                </span>
+                                <span className="text-emerald-300 font-semibold">
+                                  {patch.targetPort}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Détails techniques bas */}
+                            <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono pt-0.5">
+                              <span>L: {patch.lengthM}m</span>
+                              <span className="text-slate-300 font-medium">
+                                {patch.speedGbps} Gbps
+                              </span>
+                              <span className="text-emerald-400 font-semibold">
+                                Liaison {patch.status}
+                              </span>
                             </div>
                           </div>
                         );
-                      }
-
-                      return (
-                        <div
-                          key={patch.id}
-                          className="p-2 bg-slate-950 rounded-lg border border-slate-800/80 hover:border-slate-700 transition space-y-1.5 group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-slate-200 text-[11px] truncate flex items-center gap-1.5">
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full ${
-                                  patch.status === "UP"
-                                    ? "bg-emerald-400 animate-pulse"
-                                    : "bg-rose-400"
-                                }`}
-                              />
-                              {patch.serviceName}
-                            </span>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              <span
-                                className={`text-[9px] font-mono px-1 py-0.5 rounded border ${vlanColorClass}`}
-                              >
-                                VID {patch.vlanId}
-                              </span>
-                              <button
-                                onClick={() => {
-                                  setEditingPatchId(patch.id);
-                                  setEditPatchSourcePort(patch.sourcePort);
-                                  setEditPatchTargetPort(patch.targetPort);
-                                  setEditPatchVlan(patch.vlanId);
-                                  setEditPatchServiceName(patch.serviceName);
-                                  setEditPatchStatus(patch.status);
-                                  setEditPatchCableType(patch.cableType as any);
-                                  setEditPatchSpeed(patch.speedGbps);
-                                }}
-                                className="text-slate-500 hover:text-purple-300 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
-                                title="Modifier ce cordon de brassage"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={() => handleDeletePatch(patch.id)}
-                                className="text-slate-600 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover:opacity-100 transition"
-                                title="Débrancher ce cordon de brassage"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Cheminement Ports */}
-                          <div className="flex items-center justify-between font-mono text-[10px] bg-slate-900/60 p-1.5 rounded border border-slate-900">
-                            <div className="flex flex-col">
-                              <span className="text-slate-400 text-[9px]">
-                                {patch.sourceDevice}
-                              </span>
-                              <span className="text-blue-300 font-semibold">
-                                {patch.sourcePort}
-                              </span>
-                            </div>
-                            <div className="flex flex-col items-center px-1 text-slate-500">
-                              <span className="text-[8px] uppercase tracking-wider text-slate-400">
-                                {patch.cableType === "DAC_10G"
-                                  ? "DAC 10G"
-                                  : patch.cableType === "FIBER_LC"
-                                    ? "Fibre LC"
-                                    : "Cat6A RJ45"}
-                              </span>
-                              <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
-                            </div>
-                            <div className="flex flex-col items-end">
-                              <span className="text-slate-400 text-[9px]">
-                                {patch.targetDevice}
-                              </span>
-                              <span className="text-emerald-300 font-semibold">
-                                {patch.targetPort}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Détails techniques bas */}
-                          <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono pt-0.5">
-                            <span>L: {patch.lengthM}m</span>
-                            <span className="text-slate-300 font-medium">
-                              {patch.speedGbps} Gbps
-                            </span>
-                            <span className="text-emerald-400 font-semibold">
-                              Liaison {patch.status}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                      })
+                    )}
                   </div>
                 </div>
               )}
@@ -4702,9 +4598,13 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                             ? ` (${selectedNode.pingLatencyMs}ms)`
                             : ""}
                         </span>
-                      ) : (
+                      ) : selectedNode.ipAddress ? (
                         <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.5 rounded">
-                          SNMP v3 Active
+                          SNMP Configuré
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-mono text-slate-500 bg-slate-950/40 border border-slate-800/40 px-1.5 py-0.5 rounded">
+                          Non configuré
                         </span>
                       )}
                     </div>

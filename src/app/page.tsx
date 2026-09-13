@@ -776,8 +776,9 @@ export default function NetFloorApp() {
         heightMm: fromRacks.depthMm,
         subType: fromRacks.uHeight === 18 ? ("RACK_18U" as const) : ("RACK_42U" as const),
         uHeight: fromRacks.uHeight,
-        description: `Baie informatique 19" (${fromRacks.uHeight}U) dans le local technique.`,
+        description: fromRacks.description ?? "",
         devices: fromRacks.devices ?? [],
+        patches: fromRacks.patches ?? [],
         siteId: fromRacks.siteId ?? DEFAULT_SITE_ID,
       };
     }
@@ -1434,10 +1435,12 @@ export default function NetFloorApp() {
 
   // Option : Mise à jour libre des propriétés (RH, Dimensions réelles ou fausses mesures, Rotation, Baies)
   const handleUpdateNodeProperties = (nodeId: string, updates: Partial<NodeDisplay>) => {
-    // Si mise à jour du nom, dimensions, équipements ou site d'une baie, synchroniser racks
+    // Si mise à jour du nom, dimensions, équipements, description, patches ou site d'une baie, synchroniser racks
     if (
       updates.name ||
+      updates.description !== undefined ||
       updates.devices ||
+      updates.patches !== undefined ||
       updates.widthMm ||
       updates.heightMm ||
       updates.uHeight ||
@@ -1449,7 +1452,9 @@ export default function NetFloorApp() {
             ? {
                 ...r,
                 ...(updates.name ? { name: updates.name } : {}),
+                ...(updates.description !== undefined ? { description: updates.description } : {}),
                 ...(updates.devices ? { devices: updates.devices } : {}),
+                ...(updates.patches !== undefined ? { patches: updates.patches } : {}),
                 ...(updates.widthMm ? { widthMm: updates.widthMm } : {}),
                 ...(updates.heightMm ? { depthMm: updates.heightMm } : {}),
                 ...(updates.uHeight ? { uHeight: updates.uHeight } : {}),
@@ -1632,7 +1637,6 @@ export default function NetFloorApp() {
 
     if (isRack) {
       const rackU = item.subType === "RACK_18U" ? 18 : 42;
-      const initialDevices = createDefaultRackDevices(newId, finalName);
       const newRack: RackDisplay = {
         id: newId,
         name: finalName,
@@ -1641,10 +1645,14 @@ export default function NetFloorApp() {
         widthMm: item.widthMm ?? 800,
         depthMm: Math.max(item.heightMm ?? 1000, 320 + rackU * 36),
         uHeight: rackU,
-        devices: initialDevices,
+        description: "",
+        devices: [],
+        patches: [],
         siteId: activeSiteId || DEFAULT_SITE_ID,
       };
       setRacks((prev) => [...prev, newRack]);
+      setSelectedNodeId(newId);
+      return;
     }
 
     let stackedPorts: StackedPortItem[] | undefined = undefined;
@@ -1655,10 +1663,6 @@ export default function NetFloorApp() {
         outletRole: item.outletRole ?? "GENERIC",
         vlanId: assignedVlan,
         poeMode: item.poeMode ?? "NONE",
-        ipAddress: `10.42.${assignedVlan}.${110 + idx}`,
-        macAddress: `00:1A:2B:3C:4D:${String(idx + 20).padStart(2, "0")}`,
-        pingStatus: "ONLINE",
-        pingLatencyMs: 2,
       }));
     }
 
@@ -1669,12 +1673,8 @@ export default function NetFloorApp() {
       xMm: newX,
       yMm: newY,
       widthMm: item.widthMm,
-      heightMm: isRack
-        ? Math.max(item.heightMm ?? 1000, 320 + (item.subType === "RACK_18U" ? 18 : 42) * 36)
-        : item.heightMm,
+      heightMm: item.heightMm,
       subType: item.subType,
-      uHeight: isRack ? (item.subType === "RACK_18U" ? 18 : 42) : undefined,
-      devices: isRack ? createDefaultRackDevices(newId, finalName) : undefined,
       outletRole: item.outletRole,
       assignedPerson: item.category === "FURNITURE" ? "Poste vacant / Flex" : undefined,
       department: item.category === "FURNITURE" ? "Espace Collaboratif" : undefined,
@@ -1688,12 +1688,7 @@ export default function NetFloorApp() {
       portCount: portCount,
       stackedPorts,
       siteId: activeSiteId || DEFAULT_SITE_ID,
-      portId:
-        item.targetType === "WALL_OUTLET"
-          ? item.outletRole === "VOIP"
-            ? "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d"
-            : "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c"
-          : undefined,
+      portId: item.targetType === "WALL_OUTLET" ? `port-${newId}` : undefined,
     };
 
     setNodes((prev) => [...prev, newNode]);

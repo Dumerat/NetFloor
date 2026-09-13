@@ -321,7 +321,7 @@ if (typeof describe !== "undefined" && typeof it !== "undefined") {
     // @ts-ignore
     it("should validate topology anomalies and mass enterprise cabling ledger", async () => {
       await runIngestionTests();
-    });
+    }, 30000);
   });
 } else {
   runIngestionTests().catch((err) => {

@@ -64,7 +64,9 @@ export async function GET() {
         depthMm: r.depthMm,
         uHeight: r.uHeight,
         rotationDeg: r.rotationDeg,
+        description: (meta.description as string) || "",
         devices: (meta.devices as unknown[]) || [],
+        patches: (meta.patches as unknown[]) || [],
         siteId: (meta.siteId as string) || undefined,
       };
     });
@@ -215,7 +217,9 @@ export async function saveTopologyPayload(payload: {
         rotationDeg: Number(r.rotationDeg) || 0,
         metadata: {
           originalId: r.id,
+          description: r.description || "",
           devices: r.devices || [],
+          patches: r.patches || [],
           siteId: r.siteId,
         },
       }));

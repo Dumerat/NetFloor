@@ -79,7 +79,49 @@
       "widthMm": 800,
       "depthMm": 1000,
       "uHeight": 42,
+      "description": "Baie principale de brassage du local technique RDC (42U) avec commutateurs cœur de réseau.",
       "siteId": "site-principal",
+      "patches": [
+        {
+          "id": "patch-demo-01",
+          "sourceDevice": "PP-R01-01 (U24)",
+          "sourcePort": "Port 01",
+          "targetDevice": "SW-R01-01 (U22)",
+          "targetPort": "Gi1/0/1",
+          "vlanId": 20,
+          "serviceName": "Brassage Prise Bureau 401-A (Data)",
+          "cableType": "CAT6A_RJ45",
+          "lengthM": 1.0,
+          "status": "UP",
+          "speedGbps": 1
+        },
+        {
+          "id": "patch-demo-02",
+          "sourceDevice": "PP-R01-01 (U24)",
+          "sourcePort": "Port 02",
+          "targetDevice": "SW-R01-01 (U22)",
+          "targetPort": "Gi1/0/2",
+          "vlanId": 30,
+          "serviceName": "Brassage Téléphone VoIP Bureau 401 (VoIP)",
+          "cableType": "CAT6A_RJ45",
+          "lengthM": 1.0,
+          "status": "UP",
+          "speedGbps": 1
+        },
+        {
+          "id": "patch-demo-03",
+          "sourceDevice": "PP-R01-01 (U24)",
+          "sourcePort": "Port 03",
+          "targetDevice": "SW-R01-01 (U22)",
+          "targetPort": "Gi1/0/3",
+          "vlanId": 50,
+          "serviceName": "Borne Wi-Fi 6 Plafonnier (PoE+)",
+          "cableType": "CAT6A_RJ45",
+          "lengthM": 1.0,
+          "status": "UP",
+          "speedGbps": 1
+        }
+      ],
       "devices": [
         {
           "id": "dev-r01-pdu",
@@ -126,7 +168,9 @@
       "widthMm": 800,
       "depthMm": 800,
       "uHeight": 18,
+      "description": "Baie secondaire Aile Est (18U) desservant les bureaux et espaces collaboratifs.",
       "siteId": "site-principal",
+      "patches": [],
       "devices": [
         {
           "id": "dev-r02-pdu",
@@ -173,7 +217,9 @@
       "widthMm": 800,
       "depthMm": 800,
       "uHeight": 24,
+      "description": "Baie secondaire Pôle R&D (24U) dédiée aux bancs d'essai et serveurs de test.",
       "siteId": "site-principal",
+      "patches": [],
       "devices": [
         {
           "id": "dev-r03-pdu",
