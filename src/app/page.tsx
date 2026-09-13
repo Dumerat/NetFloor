@@ -15,6 +15,27 @@ import { NodeDisplay, RackDisplay, RackDeviceItem, OutletRole, StackedPortItem, 
 import { CableData, CableFilterMode } from "@/components/canvas/CableLayer";
 import { FloorDimensionsModal } from "@/components/ui/FloorDimensionsModal";
 import { FloorZone, DEFAULT_ZONES } from "@/types/zones";
+import { BatchDeskSpawnerModal } from "@/components/ui/BatchDeskSpawnerModal";
+import { BatchSpawnResult } from "@/engine/spatial/batchSpawner";
+import { UnpositionedElementsDrawer } from "@/components/ui/UnpositionedElementsDrawer";
+import { PlanManagerModal } from "@/components/ui/PlanManagerModal";
+import { SitesPanel } from "@/components/ui/SitesPanel";
+import {
+  saveBackgroundPlan,
+  loadBackgroundPlan,
+  deleteBackgroundPlan,
+  loadAllBackgroundPlans,
+  StoredBackgroundPlan,
+  FloorSite,
+  loadAllSites,
+  saveSite,
+  deleteSite,
+  DEFAULT_SITE_ID,
+  DEFAULT_SITE,
+} from "@/engine/storage/planStorage";
+import { autoRoutePortsToRack } from "@/engine/spatial/autoRoute";
+import { ApplyMatrixResult } from "@/engine/ingestion/matrixCsvParser";
+import { snapToGrid } from "@/engine/spatial/snapping";
 import {
   ZoomIn,
   ZoomOut,
@@ -33,6 +54,8 @@ import {
   Search,
   AlertCircle,
   Ruler,
+  Image as ImageIcon,
+  Building2,
 } from "lucide-react";
 import { screenToWorld } from "@/engine/spatial/matrix";
 import {
@@ -59,7 +82,12 @@ const DynamicFloorCanvas = dynamic(
 
 function CameraScaleIndicator() {
   const scale = useCameraStore((s) => s.viewport.scale);
-  return <span className="text-blue-400 font-semibold font-mono">{(1000 * scale).toFixed(1)} px/m</span>;
+  const ppm = 1000 * scale;
+  return (
+    <span className="text-blue-400 font-semibold font-mono">
+      {ppm >= 1 ? `${ppm.toFixed(1)} px/m` : `${ppm.toFixed(2)} px/m`}
+    </span>
+  );
 }
 
 /**
@@ -130,11 +158,25 @@ export default function NetFloorApp() {
   const zoomOut = useCameraStore((s) => s.zoomOut);
   const fitFloor = useCameraStore((s) => s.fitFloor);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("outlet-408-a");
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>(["outlet-408-a"]);
+  const [isRulerActive, setIsRulerActive] = useState<boolean>(false);
+  const [isPlanManagerOpen, setIsPlanManagerOpen] = useState<boolean>(false);
+  const [allBackgroundPlans, setAllBackgroundPlans] = useState<StoredBackgroundPlan[]>([]);
+  const [activePlanId, setActivePlanId] = useState<string | null>(null);
+  const [sites, setSites] = useState<FloorSite[]>([DEFAULT_SITE]);
+  const [activeSiteId, setActiveSiteId] = useState<string>(DEFAULT_SITE_ID);
+  const [isSitesOpen, setIsSitesOpen] = useState<boolean>(false);
+  const [isFileMenuOpen, setIsFileMenuOpen] = useState<boolean>(false);
   const [traceResult, setTraceResult] = useState<CircuitTraceResult | null>(null);
   const [isTracing, setIsTracing] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isDimensionsModalOpen, setIsDimensionsModalOpen] = useState(false);
+  // Étage & Dimensions configurables
+  const [floorData, setFloorData] = useState({
+    widthMm: 60000,
+    heightMm: 35000,
+  });
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [isTopologyOpen, setIsTopologyOpen] = useState(false);
@@ -143,6 +185,7 @@ export default function NetFloorApp() {
   const [inspectorWidth, setInspectorWidth] = useState(384);
   const isResizingLeftRef = useRef(false);
   const isResizingRightRef = useRef(false);
+  const savePlanTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   // Gestionnaire global du glisser-redimensionner (Drag-to-Resize) avec bornes min/max
   useEffect(() => {
@@ -262,11 +305,116 @@ export default function NetFloorApp() {
   // Pivots orthogonaux uniques personnalisés déplacés par l'utilisateur à la souris
   const [customPivots, setCustomPivots] = useState<Record<string, { x: number; y: number }>>({});
 
-  // Étage & Dimensions configurables
-  const [floorData, setFloorData] = useState({
-    widthMm: 60000,
-    heightMm: 35000,
+  // État du Fond de Plan Architectural (Image/PDF)
+  const [backgroundPlan, setBackgroundPlan] = useState<{
+    imageUrl: string | null;
+    name: string;
+    opacity: number;
+    isLocked: boolean;
+    xMm: number;
+    yMm: number;
+    scale: number;
+    widthMm?: number | undefined;
+    heightMm?: number | undefined;
+    visible: boolean;
+  }>({
+    imageUrl: null,
+    name: "",
+    opacity: 0.6,
+    isLocked: true,
+    xMm: 0,
+    yMm: 0,
+    scale: 1.0,
+    visible: true,
   });
+
+  // État de la modale Batch Spawner
+  const [isBatchSpawnerOpen, setIsBatchSpawnerOpen] = useState(false);
+
+  // Éléments Non Positionnés (importés depuis CSV mais pas encore sur le canevas)
+  const [unpositionedNodes, setUnpositionedNodes] = useState<NodeDisplay[]>([]);
+
+  // Chargement du fond de plan et des sites stockés dans IndexedDB au montage
+  useEffect(() => {
+    loadAllSites().then((loadedSites) => {
+      if (loadedSites.length > 0) {
+        setSites(loadedSites);
+        if (!loadedSites.some((s) => s.id === activeSiteId)) {
+          setActiveSiteId(loadedSites[0]?.id ?? DEFAULT_SITE_ID);
+        }
+      }
+    });
+
+    loadAllBackgroundPlans().then((plans) => {
+      setAllBackgroundPlans(plans);
+    });
+    loadBackgroundPlan(DEFAULT_SITE_ID).then((plan) => {
+      if (plan && plan.imageData) {
+        setBackgroundPlan({
+          imageUrl: plan.imageData,
+          name: plan.name,
+          opacity: plan.opacity,
+          isLocked: plan.isLocked,
+          xMm: plan.xMm,
+          yMm: plan.yMm,
+          scale: plan.scale,
+          widthMm: plan.widthMm,
+          heightMm: plan.heightMm,
+          visible: plan.visible,
+        });
+      }
+    });
+  }, [activeSiteId]);
+
+  const handleUpdateBackgroundPlan = useCallback(
+    (updates: Partial<typeof backgroundPlan>) => {
+      setBackgroundPlan((prev) => {
+        const updated = { ...prev, ...updates };
+        if (updated.imageUrl) {
+          saveBackgroundPlan({
+            name: updated.name,
+            imageData: updated.imageUrl,
+            opacity: updated.opacity,
+            isLocked: updated.isLocked,
+            xMm: updated.xMm,
+            yMm: updated.yMm,
+            scale: updated.scale,
+            widthMm: updated.widthMm,
+            heightMm: updated.heightMm,
+            visible: updated.visible,
+          });
+        }
+        return updated;
+      });
+      loadAllBackgroundPlans().then(setAllBackgroundPlans);
+    },
+    []
+  );
+
+  const handleCalibrateScale = useCallback(
+    (result: { pixelsPerMeter: number; realMeters: number; distPx: number; distWorldMm: number }) => {
+      setBackgroundPlan((prev) => {
+        if (prev.imageUrl && result.distWorldMm > 0) {
+          const targetWorldMm = result.realMeters * 1000;
+          const ratio = targetWorldMm / result.distWorldMm;
+          const newScale = (prev.scale || 1.0) * ratio;
+          saveBackgroundPlan({
+            name: prev.name,
+            imageData: prev.imageUrl,
+            opacity: prev.opacity,
+            isLocked: prev.isLocked,
+            xMm: prev.xMm,
+            yMm: prev.yMm,
+            scale: newScale,
+            visible: prev.visible,
+          });
+          return { ...prev, scale: newScale };
+        }
+        return prev;
+      });
+    },
+    []
+  );
 
   // Zones de services / pôles d'aménagement
   const [zones, setZones] = useState<FloorZone[]>(DEFAULT_ZONES);
@@ -282,6 +430,7 @@ export default function NetFloorApp() {
       depthMm: 1000,
       uHeight: 42,
       devices: DEFAULT_RACK_DEVICES,
+      siteId: DEFAULT_SITE_ID,
     },
     {
       id: "rack-02",
@@ -292,6 +441,7 @@ export default function NetFloorApp() {
       depthMm: 800,
       uHeight: 18,
       devices: createDefaultRackDevices("rack-02", "BAIE-EST"),
+      siteId: DEFAULT_SITE_ID,
     },
     {
       id: "rack-03",
@@ -302,6 +452,7 @@ export default function NetFloorApp() {
       depthMm: 800,
       uHeight: 24,
       devices: createDefaultRackDevices("rack-03", "BAIE-RND"),
+      siteId: DEFAULT_SITE_ID,
     },
   ]);
 
@@ -1148,8 +1299,205 @@ export default function NetFloorApp() {
     },
   ]);
 
-  // Bureaux disponibles pour la liaison
-  const desks = useMemo(() => nodes.filter((n) => n.type === "DESK"), [nodes]);
+  // Filtrage des éléments par site actif
+  const visibleRacks = useMemo(() =>
+    racks.filter((r) => !activeSiteId || activeSiteId === "ALL" || (r.siteId ?? DEFAULT_SITE_ID) === activeSiteId),
+    [racks, activeSiteId]
+  );
+  const visibleNodes = useMemo(() =>
+    nodes.filter((n) => !activeSiteId || activeSiteId === "ALL" || (n.siteId ?? DEFAULT_SITE_ID) === activeSiteId),
+    [nodes, activeSiteId]
+  );
+  const visibleZones = useMemo(() =>
+    zones.filter((z) => !activeSiteId || activeSiteId === "ALL" || (z.siteId ?? DEFAULT_SITE_ID) === activeSiteId),
+    [zones, activeSiteId]
+  );
+
+  // Bureaux disponibles pour la liaison sur le site actif
+  const desks = useMemo(() => visibleNodes.filter((n) => n.type === "DESK"), [visibleNodes]);
+
+  // Fonction pour concentrer la caméra et la vue sur un site spécifique
+  const handleFocusSite = useCallback(
+    (siteId: string) => {
+      const sitePlans = allBackgroundPlans.filter(
+        (p) => (p.siteId ?? DEFAULT_SITE_ID) === siteId && p.visible
+      );
+      const siteRacks = racks.filter(
+        (r) => (r.siteId ?? DEFAULT_SITE_ID) === siteId
+      );
+      const siteNodes = nodes.filter(
+        (n) => (n.siteId ?? DEFAULT_SITE_ID) === siteId
+      );
+      const siteZones = zones.filter(
+        (z) => (z.siteId ?? DEFAULT_SITE_ID) === siteId
+      );
+
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let hasElements = false;
+
+      for (const p of sitePlans) {
+        hasElements = true;
+        const w = p.widthMm ?? floorData.widthMm;
+        const h = p.heightMm ?? floorData.heightMm;
+        minX = Math.min(minX, p.xMm);
+        minY = Math.min(minY, p.yMm);
+        maxX = Math.max(maxX, p.xMm + w);
+        maxY = Math.max(maxY, p.yMm + h);
+      }
+
+      for (const r of siteRacks) {
+        hasElements = true;
+        minX = Math.min(minX, r.xMm);
+        minY = Math.min(minY, r.yMm);
+        maxX = Math.max(maxX, r.xMm + (r.widthMm ?? 800));
+        maxY = Math.max(maxY, r.yMm + (r.depthMm ?? 1000));
+      }
+
+      for (const n of siteNodes) {
+        if (n.xMm < 0 || n.yMm < 0) continue;
+        hasElements = true;
+        minX = Math.min(minX, n.xMm);
+        minY = Math.min(minY, n.yMm);
+        maxX = Math.max(maxX, n.xMm + (n.widthMm ?? 1000));
+        maxY = Math.max(maxY, n.yMm + (n.heightMm ?? 1000));
+      }
+
+      for (const z of siteZones) {
+        hasElements = true;
+        minX = Math.min(minX, z.xMm);
+        minY = Math.min(minY, z.yMm);
+        maxX = Math.max(maxX, z.xMm + z.widthMm);
+        maxY = Math.max(maxY, z.yMm + z.heightMm);
+      }
+
+      if (hasElements && minX < Infinity && minY < Infinity) {
+        const widthMm = Math.max(2000, maxX - minX);
+        const heightMm = Math.max(2000, maxY - minY);
+        const centerX = minX + widthMm / 2;
+        const centerY = minY + heightMm / 2;
+
+        const screenW = typeof window !== "undefined" ? window.innerWidth : 1200;
+        const screenH = typeof window !== "undefined" ? window.innerHeight : 800;
+
+        const scaleX = (screenW * 0.75) / widthMm;
+        const scaleY = (screenH * 0.75) / heightMm;
+        const targetScale = Math.min(scaleX, scaleY, 0.15);
+
+        useCameraStore.getState().setViewport({
+          panX: screenW / 2 - centerX * targetScale,
+          panY: screenH / 2 - centerY * targetScale,
+          scale: targetScale,
+        });
+      } else {
+        fitFloor(floorData.widthMm, floorData.heightMm, window.innerWidth, window.innerHeight);
+      }
+    },
+    [allBackgroundPlans, racks, nodes, zones, floorData, fitFloor]
+  );
+
+  const handleBatchSpawn = useCallback((result: BatchSpawnResult) => {
+    const siteTag = activeSiteId || DEFAULT_SITE_ID;
+    const taggedDesks = result.desks.map((d) => ({ ...d, siteId: d.siteId ?? siteTag }));
+    const taggedOutlets = result.outlets.map((o) => ({ ...o, siteId: o.siteId ?? siteTag }));
+    setNodes((prev) => [...prev, ...taggedDesks, ...taggedOutlets]);
+    if (taggedDesks.length > 0) {
+      setSelectedNodeId(taggedDesks[0]!.id);
+    }
+  }, [activeSiteId]);
+
+  const handleAutoRoute = useCallback(
+    (portIds: string[], targetRackId: string, targetSwitchId?: string) => {
+      setNodes((currentNodes) => {
+        const result = autoRoutePortsToRack({
+          portIds,
+          rackId: targetRackId,
+          switchId: targetSwitchId,
+          allNodes: currentNodes,
+          racks: visibleRacks.length > 0 ? visibleRacks : racks,
+          customPivots,
+        });
+        setCustomPivots(result.updatedCustomPivots);
+        return result.updatedNodes;
+      });
+    },
+    [visibleRacks, racks, customPivots]
+  );
+
+  const handleSelectNodeToggle = useCallback((node: NodeDisplay, isShift: boolean) => {
+    setSelectedZoneId(null);
+    if (isShift) {
+      setSelectedNodeIds((prev) => {
+        const next = prev.includes(node.id) ? prev.filter((id) => id !== node.id) : [...prev, node.id];
+        if (next.length === 1 && next[0]) setSelectedNodeId(next[0]);
+        else setSelectedNodeId(null);
+        return next;
+      });
+    } else {
+      setSelectedNodeIds([node.id]);
+      setSelectedNodeId(node.id);
+    }
+  }, []);
+
+  const handleSelectNodeIds = useCallback((ids: string[]) => {
+    setSelectedZoneId(null);
+    setSelectedNodeIds(ids);
+    if (ids.length === 1 && ids[0]) {
+      setSelectedNodeId(ids[0]);
+    } else {
+      setSelectedNodeId(null);
+    }
+  }, []);
+
+  const handleGroupNodeMoveEnd = useCallback((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => {
+    if (nodeIds.length === 0 || (delta.deltaX === 0 && delta.deltaY === 0)) return;
+    const idSet = new Set(nodeIds);
+    setNodes((prev) =>
+      prev.map((n) => {
+        if (idSet.has(n.id) || (n.attachedToDeskId && idSet.has(n.attachedToDeskId))) {
+          return {
+            ...n,
+            xMm: Math.round(n.xMm + delta.deltaX),
+            yMm: Math.round(n.yMm + delta.deltaY),
+          };
+        }
+        return n;
+      })
+    );
+    setRacks((prev) =>
+      prev.map((r) => {
+        if (idSet.has(r.id)) {
+          return {
+            ...r,
+            xMm: Math.round(r.xMm + delta.deltaX),
+            yMm: Math.round(r.yMm + delta.deltaY),
+          };
+        }
+        return r;
+      })
+    );
+  }, []);
+
+  const handleBulkDelete = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    setNodes((prev) => prev.filter((n) => !idSet.has(n.id) && (!n.attachedToDeskId || !idSet.has(n.attachedToDeskId))));
+    setRacks((prev) => prev.filter((r) => !idSet.has(r.id)));
+    setSelectedNodeIds([]);
+    setSelectedNodeId(null);
+  }, []);
+
+  const handleClearMultiSelection = useCallback(() => {
+    setSelectedNodeIds([]);
+  }, []);
+
+  const handleApplyMatrixImport = useCallback((result: ApplyMatrixResult) => {
+    setNodes(result.updatedNodes);
+    if (result.unpositionedNodes.length > 0) {
+      setUnpositionedNodes((prev) => [...prev, ...result.unpositionedNodes]);
+    }
+  }, []);
 
   // Nœud actuellement sélectionné (synchronisé en direct, incluant les baies)
   const selectedNode = useMemo(() => {
@@ -1168,6 +1516,7 @@ export default function NetFloorApp() {
         uHeight: fromRacks.uHeight,
         description: `Baie informatique 19" (${fromRacks.uHeight}U) dans le local technique.`,
         devices: fromRacks.devices ?? [],
+        siteId: fromRacks.siteId ?? DEFAULT_SITE_ID,
       };
     }
     const fromNodes = nodes.find((n) => n.id === selectedNodeId);
@@ -1218,21 +1567,22 @@ export default function NetFloorApp() {
       heightMm: newZone?.heightMm ?? 8000,
       opacity: newZone?.opacity ?? 0.12,
       description: newZone?.description || "Nouvelle zone de service délimitée.",
+      siteId: newZone?.siteId || activeSiteId || DEFAULT_SITE_ID,
     };
     setZones((prev) => [...prev, createdZone]);
     setSelectedZoneId(createdZone.id);
     setSelectedNodeId(null);
-  }, [zones.length]);
+  }, [zones.length, activeSiteId]);
 
   // Calcul dynamique des câbles : regroupement en faisceau par colonnette + baie cible avec décalage ruban parallèle
   const cables: CableData[] = useMemo(() => {
     if (activeViewMode === "HR") return [];
-    if (racks.length === 0) return [];
+    if (visibleRacks.length === 0) return [];
 
     const list: CableData[] = [];
     let globalIndex = 0;
 
-    const wallOutlets = nodes.filter(
+    const wallOutlets = visibleNodes.filter(
       (n) => n.type === "WALL_OUTLET" && (n.isPatched || n.stackedPorts?.some((p) => p.isPatched))
     );
 
@@ -1248,7 +1598,7 @@ export default function NetFloorApp() {
         // Regroupement par baie cible pour former les faisceaux communs (split si baies différentes)
         const portsByRack: Record<string, typeof patchedPorts> = {};
         patchedPorts.forEach((item) => {
-          const targetRackId = item.sp.connectedRackId || outlet.connectedRackId || racks[0]?.id || "rack-01";
+          const targetRackId = item.sp.connectedRackId || outlet.connectedRackId || visibleRacks[0]?.id || "rack-01";
           if (!portsByRack[targetRackId]) {
             portsByRack[targetRackId] = [];
           }
@@ -1257,7 +1607,7 @@ export default function NetFloorApp() {
 
         // Générer chaque faisceau vers sa baie cible
         Object.entries(portsByRack).forEach(([rackId, bundleItems]) => {
-          const rack = racks.find((r) => r.id === rackId) ?? racks[0];
+          const rack = visibleRacks.find((r) => r.id === rackId) ?? visibleRacks[0];
           if (!rack) return;
 
           const bundleKey = `bundle-${outlet.id}-${rack.id}`;
@@ -1320,7 +1670,7 @@ export default function NetFloorApp() {
         });
       } else if (outlet.isPatched) {
         // Prise simple standard
-        const rack = racks.find((r) => r.id === outlet.connectedRackId) ?? racks.find((r) => r.id === "rack-01") ?? racks[0];
+        const rack = visibleRacks.find((r) => r.id === outlet.connectedRackId) ?? visibleRacks.find((r) => r.id === "rack-01") ?? visibleRacks[0];
         if (!rack) return;
         const isVoip = outlet.outletRole === "VOIP";
         const isPrinter = outlet.outletRole === "PRINTER";
@@ -1370,7 +1720,7 @@ export default function NetFloorApp() {
     });
 
     return list;
-  }, [nodes, racks, activeViewMode, customPivots, vlanStyles]);
+  }, [visibleNodes, visibleRacks, activeViewMode, customPivots, vlanStyles]);
 
   // Déplacement interactif libre 2D du pivot orthogonal unique
   const handlePivotChange = useCallback(
@@ -1719,6 +2069,7 @@ export default function NetFloorApp() {
         ipAddress,
         assignedPerson: primaryOccupant || undefined,
         attachedSeatIndex: desk.seats && desk.seats.length > 0 ? 0 : undefined,
+        siteId: desk.siteId ?? activeSiteId ?? DEFAULT_SITE_ID,
       };
 
       return [...prev, newOutlet];
@@ -1773,6 +2124,7 @@ export default function NetFloorApp() {
         attachedToDeskId: deskId,
         outletRole: "DATA",
         stackedPorts: initialPorts,
+        siteId: desk.siteId ?? activeSiteId ?? DEFAULT_SITE_ID,
       };
 
       return [...prev, newColonnette];
@@ -1812,8 +2164,8 @@ export default function NetFloorApp() {
 
   // Option : Mise à jour libre des propriétés (RH, Dimensions réelles ou fausses mesures, Rotation, Baies)
   const handleUpdateNodeProperties = (nodeId: string, updates: Partial<NodeDisplay>) => {
-    // Si mise à jour du nom, dimensions ou équipements d'une baie, synchroniser racks
-    if (updates.name || updates.devices || updates.widthMm || updates.heightMm || updates.uHeight) {
+    // Si mise à jour du nom, dimensions, équipements ou site d'une baie, synchroniser racks
+    if (updates.name || updates.devices || updates.widthMm || updates.heightMm || updates.uHeight || updates.siteId) {
       setRacks((prevRacks) =>
         prevRacks.map((r) =>
           r.id === nodeId
@@ -1824,6 +2176,7 @@ export default function NetFloorApp() {
                 ...(updates.widthMm ? { widthMm: updates.widthMm } : {}),
                 ...(updates.heightMm ? { depthMm: updates.heightMm } : {}),
                 ...(updates.uHeight ? { uHeight: updates.uHeight } : {}),
+                ...(updates.siteId !== undefined ? { siteId: updates.siteId } : {}),
               }
             : r
         )
@@ -1833,6 +2186,19 @@ export default function NetFloorApp() {
     setNodes((prev) => {
       const target = prev.find((n) => n.id === nodeId);
       if (!target) return prev;
+
+      // Si on change le site d'un bureau, propager aux prises solidaires attachées
+      if (updates.siteId !== undefined && target.type === "DESK") {
+        return prev.map((n) => {
+          if (n.id === nodeId) {
+            return { ...n, ...updates };
+          }
+          if (n.attachedToDeskId === nodeId) {
+            return { ...n, siteId: updates.siteId };
+          }
+          return n;
+        });
+      }
 
       // Si c'est une rotation de bureau : rotationner sur le centre et faire pivoter les prises solidaires
       if (updates.rotationDeg !== undefined && target.type === "DESK") {
@@ -1999,6 +2365,7 @@ export default function NetFloorApp() {
         depthMm: Math.max(item.heightMm ?? 1000, 320 + rackU * 36),
         uHeight: rackU,
         devices: initialDevices,
+        siteId: activeSiteId || DEFAULT_SITE_ID,
       };
       setRacks((prev) => [...prev, newRack]);
     }
@@ -2041,6 +2408,7 @@ export default function NetFloorApp() {
       customEmote: item.customEmote,
       portCount: portCount,
       stackedPorts,
+      siteId: activeSiteId || DEFAULT_SITE_ID,
       portId:
         item.targetType === "WALL_OUTLET"
           ? item.outletRole === "VOIP"
@@ -2327,19 +2695,26 @@ export default function NetFloorApp() {
 
         {/* Camera & Ingestion Controls */}
         <div className="flex items-center gap-2.5 text-xs font-mono">
+          {/* Sélecteur rapide de Site Actif */}
+          {/* Bouton du Site Actif & Taille de la Zone */}
+          <button
+            type="button"
+            onClick={() => setIsDimensionsModalOpen(true)}
+            title="Taille de la zone et dimensions du site (cliquez pour modifier)"
+            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-800 hover:border-amber-500/50 rounded-lg transition flex items-center gap-2 text-xs font-sans cursor-pointer shadow-sm group"
+          >
+            <Building2 className="w-3.5 h-3.5 text-amber-400 group-hover:scale-105 transition shrink-0" />
+            <span className="font-semibold text-slate-100 max-w-[140px] truncate">
+              {sites.find((s) => s.id === activeSiteId)?.name ?? "Site Principal"}
+            </span>
+            <span className="text-slate-400 font-mono text-[11px] bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-750">
+              {floorData.widthMm / 1000}m × {floorData.heightMm / 1000}m
+            </span>
+          </button>
+
           <div className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1 flex items-center gap-2 text-slate-400">
             <span>Échelle : <CameraScaleIndicator /></span>
           </div>
-
-          {/* Contrôle des Dimensions du Plan de Base */}
-          <button
-            onClick={() => setIsDimensionsModalOpen(true)}
-            title="Modifier la taille du plan (largeur × longueur en mètres)"
-            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 rounded-lg transition flex items-center gap-1.5 text-xs font-mono"
-          >
-            <Ruler className="w-3.5 h-3.5 text-blue-400" />
-            <span>{floorData.widthMm / 1000}m × {floorData.heightMm / 1000}m</span>
-          </button>
 
           {/* Bouton Création d'une nouvelle Zone */}
           <button
@@ -2375,21 +2750,89 @@ export default function NetFloorApp() {
             </button>
           </div>
 
+          {/* Bouton Gestionnaire de Plans & Fonds d'étages */}
           <button
-            onClick={() => setIsImportModalOpen(true)}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-sans font-medium rounded-lg border border-slate-700 flex items-center gap-1.5 transition text-xs shadow-sm"
+            type="button"
+            onClick={() => setIsPlanManagerOpen(true)}
+            title="Gestionnaire de Plans & Fonds d'étages (Upload PNG/PDF, échelle métrique en mètres, calage X/Y)"
+            className="px-2.5 py-1.5 bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 hover:text-amber-100 border border-amber-800/50 hover:border-amber-600 rounded-lg transition flex items-center gap-1.5 text-xs font-sans shadow-sm cursor-pointer"
           >
-            <UploadCloud className="w-3.5 h-3.5 text-blue-400" />
-            Importer CSV
+            <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+            <span>Gestion des Plans</span>
           </button>
+
+          {/* Bouton Outil Règle Permanente & Étalonnage Fusionnés */}
           <button
-            onClick={handleExportCsv}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-sans font-medium rounded-lg shadow-lg shadow-blue-600/30 flex items-center gap-1.5 transition text-xs"
-            title="Exporter l'inventaire complet en carnet de câblage CSV"
+            type="button"
+            onClick={() => setIsRulerActive((prev) => !prev)}
+            title="Outil Règle & Mesure métrique (permet de mesurer n'importe quel segment et d'étalonner l'échelle)"
+            className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-sans shadow-sm cursor-pointer ${
+              isRulerActive
+                ? "bg-sky-600 text-white border-sky-400 font-semibold shadow-sky-600/30"
+                : "bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-850"
+            }`}
           >
-            <Download className="w-3.5 h-3.5" />
-            Exporter CSV
+            <Ruler className="w-3.5 h-3.5 text-sky-400" />
+            <span>Règle</span>
           </button>
+
+          {/* Menu Déroulant Compact : Échanges & Fichiers */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsFileMenuOpen((prev) => !prev)}
+              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-sans font-medium rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-1 transition text-[11px] cursor-pointer"
+              title="Importer ou Exporter les données CSV"
+            >
+              <UploadCloud className="w-3 h-3" />
+              <span>⇄ Fichiers</span>
+              <span className="text-[9px] opacity-80">▾</span>
+            </button>
+
+            {isFileMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsFileMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 text-xs text-slate-200 animate-in fade-in slide-in-from-top-1 font-sans">
+                  <div className="px-2.5 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                    Gestion des données
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsFileMenuOpen(false);
+                      setIsImportModalOpen(true);
+                    }}
+                    className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-slate-200 hover:text-white transition cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4 text-sky-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Importer CSV / Matrice</div>
+                      <div className="text-[10px] text-slate-400">Carnet de câblage, baies et prises</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsFileMenuOpen(false);
+                      handleExportCsv();
+                    }}
+                    className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 text-slate-200 hover:text-white transition cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-xs">Exporter Carnet CSV</div>
+                      <div className="text-[10px] text-slate-400">Inventaire et raccordements complets</div>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -2399,9 +2842,10 @@ export default function NetFloorApp() {
         <EquipmentPalette
           isOpen={isPaletteOpen}
           onToggle={() => {
-            if (isTopologyOpen || isInventoryOpen) {
+            if (isTopologyOpen || isInventoryOpen || isSitesOpen) {
               setIsTopologyOpen(false);
               setIsInventoryOpen(false);
+              setIsSitesOpen(false);
               setIsPaletteOpen(true);
             } else {
               setIsPaletteOpen((prev) => !prev);
@@ -2409,12 +2853,54 @@ export default function NetFloorApp() {
           }}
           onAddItem={handleAddItemFromPalette}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
+          onOpenBatchSpawner={() => setIsBatchSpawnerOpen(true)}
+          onOpenSites={() => {
+            if (isSitesOpen) {
+              setIsSitesOpen(false);
+            } else {
+              setIsPaletteOpen(false);
+              setIsTopologyOpen(false);
+              setIsInventoryOpen(false);
+              setIsSitesOpen(true);
+            }
+          }}
+          isSitesOpen={isSitesOpen}
+          sitesContent={
+            <SitesPanel
+              sites={sites}
+              activeSiteId={activeSiteId}
+              onSelectActiveSite={(id) => {
+                setActiveSiteId(id);
+              }}
+              onFocusSite={handleFocusSite}
+              onSaveSite={async (site) => {
+                await saveSite(site);
+                const updated = await loadAllSites();
+                setSites(updated);
+              }}
+              onDeleteSite={async (id) => {
+                await deleteSite(id);
+                const updated = await loadAllSites();
+                setSites(updated);
+                if (activeSiteId === id) {
+                  const fallbackId = updated[0]?.id ?? DEFAULT_SITE_ID;
+                  setActiveSiteId(fallbackId);
+                  handleFocusSite(fallbackId);
+                }
+              }}
+              plans={allBackgroundPlans}
+              racks={racks}
+              nodes={nodes}
+              onOpenPlanManager={() => setIsPlanManagerOpen(true)}
+            />
+          }
           onOpenTopology={() => {
             if (isTopologyOpen) {
               setIsTopologyOpen(false);
             } else {
               setIsPaletteOpen(false);
               setIsInventoryOpen(false);
+              setIsSitesOpen(false);
               setIsTopologyOpen(true);
             }
           }}
@@ -2425,15 +2911,16 @@ export default function NetFloorApp() {
             } else {
               setIsPaletteOpen(false);
               setIsTopologyOpen(false);
+              setIsSitesOpen(false);
               setIsInventoryOpen(true);
             }
           }}
           isInventoryOpen={isInventoryOpen}
           inventoryContent={
             <InventoryPanel
-              nodes={nodes}
-              racks={racks}
-              zones={zones}
+              nodes={visibleNodes}
+              racks={visibleRacks}
+              zones={visibleZones}
               vlanStyles={vlanStyles}
               onClose={() => setIsInventoryOpen(false)}
               onSelectNode={(node) => {
@@ -2449,8 +2936,8 @@ export default function NetFloorApp() {
           onResizeStart={handleStartLeftResize}
           topologyContent={
             <NetworkTopologyPanel
-              racks={racks}
-              nodes={nodes}
+              racks={visibleRacks}
+              nodes={visibleNodes}
               cables={cables}
               vlanStyles={vlanStyles}
               onClose={() => setIsTopologyOpen(false)}
@@ -2466,7 +2953,7 @@ export default function NetFloorApp() {
 
         {/* Main Canvas Area */}
         <div
-          style={{ marginLeft: (isPaletteOpen || isTopologyOpen || isInventoryOpen) ? `${leftPanelWidth}px` : "56px" }}
+          style={{ marginLeft: (isPaletteOpen || isTopologyOpen || isInventoryOpen || isSitesOpen) ? `${leftPanelWidth}px` : "56px" }}
           className="flex-1 h-full relative min-w-0"
           onDragOver={(e) => {
             e.preventDefault();
@@ -2485,12 +2972,30 @@ export default function NetFloorApp() {
               const viewport = useCameraStore.getState().viewport;
               const worldPos = screenToWorld({ x: screenX, y: screenY }, viewport);
 
+              // 0. Cas du glisser-déposer d'un élément non positionné (importé depuis CSV matriciel)
+              if (parsed && parsed.type === "UNPOSITIONED_NODE" && parsed.node) {
+                const unpositionedNode = parsed.node as NodeDisplay;
+                const snappedPos = snapToGrid(worldPos, useCameraStore.getState().gridConfig).point;
+                const placedNode: NodeDisplay = {
+                  ...unpositionedNode,
+                  xMm: snappedPos.x,
+                  yMm: snappedPos.y,
+                  siteId: unpositionedNode.siteId ?? activeSiteId ?? DEFAULT_SITE_ID,
+                };
+
+                // Retirer de unpositionedNodes et ajouter à nodes
+                setUnpositionedNodes((prev) => prev.filter((n) => n.id !== unpositionedNode.id));
+                setNodes((prev) => [...prev, placedNode]);
+                setSelectedNodeId(placedNode.id);
+                return;
+              }
+
               // 1. Cas du glisser-déposer d'un utilisateur depuis l'inventaire
               if (parsed && parsed.type === "DIRECTORY_USER" && parsed.user) {
                 const user = parsed.user as { id: string; fullName: string; department?: string };
 
                 // Détecter si on a déposé l'utilisateur sur un meuble/bureau
-                const hitDesk = nodes.find((d) => {
+                const hitDesk = visibleNodes.find((d) => {
                   if (d.type !== "DESK") return false;
                   const deskW = d.widthMm ?? 1600;
                   const deskH = d.heightMm ?? 800;
@@ -2654,14 +3159,18 @@ export default function NetFloorApp() {
           <DynamicFloorCanvas
             floorWidthMm={floorData.widthMm}
             floorHeightMm={floorData.heightMm}
-            zones={zones}
+            zones={visibleZones}
             selectedZoneId={selectedZoneId}
             onSelectZone={handleSelectZone}
             onZoneMoveEnd={handleZoneMoveEnd}
-            racks={racks}
-            nodes={nodes}
+            racks={visibleRacks}
+            nodes={visibleNodes}
             cables={cables}
             selectedNodeId={selectedNodeId}
+            selectedNodeIds={selectedNodeIds}
+            onSelectNodeToggle={handleSelectNodeToggle}
+            onSelectNodeIds={handleSelectNodeIds}
+            onGroupNodeMoveEnd={handleGroupNodeMoveEnd}
             activeViewMode={activeViewMode}
             cableFilterMode={cableFilterMode}
             vlanStyles={vlanStyles}
@@ -2669,6 +3178,7 @@ export default function NetFloorApp() {
             onDeselectAll={() => {
               setSelectedZoneId(null);
               setSelectedNodeId(null);
+              setSelectedNodeIds([]);
             }}
             onSelectOutlet={handleSelectOutlet}
             onSelectNode={(node) => {
@@ -2680,6 +3190,23 @@ export default function NetFloorApp() {
             onNodeDragMove={handleThrottledNodeDragMove}
             onRackDragMove={handleThrottledRackDragMove}
             onPivotChange={handleThrottledPivotChange}
+            backgroundPlan={{
+              ...backgroundPlan,
+              plans: allBackgroundPlans.length > 0
+                ? allBackgroundPlans.filter((p) => !activeSiteId || activeSiteId === "ALL" || (p.siteId ?? DEFAULT_SITE_ID) === activeSiteId)
+                : undefined,
+            }}
+            onBackgroundPlanPositionChange={(pos) => handleUpdateBackgroundPlan({ xMm: pos.x, yMm: pos.y })}
+            onCalibrateScale={handleCalibrateScale}
+            isRulerActive={isRulerActive}
+            onCloseRuler={() => setIsRulerActive(false)}
+          />
+
+          {/* Tiroir des Éléments Non Positionnés (importés par CSV) */}
+          <UnpositionedElementsDrawer
+            unpositionedNodes={unpositionedNodes}
+            onRemoveItem={(id: string) => setUnpositionedNodes((prev) => prev.filter((n) => n.id !== id))}
+            onClearAll={() => setUnpositionedNodes([])}
           />
 
           {/* Quick tips badge */}
@@ -2711,9 +3238,12 @@ export default function NetFloorApp() {
             isLoading={isTracing}
             selectedNode={selectedNode}
             selectedZone={selectedZone}
-            allNodes={nodes}
+            selectedNodeIds={selectedNodeIds}
+            onClearMultiSelection={handleClearMultiSelection}
+            onBulkDelete={handleBulkDelete}
+            allNodes={visibleNodes}
             desks={desks}
-            racks={racks}
+            racks={visibleRacks}
             onToggleAttachment={handleToggleAttachment}
             onAlignWithDesk={handleAlignWithDesk}
             onTriggerTrace={handleSelectOutlet}
@@ -2728,6 +3258,9 @@ export default function NetFloorApp() {
             vlanStyles={vlanStyles}
             onUpdateVlanStyle={handleUpdateVlanStyle}
             onResetVlanStyles={handleResetVlanStyles}
+            onAutoRoute={handleAutoRoute}
+            sites={sites}
+            activeSiteId={activeSiteId}
           />
         </div>
       </div>
@@ -2736,17 +3269,157 @@ export default function NetFloorApp() {
       <CsvImportModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
+        nodes={nodes}
+        racks={racks}
+        onApplyImport={handleApplyMatrixImport}
         onSuccess={() => {
           // Callback après import réussi
         }}
       />
 
-      {/* 3b. Modal de Personnalisation des Dimensions du Plan de Base */}
+      {/* 3a. Batch Desk Spawner Modal */}
+      <BatchDeskSpawnerModal
+        isOpen={isBatchSpawnerOpen}
+        onClose={() => setIsBatchSpawnerOpen(false)}
+        zones={visibleZones}
+        racks={visibleRacks}
+        onSpawn={handleBatchSpawn}
+      />
+
+      {/* 3b. Gestionnaire Multi-Plans & Calage Métrique */}
+      <PlanManagerModal
+        isOpen={isPlanManagerOpen}
+        onClose={() => {
+          setIsPlanManagerOpen(false);
+          loadAllBackgroundPlans().then(setAllBackgroundPlans);
+        }}
+        plans={allBackgroundPlans}
+        sites={sites}
+        activeSiteId={activeSiteId}
+        activePlanId={activePlanId ?? allBackgroundPlans[0]?.id ?? null}
+        onSelectActivePlan={(id) => {
+          setActivePlanId(id);
+          const target = allBackgroundPlans.find((p) => p.id === id);
+          if (target) {
+            setBackgroundPlan({
+              imageUrl: target.imageData,
+              name: target.name,
+              opacity: target.opacity,
+              isLocked: target.isLocked,
+              xMm: target.xMm,
+              yMm: target.yMm,
+              scale: target.scale,
+              widthMm: target.widthMm,
+              heightMm: target.heightMm,
+              visible: target.visible,
+            });
+          }
+        }}
+        onUpdatePlan={(id, updates) => {
+          // 1. Mise à jour synchrone instantanée en mémoire (0ms, zéro freeze)
+          setAllBackgroundPlans((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
+          );
+
+          // 2. Synchronisation du canevas si c'est le plan affiché
+          if (activePlanId === id || (!activePlanId && allBackgroundPlans[0]?.id === id)) {
+            setBackgroundPlan((prev) => ({
+              ...prev,
+              ...updates,
+              ...(updates.imageData ? { imageUrl: updates.imageData } : {}),
+            }));
+          }
+
+          // 3. Persistance asynchrone debouncée dans IndexedDB (sans relecture du disque)
+          if (savePlanTimeoutRef.current[id]) {
+            clearTimeout(savePlanTimeoutRef.current[id]);
+          }
+          savePlanTimeoutRef.current[id] = setTimeout(() => {
+            setAllBackgroundPlans((currentPlans) => {
+              const target = currentPlans.find((p) => p.id === id);
+              if (target) {
+                saveBackgroundPlan(target);
+              }
+              return currentPlans;
+            });
+          }, 300);
+        }}
+        onAddPlan={async (newPlan) => {
+          await saveBackgroundPlan(newPlan);
+          const updatedPlans = await loadAllBackgroundPlans();
+          setAllBackgroundPlans(updatedPlans);
+          const created = updatedPlans.find((p) => p.id === newPlan.id) ?? updatedPlans[updatedPlans.length - 1];
+          if (created) {
+            setActivePlanId(created.id);
+            setBackgroundPlan({
+              imageUrl: created.imageData,
+              name: created.name,
+              opacity: created.opacity,
+              isLocked: created.isLocked,
+              xMm: created.xMm,
+              yMm: created.yMm,
+              scale: created.scale,
+              widthMm: created.widthMm,
+              heightMm: created.heightMm,
+              visible: created.visible,
+            });
+          }
+        }}
+        onDeletePlan={async (id) => {
+          await deleteBackgroundPlan(id);
+          const updatedPlans = await loadAllBackgroundPlans();
+          setAllBackgroundPlans(updatedPlans);
+          if (activePlanId === id || updatedPlans.length === 0) {
+            const nextActive = updatedPlans[0];
+            setActivePlanId(nextActive?.id ?? null);
+            if (nextActive) {
+              setBackgroundPlan({
+                imageUrl: nextActive.imageData,
+                name: nextActive.name,
+                opacity: nextActive.opacity,
+                isLocked: nextActive.isLocked,
+                xMm: nextActive.xMm,
+                yMm: nextActive.yMm,
+                scale: nextActive.scale,
+                widthMm: nextActive.widthMm,
+                heightMm: nextActive.heightMm,
+                visible: nextActive.visible,
+              });
+            } else {
+              setBackgroundPlan({
+                imageUrl: null,
+                name: "",
+                opacity: 0.6,
+                isLocked: true,
+                xMm: 0,
+                yMm: 0,
+                scale: 1.0,
+                visible: true,
+              });
+            }
+          }
+        }}
+        floorWidthMm={floorData.widthMm}
+        floorHeightMm={floorData.heightMm}
+        onOpenScaleCalibration={() => {
+          setIsPlanManagerOpen(false);
+          setIsRulerActive(true);
+        }}
+      />
+
+      {/* 3b. Modal de Personnalisation des Dimensions de la Zone & du Site */}
       <FloorDimensionsModal
         isOpen={isDimensionsModalOpen}
         onClose={() => setIsDimensionsModalOpen(false)}
         currentWidthMm={floorData.widthMm}
         currentHeightMm={floorData.heightMm}
+        siteName={sites.find((s) => s.id === activeSiteId)?.name ?? "Site Principal"}
+        sites={sites}
+        activeSiteId={activeSiteId}
+        onSelectSite={(id) => {
+          setActiveSiteId(id);
+          handleFocusSite(id);
+        }}
         onApplyDimensions={(w, h) => {
           setFloorData({ widthMm: w, heightMm: h });
           fitFloor(w, h, window.innerWidth, window.innerHeight);

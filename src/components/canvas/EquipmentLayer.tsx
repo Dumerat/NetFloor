@@ -35,6 +35,7 @@ export interface RackDisplay {
   depthMm: number;
   uHeight: number;
   devices?: RackDeviceItem[] | undefined;
+  siteId?: string | undefined;
 }
 
 export type OutletRole = "DATA" | "VOIP" | "WIFI" | "PRINTER" | "CAMERA" | "GENERIC";
@@ -142,6 +143,7 @@ export interface NodeDisplay {
   connectedSwitchPort?: string | undefined;
   devices?: RackDeviceItem[] | undefined;
   uHeight?: number | undefined;
+  siteId?: string | undefined;
 }
 
 export function getLabelCoordinates(
@@ -170,15 +172,19 @@ interface EquipmentLayerProps {
   nodes: NodeDisplay[];
   selectedOutletId?: string | null | undefined;
   selectedNodeId?: string | null | undefined;
+  selectedNodeIds?: string[] | undefined;
   activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK";
   showAllLabels?: boolean | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onSelectOutlet: (outletNode: NodeDisplay) => void;
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
+  onSelectNodeToggle?: ((node: NodeDisplay, isMulti: boolean) => void) | undefined;
   onNodeContextMenu?: ((node: NodeDisplay, pos: { x: number; y: number }) => void) | undefined;
   onNodeMoveEnd: (id: string, newPos: { x: number; y: number }) => void;
+  onGroupNodeMoveEnd?: ((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => void) | undefined;
   onNodeDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
+  isMarqueeJustEnded?: (() => boolean) | undefined;
 }
 
 const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
@@ -186,17 +192,26 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   nodes,
   selectedOutletId,
   selectedNodeId,
+  selectedNodeIds,
   activeViewMode = "ALL",
   showAllLabels = false,
   vlanStyles,
   onSelectOutlet,
   onSelectNode,
+  onSelectNodeToggle,
   onNodeContextMenu,
   onNodeMoveEnd,
+  onGroupNodeMoveEnd,
   onNodeDragMove,
   onRackDragMove,
+  isMarqueeJustEnded,
 }) => {
-  const activeSelectedId = selectedNodeId ?? selectedOutletId;
+  const isNodeSelected = (id: string) => {
+    if (selectedNodeIds && selectedNodeIds.length > 0) {
+      return selectedNodeIds.includes(id);
+    }
+    return (selectedNodeId ?? selectedOutletId) === id;
+  };
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   const handleMouseEnter = (e: KonvaEventObject<MouseEvent>) => {
@@ -223,8 +238,132 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
     setHoveredNodeId((prev) => (prev === nodeId ? null : prev));
   };
 
-  const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
-    e.cancelBubble = true;
+  // Référence pour le déplacement groupé de la multi-sélection
+  const groupDragStateRef = useRef<{
+    leadNodeId: string;
+    startLeadPos: { x: number; y: number };
+    otherNodes: { id: string; startPos: { x: number; y: number } }[];
+    attachedOutlets: {
+      id: string;
+      startPos: { x: number; y: number };
+      startAnchorPos: { x: number; y: number };
+    }[];
+  } | null>(null);
+
+  const initGroupDragIfMulti = (nodeId: string, e: KonvaEventObject<DragEvent>) => {
+    if (selectedNodeIds && selectedNodeIds.length > 1 && selectedNodeIds.includes(nodeId)) {
+      const selectedSet = new Set(selectedNodeIds);
+      const otherNodes: { id: string; startPos: { x: number; y: number } }[] = [];
+      nodes.forEach((n) => {
+        if (selectedSet.has(n.id) && n.id !== nodeId) {
+          otherNodes.push({ id: n.id, startPos: { x: n.xMm, y: n.yMm } });
+        }
+      });
+      racks.forEach((r) => {
+        if (selectedSet.has(r.id) && r.id !== nodeId) {
+          otherNodes.push({ id: r.id, startPos: { x: r.xMm, y: r.yMm } });
+        }
+      });
+
+      // Prises rattachées aux bureaux sélectionnés qui ne sont pas déjà dans la sélection
+      const attachedOutlets: {
+        id: string;
+        startPos: { x: number; y: number };
+        startAnchorPos: { x: number; y: number };
+      }[] = [];
+      nodes.forEach((n) => {
+        if (
+          n.type === "WALL_OUTLET" &&
+          n.attachedToDeskId &&
+          selectedSet.has(n.attachedToDeskId) &&
+          !selectedSet.has(n.id)
+        ) {
+          const desk = nodes.find((d) => d.id === n.attachedToDeskId);
+          let startAnchorX = n.xMm;
+          let startAnchorY = n.yMm;
+          if (desk) {
+            const deskW = desk.widthMm ?? 1600;
+            const deskH = desk.heightMm ?? 800;
+            const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+            let localAnchorX = deskW / 2;
+            let localAnchorY = deskH / 2;
+            if (n.attachedSeatIndex !== undefined) {
+              if (desk.subType === "BENCH_QUAD") {
+                const sIdx = n.attachedSeatIndex;
+                localAnchorX = sIdx === 0 || sIdx === 2 ? deskW / 4 : (3 * deskW) / 4;
+                localAnchorY = sIdx === 0 || sIdx === 1 ? deskH / 4 : (3 * deskH) / 4;
+              } else if (desk.subType === "BENCH_DOUBLE") {
+                const sIdx = n.attachedSeatIndex;
+                localAnchorX = deskW / 2;
+                localAnchorY = sIdx === 0 ? deskH / 4 : (3 * deskH) / 4;
+              }
+            }
+            startAnchorX = desk.xMm + localAnchorX * Math.cos(rotRad) - localAnchorY * Math.sin(rotRad);
+            startAnchorY = desk.yMm + localAnchorX * Math.sin(rotRad) + localAnchorY * Math.cos(rotRad);
+          }
+          attachedOutlets.push({
+            id: n.id,
+            startPos: { x: n.xMm, y: n.yMm },
+            startAnchorPos: { x: startAnchorX, y: startAnchorY },
+          });
+        }
+      });
+
+      groupDragStateRef.current = {
+        leadNodeId: nodeId,
+        startLeadPos: { x: e.target.x(), y: e.target.y() },
+        otherNodes,
+        attachedOutlets,
+      };
+      return true;
+    }
+    groupDragStateRef.current = null;
+    return false;
+  };
+
+  const updateGroupDragMove = (nodeId: string, e: KonvaEventObject<DragEvent>) => {
+    const groupState = groupDragStateRef.current;
+    if (groupState && groupState.leadNodeId === nodeId) {
+      const deltaX = e.target.x() - groupState.startLeadPos.x;
+      const deltaY = e.target.y() - groupState.startLeadPos.y;
+      const stage = e.target.getStage();
+      if (stage) {
+        groupState.otherNodes.forEach((item) => {
+          const konvaNode = stage.findOne("#" + item.id);
+          if (konvaNode) konvaNode.position({ x: item.startPos.x + deltaX, y: item.startPos.y + deltaY });
+        });
+        groupState.attachedOutlets.forEach((item) => {
+          const konvaNode = stage.findOne("#" + item.id);
+          if (konvaNode) konvaNode.position({ x: item.startPos.x + deltaX, y: item.startPos.y + deltaY });
+          const anchorLine = stage.findOne("#anchor-line-" + item.id) as any;
+          if (anchorLine && typeof anchorLine.points === "function") {
+            anchorLine.points([
+              item.startAnchorPos.x + deltaX,
+              item.startAnchorPos.y + deltaY,
+              item.startPos.x + deltaX,
+              item.startPos.y + deltaY,
+            ]);
+          }
+        });
+        stage.batchDraw();
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const finishGroupDragIfMulti = (nodeId: string, e: KonvaEventObject<DragEvent>) => {
+    const groupState = groupDragStateRef.current;
+    if (groupState && groupState.leadNodeId === nodeId) {
+      const deltaX = Math.round(e.target.x() - groupState.startLeadPos.x);
+      const deltaY = Math.round(e.target.y() - groupState.startLeadPos.y);
+      groupDragStateRef.current = null;
+      if (onGroupNodeMoveEnd && selectedNodeIds) {
+        onGroupNodeMoveEnd(selectedNodeIds, { deltaX, deltaY });
+        return true;
+      }
+    }
+    return false;
   };
 
   // Référence pour le suivi synchrone GPU immédiat du bureau et de ses prises solidaires (0 latence)
@@ -241,6 +380,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
   const handleDeskDragStart = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
+    initGroupDragIfMulti(desk.id, e);
+
     const attached = nodes.filter((n) => n.type === "WALL_OUTLET" && n.attachedToDeskId === desk.id);
     const deskW = desk.widthMm ?? 1600;
     const deskH = desk.heightMm ?? 800;
@@ -274,6 +415,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
   const handleDeskDragMove = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
+    updateGroupDragMove(desk.id, e);
+
     const state = deskDragStateRef.current;
     const currentDeskX = e.target.x();
     const currentDeskY = e.target.y();
@@ -305,8 +448,6 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             const anchorY = currentDeskY + item.localAnchorX * sinR + item.localAnchorY * cosR;
             anchorLineNode.points([anchorX, anchorY, currentOutletX, currentOutletY]);
           }
-
-
         }
 
         // Re-dessin GPU synchrone immédiat (0 latence, même frame 60 FPS)
@@ -320,21 +461,30 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   const handleDeskDragEnd = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
     deskDragStateRef.current = null;
+    if (finishGroupDragIfMulti(desk.id, e)) return;
     handleDragEnd(desk.id, e);
   };
 
   const handleRackDragMove = (id: string, e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
+    updateGroupDragMove(id, e);
     onRackDragMove?.(id, { x: e.target.x(), y: e.target.y() });
+  };
+
+  const handleNodeDragStart = (id: string, e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
+    initGroupDragIfMulti(id, e);
   };
 
   const handleNodeDragMove = (id: string, e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
+    updateGroupDragMove(id, e);
     onNodeDragMove?.(id, { x: e.target.x(), y: e.target.y() });
   };
 
   const handleDragEnd = (id: string, e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
+    if (finishGroupDragIfMulti(id, e)) return;
     onNodeMoveEnd(id, { x: e.target.x(), y: e.target.y() });
   };
 
@@ -401,50 +551,55 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
       {/* 1. Baies Informatiques 19" Réalistes (Racks 42U) - Masquées en vue RH */}
       {activeViewMode !== "HR" &&
         racks.map((rack) => {
-          const isSelected = activeSelectedId === rack.id;
+          const isSelected = isNodeSelected(rack.id);
           const totalU = rack.uHeight || 42;
           const rWidth = rack.widthMm ?? 800;
           // Hauteur proportionnelle garantissant une hauteur minimale par U pour une excellente lisibilité
           const minDepthForU = 320 + totalU * 36;
           const rDepth = Math.max(rack.depthMm ?? 1000, minDepthForU);
 
+          const rackNodeDisplay: NodeDisplay = {
+            id: rack.id,
+            type: "PATCH_PANEL",
+            name: rack.name,
+            xMm: rack.xMm,
+            yMm: rack.yMm,
+            widthMm: rWidth,
+            heightMm: rDepth,
+            subType: "RACK_42U",
+            description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
+          };
+
           return (
             <Group
               key={rack.id}
+              id={rack.id}
               x={rack.xMm}
               y={rack.yMm}
               draggable
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
-              onDragStart={handleDragStart}
+              onDragStart={(e) => handleNodeDragStart(rack.id, e)}
               onDragMove={(e) => handleRackDragMove(rack.id, e)}
               onDragEnd={(e) => handleDragEnd(rack.id, e)}
-              onClick={() =>
-                onSelectNode?.({
-                  id: rack.id,
-                  type: "PATCH_PANEL",
-                  name: rack.name,
-                  xMm: rack.xMm,
-                  yMm: rack.yMm,
-                  widthMm: rWidth,
-                  heightMm: rDepth,
-                  subType: "RACK_42U",
-                  description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
-                })
-              }
-              onTap={() =>
-                onSelectNode?.({
-                  id: rack.id,
-                  type: "PATCH_PANEL",
-                  name: rack.name,
-                  xMm: rack.xMm,
-                  yMm: rack.yMm,
-                  widthMm: rWidth,
-                  heightMm: rDepth,
-                  subType: "RACK_42U",
-                  description: `Baie informatique standard 19" (${rack.uHeight}U) avec commutateurs Cisco et bandeaux Cat6A.`,
-                })
-              }
+              onClick={(e) => {
+                e.cancelBubble = true;
+                if (isMarqueeJustEnded?.()) return;
+                if (onSelectNodeToggle) {
+                  onSelectNodeToggle(rackNodeDisplay, e.evt.shiftKey);
+                } else {
+                  onSelectNode?.(rackNodeDisplay);
+                }
+              }}
+              onTap={(e) => {
+                e.cancelBubble = true;
+                if (isMarqueeJustEnded?.()) return;
+                if (onSelectNodeToggle) {
+                  onSelectNodeToggle(rackNodeDisplay, false);
+                } else {
+                  onSelectNode?.(rackNodeDisplay);
+                }
+              }}
               onContextMenu={(e) => {
                 e.evt.preventDefault();
                 e.cancelBubble = true;
@@ -733,7 +888,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
       {nodes
         .filter((n) => n.type === "DESK")
         .map((desk) => {
-          const isSelected = activeSelectedId === desk.id;
+          const isSelected = isNodeSelected(desk.id);
           const width = desk.widthMm ?? 1600;
           const height = desk.heightMm ?? 800;
           const rotDeg = desk.rotationDeg ?? 0;
@@ -798,6 +953,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
           return (
             <Group
               key={desk.id}
+              id={desk.id}
               x={desk.xMm}
               y={desk.yMm}
               rotation={rotDeg}
@@ -807,8 +963,24 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               onDragStart={(e) => handleDeskDragStart(desk, e)}
               onDragMove={(e) => handleDeskDragMove(desk, e)}
               onDragEnd={(e) => handleDeskDragEnd(desk, e)}
-              onClick={() => onSelectNode?.(desk)}
-              onTap={() => onSelectNode?.(desk)}
+              onClick={(e) => {
+                e.cancelBubble = true;
+                if (isMarqueeJustEnded?.()) return;
+                if (onSelectNodeToggle) {
+                  onSelectNodeToggle(desk, e.evt.shiftKey);
+                } else {
+                  onSelectNode?.(desk);
+                }
+              }}
+              onTap={(e) => {
+                e.cancelBubble = true;
+                if (isMarqueeJustEnded?.()) return;
+                if (onSelectNodeToggle) {
+                  onSelectNodeToggle(desk, false);
+                } else {
+                  onSelectNode?.(desk);
+                }
+              }}
               onContextMenu={(e) => {
                 e.evt.preventDefault();
                 e.cancelBubble = true;
@@ -1212,7 +1384,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
           return true;
         })
         .map((outlet) => {
-          const isSelected = activeSelectedId === outlet.id;
+          const isSelected = isNodeSelected(outlet.id);
           const shouldShowOutletLabel = showAllLabels || isSelected || hoveredNodeId === outlet.id;
           const isFloorBox = outlet.subType === "FLOOR_BOX";
           const isWifiAp = outlet.subType === "WIFI_AP";
@@ -1222,6 +1394,40 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             ? nodes.find((n) => n.id === outlet.attachedToDeskId)
             : undefined;
           const isLinked = Boolean(linkedDesk);
+
+          const interactiveProps = {
+            draggable: true,
+            onMouseEnter: (e: KonvaEventObject<MouseEvent>) => handleNodeMouseEnter(outlet.id, e),
+            onMouseLeave: (e: KonvaEventObject<MouseEvent>) => handleNodeMouseLeave(outlet.id, e),
+            onDragStart: (e: KonvaEventObject<DragEvent>) => handleNodeDragStart(outlet.id, e),
+            onDragMove: (e: KonvaEventObject<DragEvent>) => handleNodeDragMove(outlet.id, e),
+            onDragEnd: (e: KonvaEventObject<DragEvent>) => handleDragEnd(outlet.id, e),
+            onClick: (e: KonvaEventObject<MouseEvent>) => {
+              e.cancelBubble = true;
+              if (isMarqueeJustEnded?.()) return;
+              if (onSelectNodeToggle) {
+                onSelectNodeToggle(outlet, e.evt.shiftKey);
+              } else {
+                onSelectOutlet(outlet);
+                onSelectNode?.(outlet);
+              }
+            },
+            onTap: (e: KonvaEventObject<TouchEvent>) => {
+              e.cancelBubble = true;
+              if (isMarqueeJustEnded?.()) return;
+              if (onSelectNodeToggle) {
+                onSelectNodeToggle(outlet, false);
+              } else {
+                onSelectOutlet(outlet);
+                onSelectNode?.(outlet);
+              }
+            },
+            onContextMenu: (e: KonvaEventObject<PointerEvent>) => {
+              e.evt.preventDefault();
+              e.cancelBubble = true;
+              onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
+            },
+          };
 
           // Rendu Boîte de Sol encastrée (Nourrice inox 4x RJ45)
           if (isFloorBox) {
@@ -1234,25 +1440,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 id={outlet.id}
                 x={outlet.xMm}
                 y={outlet.yMm}
-                draggable
-                onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
-                onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
-                onDragStart={handleDragStart}
-                onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
-                onDragEnd={(e) => handleDragEnd(outlet.id, e)}
-                onClick={() => {
-                  onSelectOutlet(outlet);
-                  onSelectNode?.(outlet);
-                }}
-                onTap={() => {
-                  onSelectOutlet(outlet);
-                  onSelectNode?.(outlet);
-                }}
-                onContextMenu={(e) => {
-                  e.evt.preventDefault();
-                  e.cancelBubble = true;
-                  onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
-                }}
+                {...interactiveProps}
               >
                 {/* Cadre inox extérieur de la boîte de sol */}
                 <Rect
@@ -1351,25 +1539,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 id={outlet.id}
                 x={outlet.xMm}
                 y={outlet.yMm}
-                draggable
-                onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
-                onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
-                onDragStart={handleDragStart}
-                onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
-                onDragEnd={(e) => handleDragEnd(outlet.id, e)}
-                onClick={() => {
-                  onSelectOutlet(outlet);
-                  onSelectNode?.(outlet);
-                }}
-                onTap={() => {
-                  onSelectOutlet(outlet);
-                  onSelectNode?.(outlet);
-                }}
-                onContextMenu={(e) => {
-                  e.evt.preventDefault();
-                  e.cancelBubble = true;
-                  onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
-                }}
+                {...interactiveProps}
               >
                 {/* Onde radio Wi-Fi externe */}
                 <Circle radius={180} stroke={vlan50Color} strokeWidth={10} dash={[30, 20]} opacity={0.6} listening={false} />
@@ -1441,25 +1611,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 id={outlet.id}
                 x={outlet.xMm}
                 y={outlet.yMm}
-                draggable
-                onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
-                onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
-                onDragStart={handleDragStart}
-                onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
-                onDragEnd={(e) => handleDragEnd(outlet.id, e)}
-                onClick={() => {
-                  onSelectOutlet(outlet);
-                  onSelectNode?.(outlet);
-                }}
-                onTap={() => {
-                  onSelectOutlet(outlet);
-                  onSelectNode?.(outlet);
-                }}
-                onContextMenu={(e) => {
-                  e.evt.preventDefault();
-                  e.cancelBubble = true;
-                  onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
-                }}
+                {...interactiveProps}
               >
                 {/* Corps de l'imprimante */}
                 <Rect
@@ -1538,25 +1690,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 id={outlet.id}
                 x={outlet.xMm}
                 y={outlet.yMm}
-                draggable
-                onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
-                onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
-                onDragStart={handleDragStart}
-                onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
-                onDragEnd={(e) => handleDragEnd(outlet.id, e)}
-                onClick={() => {
-                  onSelectOutlet(outlet);
-                  onSelectNode?.(outlet);
-                }}
-                onTap={() => {
-                  onSelectOutlet(outlet);
-                  onSelectNode?.(outlet);
-                }}
-                onContextMenu={(e) => {
-                  e.evt.preventDefault();
-                  e.cancelBubble = true;
-                  onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
-                }}
+                {...interactiveProps}
               >
                 {/* Châssis métallique de la colonnette multi-ports */}
                 <Rect
@@ -1733,25 +1867,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               id={outlet.id}
               x={outlet.xMm}
               y={outlet.yMm}
-              draggable
-              onMouseEnter={(e) => handleNodeMouseEnter(outlet.id, e)}
-              onMouseLeave={(e) => handleNodeMouseLeave(outlet.id, e)}
-              onDragStart={handleDragStart}
-              onDragMove={(e) => handleNodeDragMove(outlet.id, e)}
-              onDragEnd={(e) => handleDragEnd(outlet.id, e)}
-              onClick={() => {
-                onSelectOutlet(outlet);
-                onSelectNode?.(outlet);
-              }}
-              onTap={() => {
-                onSelectOutlet(outlet);
-                onSelectNode?.(outlet);
-              }}
-              onContextMenu={(e) => {
-                e.evt.preventDefault();
-                e.cancelBubble = true;
-                onNodeContextMenu?.(outlet, { x: e.evt.clientX, y: e.evt.clientY });
-              }}
+              {...interactiveProps}
             >
               {/* Plastron mural épuré avec contour couleur VLAN */}
               <Rect

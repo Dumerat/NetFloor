@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, type FC } from "react";
-import { Stage, Layer } from "react-konva";
+import { Stage, Layer, Rect } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
 import {
@@ -13,6 +13,16 @@ import { GridLayer } from "./GridLayer";
 import { ZoneLayer } from "./ZoneLayer";
 import { CableLayer, CableData, CableFilterMode } from "./CableLayer";
 import { EquipmentLayer, RackDisplay, NodeDisplay } from "./EquipmentLayer";
+import { BackgroundPlanLayer, BackgroundPlanLayerProps } from "./BackgroundPlanLayer";
+import {
+  ScaleCalibrationLayer,
+  ScaleCalibrationModal,
+  CalibrationPoint,
+} from "./ScaleCalibrationTool";
+import {
+  MeasurementRulerLayer,
+  MeasurementRulerOverlay,
+} from "./MeasurementRulerTool";
 import { VlanStyle } from "@/data/vlanStyles";
 import { FloorZone } from "@/types/zones";
 
@@ -28,6 +38,10 @@ interface FloorCanvasProps {
   cables: CableData[];
   selectedOutletId?: string | null | undefined;
   selectedNodeId?: string | null | undefined;
+  selectedNodeIds?: string[] | undefined;
+  onSelectNodeToggle?: ((node: NodeDisplay, isShift: boolean) => void) | undefined;
+  onSelectNodeIds?: ((ids: string[]) => void) | undefined;
+  onGroupNodeMoveEnd?: ((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => void) | undefined;
   activeViewMode?: "ALL" | "HR" | "TECH" | "MAINTENANCE" | "NETWORK" | undefined;
   cableFilterMode?: CableFilterMode | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
@@ -40,6 +54,13 @@ interface FloorCanvasProps {
   onNodeDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onPivotChange?: ((cableId: string, newPivot: { x: number; y: number }) => void) | undefined;
+  backgroundPlan?: BackgroundPlanLayerProps | undefined;
+  onBackgroundPlanPositionChange?: ((pos: { x: number; y: number }) => void) | undefined;
+  isCalibratingScale?: boolean | undefined;
+  onCloseCalibration?: (() => void) | undefined;
+  onCalibrateScale?: ((res: { pixelsPerMeter: number; realMeters: number; distPx: number; distWorldMm: number }) => void) | undefined;
+  isRulerActive?: boolean | undefined;
+  onCloseRuler?: (() => void) | undefined;
 }
 
 export const FloorCanvas: FC<FloorCanvasProps> = ({
@@ -54,6 +75,10 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   cables,
   selectedOutletId,
   selectedNodeId,
+  selectedNodeIds,
+  onSelectNodeToggle,
+  onSelectNodeIds,
+  onGroupNodeMoveEnd,
   activeViewMode = "ALL",
   cableFilterMode = "ALL",
   vlanStyles,
@@ -66,12 +91,291 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   onNodeDragMove,
   onRackDragMove,
   onPivotChange,
+  backgroundPlan,
+  onBackgroundPlanPositionChange,
+  isCalibratingScale,
+  onCloseCalibration,
+  onCalibrateScale,
+  isRulerActive,
+  onCloseRuler,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { viewport, setViewport, zoomAt, fitFloor, gridConfig } = useCameraStore();
   const [dimensions, setDimensions] = useState({ width: 1200, height: 800 });
+  const [selectionBox, setSelectionBox] = useState<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
+  const isSelectingRef = useRef(false);
+  const lastMarqueeEndTimeRef = useRef<number>(0);
+  const isMarqueeJustEnded = useCallback(() => {
+    return Date.now() - lastMarqueeEndTimeRef.current < 250;
+  }, []);
 
   const hasInitialFitRef = useRef(false);
+
+  // État de l'Outil Étalonnage Métrique
+  const [calibPoint1, setCalibPoint1] = useState<CalibrationPoint | null>(null);
+  const [calibPoint2, setCalibPoint2] = useState<CalibrationPoint | null>(null);
+  const [calibHoverPoint, setCalibHoverPoint] = useState<CalibrationPoint | null>(null);
+  const [isCalibModalOpen, setIsCalibModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isCalibratingScale) {
+      setCalibPoint1(null);
+      setCalibPoint2(null);
+      setCalibHoverPoint(null);
+      setIsCalibModalOpen(false);
+    }
+  }, [isCalibratingScale]);
+
+  const handleCalibPointSelect = useCallback((pt: CalibrationPoint) => {
+    if (!calibPoint1) {
+      setCalibPoint1(pt);
+    } else if (!calibPoint2) {
+      setCalibPoint2(pt);
+      setIsCalibModalOpen(true);
+    }
+  }, [calibPoint1, calibPoint2]);
+
+  const handleCalibHoverMove = useCallback((pt: CalibrationPoint) => {
+    setCalibHoverPoint(pt);
+  }, []);
+
+  const activeCalibSecondPt = calibPoint2 || calibHoverPoint;
+  const calibDistPx =
+    calibPoint1 && activeCalibSecondPt
+      ? Math.hypot(
+          activeCalibSecondPt.screenX - calibPoint1.screenX,
+          activeCalibSecondPt.screenY - calibPoint1.screenY
+        )
+      : 0;
+
+  const handleValidateCalib = useCallback(
+    (realMeters: number) => {
+      if (!calibPoint1 || !calibPoint2) return;
+      const dxPx = calibPoint2.screenX - calibPoint1.screenX;
+      const dyPx = calibPoint2.screenY - calibPoint1.screenY;
+      const distPx = Math.hypot(dxPx, dyPx);
+
+      const dxMm = calibPoint2.worldX - calibPoint1.worldX;
+      const dyMm = calibPoint2.worldY - calibPoint1.worldY;
+      const distWorldMm = Math.hypot(dxMm, dyMm);
+
+      const pixelsPerMeter = distPx / realMeters;
+
+      onCalibrateScale?.({
+        pixelsPerMeter,
+        realMeters,
+        distPx,
+        distWorldMm,
+      });
+
+      setCalibPoint1(null);
+      setCalibPoint2(null);
+      setCalibHoverPoint(null);
+      setIsCalibModalOpen(false);
+      onCloseCalibration?.();
+    },
+    [calibPoint1, calibPoint2, onCalibrateScale, onCloseCalibration]
+  );
+
+  const handleCloseCalib = useCallback(() => {
+    setCalibPoint1(null);
+    setCalibPoint2(null);
+    setCalibHoverPoint(null);
+    setIsCalibModalOpen(false);
+    onCloseCalibration?.();
+  }, [onCloseCalibration]);
+
+  // État de l'Outil Règle Permanente
+  const [rulerPointA, setRulerPointA] = useState<{ x: number; y: number } | null>(null);
+  const [rulerPointB, setRulerPointB] = useState<{ x: number; y: number } | null>(null);
+  const [rulerMousePos, setRulerMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [rulerIsCompleted, setRulerIsCompleted] = useState(false);
+
+  useEffect(() => {
+    if (!isRulerActive) {
+      setRulerPointA(null);
+      setRulerPointB(null);
+      setRulerMousePos(null);
+      setRulerIsCompleted(false);
+    }
+  }, [isRulerActive]);
+
+  const handleRulerPointSelect = useCallback(
+    (pt: { x: number; y: number }) => {
+      if (!rulerPointA) {
+        setRulerPointA(pt);
+      } else if (!rulerIsCompleted) {
+        setRulerPointB(pt);
+        setRulerIsCompleted(true);
+      }
+    },
+    [rulerPointA, rulerIsCompleted]
+  );
+
+  const handleRulerHoverMove = useCallback((pt: { x: number; y: number }) => {
+    setRulerMousePos(pt);
+  }, []);
+
+  const handleResetRuler = useCallback(() => {
+    setRulerPointA(null);
+    setRulerPointB(null);
+    setRulerMousePos(null);
+    setRulerIsCompleted(false);
+  }, []);
+
+  const effectiveRulerEnd = rulerIsCompleted ? rulerPointB : rulerMousePos ?? rulerPointB;
+  let rulerDistanceMm = 0;
+  let rulerAngleDeg = 0;
+  if (rulerPointA && effectiveRulerEnd) {
+    rulerDistanceMm = Math.hypot(effectiveRulerEnd.x - rulerPointA.x, effectiveRulerEnd.y - rulerPointA.y);
+    const rad = Math.atan2(effectiveRulerEnd.y - rulerPointA.y, effectiveRulerEnd.x - rulerPointA.x);
+    rulerAngleDeg = Math.round((rad * 180) / Math.PI);
+  }
+  const rulerDistanceM = (rulerDistanceMm / 1000).toFixed(2);
+
+  // Marquee selection handlers
+  const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+    if (isCalibratingScale || isRulerActive) return;
+    const stage = e.target.getStage();
+    if (!stage) return;
+
+    if (e.evt.shiftKey) {
+      stage.draggable(false);
+      isSelectingRef.current = true;
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      const worldX = (pointer.x - viewport.panX) / viewport.scale;
+      const worldY = (pointer.y - viewport.panY) / viewport.scale;
+      setSelectionBox({
+        startX: worldX,
+        startY: worldY,
+        currentX: worldX,
+        currentY: worldY,
+      });
+    }
+  };
+
+  const handleStageMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+    if (!isSelectingRef.current) return;
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    const worldX = (pointer.x - viewport.panX) / viewport.scale;
+    const worldY = (pointer.y - viewport.panY) / viewport.scale;
+    setSelectionBox((prev) => (prev ? { ...prev, currentX: worldX, currentY: worldY } : null));
+  };
+
+  const handleStageMouseUp = (e: KonvaEventObject<MouseEvent>) => {
+    const stage = e.target.getStage();
+    if (stage) {
+      stage.draggable(true);
+    }
+    if (!isSelectingRef.current || !selectionBox) {
+      isSelectingRef.current = false;
+      return;
+    }
+    isSelectingRef.current = false;
+
+    const minX = Math.min(selectionBox.startX, selectionBox.currentX);
+    const maxX = Math.max(selectionBox.startX, selectionBox.currentX);
+    const minY = Math.min(selectionBox.startY, selectionBox.currentY);
+    const maxY = Math.max(selectionBox.startY, selectionBox.currentY);
+
+    setSelectionBox(null);
+
+    // Si la boîte de sélection fait au moins 15mm de côté
+    if (Math.abs(maxX - minX) > 15 || Math.abs(maxY - minY) > 15) {
+      lastMarqueeEndTimeRef.current = Date.now();
+
+      const getNodeAABB = (n: NodeDisplay) => {
+        if (n.type === "DESK") {
+          const w = n.widthMm ?? 1600;
+          const h = n.heightMm ?? 800;
+          const rotDeg = n.rotationDeg ?? 0;
+          if (rotDeg === 0) {
+            return { minX: n.xMm, maxX: n.xMm + w, minY: n.yMm, maxY: n.yMm + h };
+          }
+          const rad = (rotDeg * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          const corners = [
+            { x: 0, y: 0 },
+            { x: w, y: 0 },
+            { x: w, y: h },
+            { x: 0, y: h },
+          ];
+          let cMinX = Infinity, cMaxX = -Infinity, cMinY = Infinity, cMaxY = -Infinity;
+          for (const c of corners) {
+            const wx = n.xMm + c.x * cos - c.y * sin;
+            const wy = n.yMm + c.x * sin + c.y * cos;
+            if (wx < cMinX) cMinX = wx;
+            if (wx > cMaxX) cMaxX = wx;
+            if (wy < cMinY) cMinY = wy;
+            if (wy > cMaxY) cMaxY = wy;
+          }
+          return { minX: cMinX, maxX: cMaxX, minY: cMinY, maxY: cMaxY };
+        }
+
+        if (n.widthMm && n.heightMm && n.widthMm > 0 && n.heightMm > 0) {
+          return {
+            minX: n.xMm,
+            maxX: n.xMm + n.widthMm,
+            minY: n.yMm,
+            maxY: n.yMm + n.heightMm,
+          };
+        }
+
+        const radius = 250;
+        return {
+          minX: n.xMm - radius,
+          maxX: n.xMm + radius,
+          minY: n.yMm - radius,
+          maxY: n.yMm + radius,
+        };
+      };
+
+      const getRackAABB = (r: RackDisplay) => {
+        const rWidth = r.widthMm ?? 800;
+        const totalU = r.uHeight || 42;
+        const minDepthForU = 320 + totalU * 36;
+        const rDepth = Math.max(r.depthMm ?? 1000, minDepthForU);
+        return {
+          minX: r.xMm,
+          maxX: r.xMm + rWidth,
+          minY: r.yMm,
+          maxY: r.yMm + rDepth,
+        };
+      };
+
+      const enclosedNodeIds = nodes
+        .filter((n) => {
+          const box = getNodeAABB(n);
+          return minX <= box.maxX && maxX >= box.minX && minY <= box.maxY && maxY >= box.minY;
+        })
+        .map((n) => n.id);
+
+      const enclosedRackIds = racks
+        .filter((r) => {
+          const box = getRackAABB(r);
+          return minX <= box.maxX && maxX >= box.minX && minY <= box.maxY && maxY >= box.minY;
+        })
+        .map((r) => r.id);
+
+      const allEnclosedIds = [...enclosedNodeIds, ...enclosedRackIds];
+
+      if (allEnclosedIds.length > 0) {
+        onSelectNodeIds?.(allEnclosedIds);
+      } else {
+        onDeselectAll?.();
+      }
+    }
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -202,7 +506,12 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   }, [nodes, onSelectOutlet, onSelectNode]);
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-slate-950 cursor-grab active:cursor-grabbing">
+    <div
+      ref={containerRef}
+      className={`w-full h-full relative overflow-hidden bg-slate-950 ${
+        isCalibratingScale || isRulerActive ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
+      }`}
+    >
       <Stage
         width={dimensions.width}
         height={dimensions.height}
@@ -210,16 +519,21 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
         y={viewport.panY}
         scaleX={viewport.scale}
         scaleY={viewport.scale}
-        draggable={true} // Pan natif GPU Konva 60 FPS
+        draggable={!isCalibratingScale && !isRulerActive} // Pan natif GPU Konva 60 FPS (désactivé pendant la mesure/calibration)
         onDragEnd={handleStageDragEnd}
         onWheel={handleWheel}
+        onMouseDown={handleStageMouseDown}
+        onMouseMove={handleStageMouseMove}
+        onMouseUp={handleStageMouseUp}
         onClick={(e) => {
+          if (isMarqueeJustEnded()) return;
           // Si on clique directement sur le fond vide du Stage (ou sur la grille)
           if (e.target === e.target.getStage()) {
             onDeselectAll?.();
           }
         }}
         onTap={(e) => {
+          if (isMarqueeJustEnded()) return;
           if (e.target === e.target.getStage()) {
             onDeselectAll?.();
           }
@@ -233,6 +547,25 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             scale={viewport.scale}
           />
         </Layer>
+
+        {/* Calque 1.2 : Fond de Plan Architectural Multi-plans (Image PNG/JPG ou PDF matriciel) */}
+        {backgroundPlan && (backgroundPlan.imageUrl || (backgroundPlan.plans && backgroundPlan.plans.length > 0)) && (
+          <Layer>
+            <BackgroundPlanLayer
+              imageUrl={backgroundPlan.imageUrl}
+              plans={backgroundPlan.plans}
+              opacity={backgroundPlan.opacity ?? 0.7}
+              isLocked={backgroundPlan.isLocked ?? true}
+              xMm={backgroundPlan.xMm ?? 0}
+              yMm={backgroundPlan.yMm ?? 0}
+              scale={backgroundPlan.scale ?? 1.0}
+              widthMm={backgroundPlan.widthMm}
+              heightMm={backgroundPlan.heightMm}
+              visible={backgroundPlan.visible ?? true}
+              onPositionChange={onBackgroundPlanPositionChange}
+            />
+          </Layer>
+        )}
 
         {/* Calque 1.5 : Zones et Délimitations des Services RH / DSI / Pôles */}
         <Layer>
@@ -264,6 +597,9 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             nodes={nodes}
             selectedOutletId={selectedOutletId}
             selectedNodeId={selectedNodeId}
+            selectedNodeIds={selectedNodeIds}
+            onSelectNodeToggle={onSelectNodeToggle}
+            onGroupNodeMoveEnd={onGroupNodeMoveEnd}
             activeViewMode={activeViewMode}
             showAllLabels={showAllLabels}
             vlanStyles={vlanStyles}
@@ -273,9 +609,96 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             onNodeMoveEnd={handleNodeMoveEnd}
             onNodeDragMove={onNodeDragMove}
             onRackDragMove={onRackDragMove}
+            isMarqueeJustEnded={isMarqueeJustEnded}
           />
         </Layer>
+
+        {/* Calque 3.5 : Boîte de Sélection Rectangulaire (Marquee Shift+Drag) */}
+        {selectionBox && (
+          <Layer listening={false}>
+            <Rect
+              x={Math.min(selectionBox.startX, selectionBox.currentX)}
+              y={Math.min(selectionBox.startY, selectionBox.currentY)}
+              width={Math.abs(selectionBox.currentX - selectionBox.startX)}
+              height={Math.abs(selectionBox.currentY - selectionBox.startY)}
+              fill="rgba(56, 189, 248, 0.15)"
+              stroke="#38bdf8"
+              strokeWidth={2 / viewport.scale}
+              dash={[6 / viewport.scale, 4 / viewport.scale]}
+            />
+          </Layer>
+        )}
+
+        {/* Calque 4 : Outil d'Étalonnage Métrique à 2 Points (Shapes Konva pures) */}
+        {isCalibratingScale && (
+          <Layer>
+            <ScaleCalibrationLayer
+              floorWidthMm={floorWidthMm}
+              floorHeightMm={floorHeightMm}
+              point1={calibPoint1}
+              point2={calibPoint2}
+              hoverPoint={calibHoverPoint}
+              scale={viewport.scale}
+              isModalOpen={isCalibModalOpen}
+              onPointSelect={handleCalibPointSelect}
+              onHoverMove={handleCalibHoverMove}
+            />
+          </Layer>
+        )}
+
+        {/* Calque 5 : Outil Règle Permanente de Mesure Métrique (Shapes Konva pures) */}
+        {isRulerActive && (
+          <Layer>
+            <MeasurementRulerLayer
+              floorWidthMm={floorWidthMm}
+              floorHeightMm={floorHeightMm}
+              pointA={rulerPointA}
+              pointB={rulerPointB}
+              mousePos={rulerMousePos}
+              isCompleted={rulerIsCompleted}
+              scale={viewport.scale}
+              onPointSelect={handleRulerPointSelect}
+              onHoverMove={handleRulerHoverMove}
+            />
+          </Layer>
+        )}
       </Stage>
+
+      {/* Modale HTML5 d'Étalonnage Métrique (rendue dans le DOM en dehors de Stage Konva) */}
+      {isCalibratingScale && isCalibModalOpen && (
+        <ScaleCalibrationModal
+          isOpen={isCalibModalOpen}
+          distPx={calibDistPx}
+          onClose={handleCloseCalib}
+          onValidate={handleValidateCalib}
+        />
+      )}
+
+      {/* Barre d'Outils Flottante HTML5 de la Règle (rendue dans le DOM en dehors de Stage Konva) */}
+      {isRulerActive && (
+        <MeasurementRulerOverlay
+          distanceM={rulerDistanceM}
+          angleDeg={rulerAngleDeg}
+          isCompleted={rulerIsCompleted}
+          hasPointA={!!rulerPointA}
+          onReset={handleResetRuler}
+          onClose={() => onCloseRuler?.()}
+          onApplyScaleCalibration={
+            onCalibrateScale
+              ? (meters) => {
+                  const measuredPx = rulerDistanceMm * viewport.scale;
+                  onCalibrateScale({
+                    pixelsPerMeter: measuredPx / meters,
+                    realMeters: meters,
+                    distPx: measuredPx,
+                    distWorldMm: rulerDistanceMm,
+                  });
+                  onCloseRuler?.();
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 };
