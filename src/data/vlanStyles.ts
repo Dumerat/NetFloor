@@ -21,7 +21,10 @@ export const PRESET_VLAN_COLORS = [
   { name: "Blanc Pur (Gaine)", hex: "#f8fafc" },
 ];
 
-export const DEFAULT_VLAN_STYLES: Record<number, VlanStyle> = {
+export const DEFAULT_VLAN_STYLES: Record<number, VlanStyle> = {};
+
+/** Styles VLAN prédéfinis pour les données de démonstration uniquement */
+export const DEMO_VLAN_STYLES: Record<number, VlanStyle> = {
   20: {
     vlanId: 20,
     vlanName: "VLAN 20 (Data PC)",
