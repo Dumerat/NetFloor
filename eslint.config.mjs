@@ -11,7 +11,6 @@ export default tseslint.config(
       "dist/**",
       "coverage/**",
       "drizzle/**",
-      "lab/**",
       "next-env.d.ts",
     ],
   },

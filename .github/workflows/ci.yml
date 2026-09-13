@@ -28,11 +28,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Étape 2 : Configuration du gestionnaire de paquets pnpm (v9)
+      # Étape 2 : Configuration de pnpm (utilise packageManager de package.json)
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       # Étape 3 : Configuration Node.js 22 avec cache pnpm
       - name: Setup Node.js 22
