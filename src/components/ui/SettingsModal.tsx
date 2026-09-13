@@ -261,7 +261,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
         setSsoTestResult({ success: false, message: data.error || "Échec de la connexion SSO" });
       }
     } catch {
-      setSsoTestResult({ success: false, message: "Impossible de joindre le serveur d'authentification" });
+      setSsoTestResult({
+        success: false,
+        message: "Impossible de joindre le serveur d'authentification",
+      });
     } finally {
       setIsTestingSso(false);
     }

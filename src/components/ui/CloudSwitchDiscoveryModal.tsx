@@ -290,7 +290,9 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.devices)) {
         const discovered = data.devices
-          .filter((d: any) => d.type === "SWITCH" || d.deviceType === "SWITCH" || d.name?.includes("SW-"))
+          .filter(
+            (d: any) => d.type === "SWITCH" || d.deviceType === "SWITCH" || d.name?.includes("SW-")
+          )
           .map((d: any) => ({
             name: d.name || "SW-DETECTED-SNMP",
             model: d.model || "Commutateur SNMP MIB-II",
@@ -449,7 +451,8 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
                 </div>
                 {arubaSwitches.length === 0 ? (
                   <div className="text-center py-8 text-xs text-slate-500 bg-slate-900/30 rounded-xl border border-slate-800/60 px-4">
-                    Aucun commutateur Aruba Central synchronisé. Renseignez votre token API et cliquez sur "Actualiser".
+                    Aucun commutateur Aruba Central synchronisé. Renseignez votre token API et
+                    cliquez sur "Actualiser".
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -545,7 +548,8 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
                 </div>
                 {nebulaSwitches.length === 0 ? (
                   <div className="text-center py-8 text-xs text-slate-500 bg-slate-900/30 rounded-xl border border-slate-800/60 px-4">
-                    Aucun commutateur Nebula synchronisé. Renseignez vos identifiants d'organisation et cliquez sur "Actualiser".
+                    Aucun commutateur Nebula synchronisé. Renseignez vos identifiants d'organisation
+                    et cliquez sur "Actualiser".
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -655,7 +659,8 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
                 </div>
                 {snmpDiscoveredSwitches.length === 0 ? (
                   <div className="text-center py-8 text-xs text-slate-500 bg-slate-900/30 rounded-xl border border-slate-800/60 px-4">
-                    Aucun commutateur SNMP détecté. Lancez un scan sur une IP ou un sous-réseau joignable.
+                    Aucun commutateur SNMP détecté. Lancez un scan sur une IP ou un sous-réseau
+                    joignable.
                   </div>
                 ) : (
                   <div className="space-y-2">

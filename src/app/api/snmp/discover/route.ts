@@ -234,9 +234,7 @@ export async function POST(req: Request) {
       warning: liveDevices.filter((d) => d.status === "WARNING").length,
       offline: liveDevices.filter((d) => d.status === "OFFLINE").length,
       isLiveSnmp,
-      source: isLiveSnmp
-        ? "Agent SNMP Réel / Lab Docker (161/udp)"
-        : "Aucun agent SNMP détecté",
+      source: isLiveSnmp ? "Agent SNMP Réel / Lab Docker (161/udp)" : "Aucun agent SNMP détecté",
     };
 
     return NextResponse.json({

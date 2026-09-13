@@ -631,10 +631,10 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       return ENTERPRISE_DIRECTORY.find((u) => u.id === selectedNode.assignedUserId) ?? null;
     }
     if (selectedNode.assignedPerson) {
-      const match = selectedNode.assignedPerson
-        .replace(/\s*\(.*\)/, "")
-        .trim();
-      const found = ENTERPRISE_DIRECTORY.find((u) => u.fullName.toLowerCase().includes(match.toLowerCase()));
+      const match = selectedNode.assignedPerson.replace(/\s*\(.*\)/, "").trim();
+      const found = ENTERPRISE_DIRECTORY.find((u) =>
+        u.fullName.toLowerCase().includes(match.toLowerCase())
+      );
       if (found) return found;
       return {
         id: selectedNode.assignedUserId || "custom-user",

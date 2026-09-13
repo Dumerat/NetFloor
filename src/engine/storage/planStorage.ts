@@ -318,4 +318,3 @@ export async function clearAllSites(): Promise<void> {
     } catch {}
   }
 }
-
