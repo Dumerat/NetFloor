@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { saveTopologyPayload } from "../route";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,29 +25,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Appel direct au handler POST de /api/topology pour persister en base
-    const host = req.headers.get("host") || "localhost:3000";
-    const protocol = req.headers.get("x-forwarded-proto") || "http";
-    const topologyUrl = `${protocol}://${host}/api/topology`;
-
-    const saveRes = await fetch(topologyUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        floor: configData.floor,
-        racks: configData.racks,
-        nodes: configData.nodes,
-        zones: configData.zones,
-        sites: configData.site ? [configData.site] : configData.sites,
-        customPivots: configData.customPivots || {},
-      }),
+    // Persistance directe en BDD sans intermédiaire réseau
+    const saveResult = await saveTopologyPayload({
+      floor: configData.floor,
+      racks: configData.racks,
+      nodes: configData.nodes,
+      zones: configData.zones,
+      sites: configData.site ? [configData.site] : configData.sites,
+      customPivots: configData.customPivots || {},
     });
 
-    const result = await saveRes.json();
     return NextResponse.json({
       success: true,
       importedConfig: configData,
-      saveResult: result,
+      saveResult,
     });
   } catch (err: unknown) {
     console.error("Erreur lors de l import de topologie :", err);

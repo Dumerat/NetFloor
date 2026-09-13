@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/index";
+import { getDb } from "@/db/index";
 import { floors, racks, nodes, vlans } from "@/db/schema/index";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
@@ -14,7 +14,8 @@ export function toValidUuid(id: string): string {
 
 export async function GET() {
   try {
-    const allFloors = await db.select().from(floors);
+    const database = await getDb();
+    const allFloors = await database.select().from(floors);
 
     if (allFloors.length === 0) {
       return NextResponse.json({
@@ -42,9 +43,9 @@ export async function GET() {
     const floorId = activeFloor.id;
 
     const [allRacks, allNodes, allVlans] = await Promise.all([
-      db.select().from(racks).where(eq(racks.floorId, floorId)),
-      db.select().from(nodes).where(eq(nodes.floorId, floorId)),
-      db.select().from(vlans),
+      database.select().from(racks).where(eq(racks.floorId, floorId)),
+      database.select().from(nodes).where(eq(nodes.floorId, floorId)),
+      database.select().from(vlans),
     ]);
 
     const floorMeta = (activeFloor.metadata as Record<string, unknown>) || {};
@@ -141,32 +142,48 @@ export async function GET() {
   }
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const payload = await req.json();
-    const {
-      floor,
-      racks: incomingRacks,
-      nodes: incomingNodes,
-      zones,
-      sites,
-      customPivots,
-    } = payload;
+export async function saveTopologyPayload(payload: {
+  floor?: Record<string, unknown>;
+  racks?: Record<string, unknown>[];
+  nodes?: Record<string, unknown>[];
+  zones?: unknown[];
+  sites?: unknown[];
+  customPivots?: Record<string, unknown>;
+}) {
+  const { floor, racks: incomingRacks, nodes: incomingNodes, zones, sites, customPivots } = payload;
 
-    const floorId = toValidUuid(floor?.id || "default-floor-01");
-    const floorName = floor?.name || "Plateau Principal - RDC";
-    const building = floor?.building || "Campus Principal";
-    const floorNumber = floor?.floorNumber ?? 1;
-    const widthMm = Math.round(floor?.widthMm || 60000);
-    const heightMm = Math.round(floor?.heightMm || 35000);
-    const scaleRatio = floor?.scaleRatio ?? 1.0;
+  const floorId = toValidUuid((floor?.id as string) || "default-floor-01");
+  const floorName = (floor?.name as string) || "Plateau Principal - RDC";
+  const building = (floor?.building as string) || "Campus Principal";
+  const floorNumber = Number(floor?.floorNumber) || 1;
+  const widthMm = Math.round(Number(floor?.widthMm) || 60000);
+  const heightMm = Math.round(Number(floor?.heightMm) || 35000);
+  const scaleRatio = Number(floor?.scaleRatio) || 1.0;
 
-    await db.transaction(async (tx) => {
-      // 1. Upsert de l'étage
-      await tx
-        .insert(floors)
-        .values({
-          id: floorId,
+  const database = await getDb();
+  await database.transaction(async (tx) => {
+    // 1. Upsert de l'étage
+    await tx
+      .insert(floors)
+      .values({
+        id: floorId,
+        name: floorName,
+        building,
+        floorNumber,
+        widthMm,
+        heightMm,
+        scaleRatio,
+        metadata: {
+          originalId: (floor?.id as string) || "default-floor-01",
+          zones: zones || [],
+          sites: sites || [],
+          customPivots: customPivots || {},
+        },
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: floors.id,
+        set: {
           name: floorName,
           building,
           floorNumber,
@@ -174,132 +191,122 @@ export async function POST(req: NextRequest) {
           heightMm,
           scaleRatio,
           metadata: {
-            originalId: floor?.id || "default-floor-01",
+            originalId: (floor?.id as string) || "default-floor-01",
             zones: zones || [],
             sites: sites || [],
             customPivots: customPivots || {},
           },
           updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: floors.id,
-          set: {
-            name: floorName,
-            building,
-            floorNumber,
-            widthMm,
-            heightMm,
-            scaleRatio,
-            metadata: {
-              originalId: floor?.id || "default-floor-01",
-              zones: zones || [],
-              sites: sites || [],
-              customPivots: customPivots || {},
-            },
-            updatedAt: new Date(),
-          },
-        });
+        },
+      });
 
-      // 2. Synchronisation atomique des baies
-      await tx.delete(racks).where(eq(racks.floorId, floorId));
-      if (Array.isArray(incomingRacks) && incomingRacks.length > 0) {
-        const rackRows = incomingRacks.map((r: Record<string, unknown>) => ({
-          id: toValidUuid(String(r.id || crypto.randomUUID())),
+    // 2. Synchronisation atomique des baies
+    await tx.delete(racks).where(eq(racks.floorId, floorId));
+    if (Array.isArray(incomingRacks) && incomingRacks.length > 0) {
+      const rackRows = incomingRacks.map((r: Record<string, unknown>) => ({
+        id: toValidUuid(String(r.id || crypto.randomUUID())),
+        floorId,
+        name: String(r.name || "BAIE"),
+        uHeight: Number(r.uHeight) || 42,
+        xMm: Math.round(Number(r.xMm) || 0),
+        yMm: Math.round(Number(r.yMm) || 0),
+        widthMm: Math.round(Number(r.widthMm) || 800),
+        depthMm: Math.round(Number(r.depthMm) || 800),
+        rotationDeg: Number(r.rotationDeg) || 0,
+        metadata: {
+          originalId: r.id,
+          devices: r.devices || [],
+          siteId: r.siteId,
+        },
+      }));
+
+      for (let i = 0; i < rackRows.length; i += 50) {
+        await tx.insert(racks).values(rackRows.slice(i, i + 50));
+      }
+    }
+
+    // 3. Synchronisation atomique des nœuds
+    await tx.delete(nodes).where(eq(nodes.floorId, floorId));
+    if (Array.isArray(incomingNodes) && incomingNodes.length > 0) {
+      const nodeRows = incomingNodes.map((n: Record<string, unknown>) => {
+        const rawType = String(n.type || "WALL_OUTLET");
+        const validType =
+          rawType === "DESK" ||
+          rawType === "WALL_OUTLET" ||
+          rawType === "PATCH_PANEL" ||
+          rawType === "SWITCH" ||
+          rawType === "ACCESS_POINT" ||
+          rawType === "SERVER"
+            ? (rawType as
+                "DESK" | "WALL_OUTLET" | "PATCH_PANEL" | "SWITCH" | "ACCESS_POINT" | "SERVER")
+            : "WALL_OUTLET";
+
+        return {
+          id: toValidUuid(String(n.id || crypto.randomUUID())),
           floorId,
-          name: String(r.name || "BAIE"),
-          uHeight: Number(r.uHeight) || 42,
-          xMm: Math.round(Number(r.xMm) || 0),
-          yMm: Math.round(Number(r.yMm) || 0),
-          widthMm: Math.round(Number(r.widthMm) || 800),
-          depthMm: Math.round(Number(r.depthMm) || 800),
-          rotationDeg: Number(r.rotationDeg) || 0,
+          rackId: n.rackId ? toValidUuid(String(n.rackId)) : null,
+          rackUPosition: n.rackUPosition ? Number(n.rackUPosition) : null,
+          type: validType,
+          name: String(n.name || "Équipement"),
+          model: n.model ? String(n.model) : null,
+          xMm: Math.round(Number(n.xMm) || 0),
+          yMm: Math.round(Number(n.yMm) || 0),
+          rotationDeg: Number(n.rotationDeg) || 0,
           metadata: {
-            originalId: r.id,
-            devices: r.devices || [],
-            siteId: r.siteId,
+            originalId: n.id,
+            subType: n.subType,
+            outletRole: n.outletRole,
+            assignedPerson: n.assignedPerson,
+            assignedUserId: n.assignedUserId,
+            department: n.department,
+            description: n.description,
+            chairPosition: n.chairPosition,
+            seats: n.seats,
+            attachedSeatIndex: n.attachedSeatIndex,
+            attachedToDeskId: n.attachedToDeskId,
+            ipAddress: n.ipAddress,
+            macAddress: n.macAddress,
+            pingStatus: n.pingStatus,
+            pingLatencyMs: n.pingLatencyMs,
+            stackedPorts: n.stackedPorts,
+            vlanId: n.vlanId,
+            poeMode: n.poeMode,
+            customEmote: n.customEmote,
+            portCount: n.portCount,
+            labelPosition: n.labelPosition,
+            isPatched: n.isPatched,
+            connectedRackId: n.connectedRackId,
+            connectedSwitchId: n.connectedSwitchId,
+            connectedSwitchPort: n.connectedSwitchPort,
+            devices: n.devices,
+            uHeight: n.uHeight,
+            siteId: n.siteId,
           },
-        }));
+        };
+      });
 
-        for (let i = 0; i < rackRows.length; i += 50) {
-          await tx.insert(racks).values(rackRows.slice(i, i + 50));
-        }
+      for (let i = 0; i < nodeRows.length; i += 50) {
+        await tx.insert(nodes).values(nodeRows.slice(i, i + 50));
       }
+    }
+  });
 
-      // 3. Synchronisation atomique des nœuds
-      await tx.delete(nodes).where(eq(nodes.floorId, floorId));
-      if (Array.isArray(incomingNodes) && incomingNodes.length > 0) {
-        const nodeRows = incomingNodes.map((n: Record<string, unknown>) => {
-          const rawType = String(n.type || "WALL_OUTLET");
-          const validType =
-            rawType === "DESK" ||
-            rawType === "WALL_OUTLET" ||
-            rawType === "PATCH_PANEL" ||
-            rawType === "SWITCH" ||
-            rawType === "ACCESS_POINT" ||
-            rawType === "SERVER"
-              ? (rawType as
-                  "DESK" | "WALL_OUTLET" | "PATCH_PANEL" | "SWITCH" | "ACCESS_POINT" | "SERVER")
-              : "WALL_OUTLET";
+  return {
+    success: true,
+    savedAt: new Date().toISOString(),
+    counts: {
+      racks: incomingRacks?.length || 0,
+      nodes: incomingNodes?.length || 0,
+      zones: zones?.length || 0,
+    },
+  };
+}
 
-          return {
-            id: toValidUuid(String(n.id || crypto.randomUUID())),
-            floorId,
-            rackId: n.rackId ? toValidUuid(String(n.rackId)) : null,
-            rackUPosition: n.rackUPosition ? Number(n.rackUPosition) : null,
-            type: validType,
-            name: String(n.name || "Équipement"),
-            model: n.model ? String(n.model) : null,
-            xMm: Math.round(Number(n.xMm) || 0),
-            yMm: Math.round(Number(n.yMm) || 0),
-            rotationDeg: Number(n.rotationDeg) || 0,
-            metadata: {
-              originalId: n.id,
-              subType: n.subType,
-              outletRole: n.outletRole,
-              assignedPerson: n.assignedPerson,
-              assignedUserId: n.assignedUserId,
-              department: n.department,
-              description: n.description,
-              chairPosition: n.chairPosition,
-              seats: n.seats,
-              attachedSeatIndex: n.attachedSeatIndex,
-              attachedToDeskId: n.attachedToDeskId,
-              ipAddress: n.ipAddress,
-              macAddress: n.macAddress,
-              pingStatus: n.pingStatus,
-              pingLatencyMs: n.pingLatencyMs,
-              stackedPorts: n.stackedPorts,
-              vlanId: n.vlanId,
-              poeMode: n.poeMode,
-              customEmote: n.customEmote,
-              portCount: n.portCount,
-              labelPosition: n.labelPosition,
-              isPatched: n.isPatched,
-              connectedRackId: n.connectedRackId,
-              connectedSwitchId: n.connectedSwitchId,
-              connectedSwitchPort: n.connectedSwitchPort,
-              devices: n.devices,
-              uHeight: n.uHeight,
-              siteId: n.siteId,
-            },
-          };
-        });
-
-        for (let i = 0; i < nodeRows.length; i += 50) {
-          await tx.insert(nodes).values(nodeRows.slice(i, i + 50));
-        }
-      }
-    });
-
-    return NextResponse.json({
-      success: true,
-      savedAt: new Date().toISOString(),
-      counts: {
-        racks: incomingRacks?.length || 0,
-        nodes: incomingNodes?.length || 0,
-        zones: zones?.length || 0,
-      },
-    });
+export async function POST(req: NextRequest) {
+  try {
+    const payload = await req.json();
+    const result = await saveTopologyPayload(payload);
+    return NextResponse.json(result);
   } catch (err: unknown) {
     console.error("Erreur lors de la sauvegarde en BDD :", err);
     const message = err instanceof Error ? err.message : "Erreur inconnue de persistance";
@@ -309,10 +316,11 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE() {
   try {
-    const allFloors = await db.select().from(floors);
+    const database = await getDb();
+    const allFloors = await database.select().from(floors);
     if (allFloors.length > 0) {
       const floorId = allFloors[0]!.id;
-      await db.transaction(async (tx) => {
+      await database.transaction(async (tx) => {
         await tx.delete(nodes).where(eq(nodes.floorId, floorId));
         await tx.delete(racks).where(eq(racks.floorId, floorId));
         await tx

@@ -79,33 +79,44 @@
       "widthMm": 800,
       "depthMm": 1000,
       "uHeight": 42,
+      "siteId": "site-principal",
       "devices": [
         {
-          "uPosition": 42,
-          "type": "PDU",
+          "id": "dev-r01-pdu",
+          "slotU": 42,
+          "uSize": 1,
+          "deviceType": "PDU",
           "brand": "APC",
           "model": "AP7921B",
-          "portCount": 8,
-          "name": "PDU-A"
+          "portsCount": 8,
+          "name": "PDU-A",
+          "status": "ONLINE"
         },
         {
-          "uPosition": 24,
-          "type": "PATCH_PANEL",
+          "id": "dev-r01-pp01",
+          "slotU": 24,
+          "uSize": 1,
+          "deviceType": "PATCH_PANEL",
           "brand": "LEGRAND",
           "model": "LCS3 24P Cat6A",
-          "portCount": 24,
-          "name": "PP-R01-01"
+          "portsCount": 24,
+          "name": "PP-R01-01",
+          "status": "ONLINE"
         },
         {
-          "uPosition": 22,
-          "type": "SWITCH",
+          "id": "dev-r01-sw01",
+          "slotU": 22,
+          "uSize": 1,
+          "deviceType": "SWITCH",
           "brand": "CISCO",
           "model": "Catalyst C9300-48P",
-          "portCount": 48,
-          "name": "SW-R01-01"
+          "portsCount": 48,
+          "name": "SW-R01-01",
+          "status": "ONLINE",
+          "ipAddress": "10.42.0.10",
+          "macAddress": "00:0A:41:88:99:A1"
         }
-      ],
-      "siteId": "site-principal"
+      ]
     },
     {
       "id": "rack-02",
@@ -115,33 +126,44 @@
       "widthMm": 800,
       "depthMm": 800,
       "uHeight": 18,
+      "siteId": "site-principal",
       "devices": [
         {
-          "uPosition": 42,
-          "type": "PDU",
+          "id": "dev-r02-pdu",
+          "slotU": 18,
+          "uSize": 1,
+          "deviceType": "PDU",
           "brand": "APC",
           "model": "AP7921B",
-          "portCount": 8,
-          "name": "PDU-A"
+          "portsCount": 8,
+          "name": "PDU-B",
+          "status": "ONLINE"
         },
         {
-          "uPosition": 24,
-          "type": "PATCH_PANEL",
+          "id": "dev-r02-pp01",
+          "slotU": 14,
+          "uSize": 1,
+          "deviceType": "PATCH_PANEL",
           "brand": "LEGRAND",
           "model": "LCS3 24P Cat6A",
-          "portCount": 24,
-          "name": "BAIE-EST-PP01"
+          "portsCount": 24,
+          "name": "BAIE-EST-PP01",
+          "status": "ONLINE"
         },
         {
-          "uPosition": 22,
-          "type": "SWITCH",
+          "id": "dev-r02-sw01",
+          "slotU": 12,
+          "uSize": 1,
+          "deviceType": "SWITCH",
           "brand": "CISCO",
           "model": "Catalyst C9300-48P",
-          "portCount": 48,
-          "name": "BAIE-EST-SW01"
+          "portsCount": 48,
+          "name": "BAIE-EST-SW01",
+          "status": "ONLINE",
+          "ipAddress": "10.42.0.12",
+          "macAddress": "00:0A:41:88:99:B2"
         }
-      ],
-      "siteId": "site-principal"
+      ]
     },
     {
       "id": "rack-03",
@@ -151,77 +173,47 @@
       "widthMm": 800,
       "depthMm": 800,
       "uHeight": 24,
+      "siteId": "site-principal",
       "devices": [
         {
-          "uPosition": 42,
-          "type": "PDU",
+          "id": "dev-r03-pdu",
+          "slotU": 24,
+          "uSize": 1,
+          "deviceType": "PDU",
           "brand": "APC",
           "model": "AP7921B",
-          "portCount": 8,
-          "name": "PDU-A"
+          "portsCount": 8,
+          "name": "PDU-C",
+          "status": "ONLINE"
         },
         {
-          "uPosition": 24,
-          "type": "PATCH_PANEL",
+          "id": "dev-r03-pp01",
+          "slotU": 14,
+          "uSize": 1,
+          "deviceType": "PATCH_PANEL",
           "brand": "LEGRAND",
           "model": "LCS3 24P Cat6A",
-          "portCount": 24,
-          "name": "BAIE-RND-PP01"
+          "portsCount": 24,
+          "name": "BAIE-RND-PP01",
+          "status": "ONLINE"
         },
         {
-          "uPosition": 22,
-          "type": "SWITCH",
+          "id": "dev-r03-sw01",
+          "slotU": 12,
+          "uSize": 1,
+          "deviceType": "SWITCH",
           "brand": "CISCO",
           "model": "Catalyst C9300-48P",
-          "portCount": 48,
-          "name": "BAIE-RND-SW01"
+          "portsCount": 48,
+          "name": "BAIE-RND-SW01",
+          "status": "ONLINE",
+          "ipAddress": "10.42.0.13",
+          "macAddress": "00:0A:41:88:99:C3"
         }
-      ],
-      "siteId": "site-principal"
+      ]
     }
   ],
   "nodes": [
-    {
-      "id": "rack-01",
-      "type": "PATCH_PANEL",
-      "name": "BAIE-PRINCIPALE-RDC",
-      "xMm": 12000,
-      "yMm": 14000,
-      "widthMm": 800,
-      "heightMm": 1000,
-      "subType": "RACK_42U",
-      "description": "Baie principale de brassage & serveurs 42U avec commutateur Cisco Catalyst 9300 et bandeau Cat6A.",
-      "ipAddress": "10.42.0.10",
-      "macAddress": "00:0A:41:88:99:A1",
-      "pingStatus": "ONLINE",
-      "pingLatencyMs": 1,
-      "devices": [
-        {
-          "uPosition": 42,
-          "type": "PDU",
-          "brand": "APC",
-          "model": "AP7921B",
-          "portCount": 8,
-          "name": "PDU-A"
-        },
-        {
-          "uPosition": 24,
-          "type": "PATCH_PANEL",
-          "brand": "LEGRAND",
-          "model": "LCS3 24P Cat6A",
-          "portCount": 24,
-          "name": "PP-R01-01"
-        },
-        {
-          "uPosition": 22,
-          "type": "SWITCH",
-          "brand": "CISCO",
-          "model": "Catalyst C9300-48P",
-          "portCount": 48,
-          "name": "SW-R01-01"
-        }
-      ]
-    },
     {
       "id": "bench-402",
       "type": "DESK",
@@ -496,47 +488,6 @@
       "connectedSwitchPort": "Gi1/0/24"
     },
     {
-      "id": "rack-02",
-      "type": "PATCH_PANEL",
-      "name": "BAIE-SECONDAIRE-EST",
-      "xMm": 45000,
-      "yMm": 13000,
-      "widthMm": 800,
-      "heightMm": 800,
-      "subType": "RACK_18U",
-      "description": "Baie murale de répartition intermédiaire 18U pour le pôle Direction et RH Est.",
-      "ipAddress": "10.42.0.12",
-      "macAddress": "00:0A:41:88:99:B2",
-      "pingStatus": "ONLINE",
-      "pingLatencyMs": 2,
-      "devices": [
-        {
-          "uPosition": 42,
-          "type": "PDU",
-          "brand": "APC",
-          "model": "AP7921B",
-          "portCount": 8,
-          "name": "PDU-A"
-        },
-        {
-          "uPosition": 24,
-          "type": "PATCH_PANEL",
-          "brand": "LEGRAND",
-          "model": "LCS3 24P Cat6A",
-          "portCount": 24,
-          "name": "BAIE-EST-PP01"
-        },
-        {
-          "uPosition": 22,
-          "type": "SWITCH",
-          "brand": "CISCO",
-          "model": "Catalyst C9300-48P",
-          "portCount": 48,
-          "name": "BAIE-EST-SW01"
-        }
-      ]
-    },
-    {
       "id": "desk-501",
       "type": "DESK",
       "name": "Bureau 501",
@@ -733,47 +684,6 @@
       "isPatched": true,
       "connectedRackId": "rack-01",
       "connectedSwitchPort": "Gi1/0/18"
-    },
-    {
-      "id": "rack-03",
-      "type": "PATCH_PANEL",
-      "name": "BAIE-OUEST-R&D",
-      "xMm": 21500,
-      "yMm": 10800,
-      "widthMm": 800,
-      "heightMm": 800,
-      "subType": "RACK_18U",
-      "description": "Baie de sous-répartition 24U dédiée au banc d'essais et aux développeurs du Tech Lab.",
-      "ipAddress": "10.42.0.13",
-      "macAddress": "00:0A:41:88:99:C3",
-      "pingStatus": "ONLINE",
-      "pingLatencyMs": 1,
-      "devices": [
-        {
-          "uPosition": 42,
-          "type": "PDU",
-          "brand": "APC",
-          "model": "AP7921B",
-          "portCount": 8,
-          "name": "PDU-A"
-        },
-        {
-          "uPosition": 24,
-          "type": "PATCH_PANEL",
-          "brand": "LEGRAND",
-          "model": "LCS3 24P Cat6A",
-          "portCount": 24,
-          "name": "BAIE-RND-PP01"
-        },
-        {
-          "uPosition": 22,
-          "type": "SWITCH",
-          "brand": "CISCO",
-          "model": "Catalyst C9300-48P",
-          "portCount": 48,
-          "name": "BAIE-RND-SW01"
-        }
-      ]
     },
     {
       "id": "bench-403",

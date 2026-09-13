@@ -762,18 +762,25 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 return (
                   <Group>
                     {uMarks}
-                    {devList.map((dev) => {
-                      const uSize = dev.uSize ?? 1;
-                      // slotU est de 1 (bas) à totalU (haut)
-                      // Position Y inverse : slotU élevé = en haut
-                      const devY = usableTop + (totalU - dev.slotU) * uStep;
+                    {devList.map((dev: any, devIndex: number) => {
+                      const uSize = Number(dev.uSize) || 1;
+                      // Support à la fois slotU et uPosition, borné de manière sécurisée entre 1 et totalU
+                      const rawSlot = dev.slotU ?? dev.uPosition ?? totalU - devIndex;
+                      const safeSlot = Math.min(totalU, Math.max(1, Number(rawSlot) || 1));
+                      const rawDevY = usableTop + (totalU - safeSlot) * uStep;
+                      const devY = Number.isFinite(rawDevY) ? rawDevY : usableTop;
                       const devH = Math.max(32, uStep * uSize - 4);
 
-                      const isSw = dev.deviceType === "SWITCH";
-                      const isPp = dev.deviceType === "PATCH_PANEL";
-                      const isFw = dev.deviceType === "FIREWALL";
-                      const isSrv = dev.deviceType === "SERVER";
-                      const isPdu = dev.deviceType === "PDU";
+                      const rawType = String(dev.deviceType || dev.type || "").toUpperCase();
+                      const isSw = rawType === "SWITCH";
+                      const isPp = rawType === "PATCH_PANEL";
+                      const isFw = rawType === "FIREWALL";
+                      const isSrv = rawType === "SERVER";
+                      const isPdu = rawType === "PDU";
+
+                      const devId = String(dev.id || `dev-${rack.id}-${devIndex}`);
+                      const devName = String(dev.name || `${rawType || "Équipement"} U${safeSlot}`);
+                      const portsCount = Number(dev.portsCount ?? dev.portCount) || 0;
 
                       const devFill = isSw
                         ? "#172554"
@@ -812,7 +819,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                                 : "DEV";
 
                       return (
-                        <Group key={dev.id}>
+                        <Group key={devId}>
                           <Rect
                             x={95}
                             y={devY}
@@ -840,7 +847,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                             x={107}
                             y={devY + Math.max(8, (devH - 20) / 2)}
                             width={71}
-                            text={`U${dev.slotU} ${typeBadge}`}
+                            text={`U${safeSlot} ${typeBadge}`}
                             fontSize={Math.min(18, Math.max(13, devH * 0.35))}
                             fontFamily="monospace"
                             fontStyle="bold"
@@ -853,7 +860,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                             x={190}
                             y={devY + Math.max(6, (devH - 26) / 2)}
                             width={rWidth - 300}
-                            text={dev.name}
+                            text={devName}
                             fontSize={Math.min(32, Math.max(18, devH * 0.42))}
                             fontFamily="monospace"
                             fontStyle="bold"
@@ -863,13 +870,13 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                             listening={false}
                           />
                           {/* Représentation des ports RJ45 / LEDs */}
-                          {dev.portsCount && devH >= 54 && (
+                          {portsCount > 0 && devH >= 54 && (
                             <Group y={devY + devH - 24}>
                               {Array.from({
-                                length: Math.min(12, Math.ceil(dev.portsCount / 2)),
+                                length: Math.min(12, Math.ceil(portsCount / 2)),
                               }).map((_, pIdx) => (
                                 <Rect
-                                  key={`dev-port-${dev.id}-${pIdx}`}
+                                  key={`dev-port-${devId}-${pIdx}`}
                                   x={190 + pIdx * ((rWidth - 320) / 12)}
                                   y={0}
                                   width={18}

@@ -63,6 +63,8 @@ import {
   Ruler,
   Image as ImageIcon,
   Building2,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { screenToWorld } from "@/engine/spatial/matrix";
 import {
@@ -327,7 +329,7 @@ export default function NetFloorApp() {
     imageUrl: null,
     name: "",
     opacity: 0.6,
-    isLocked: true,
+    isLocked: false,
     xMm: 0,
     yMm: 0,
     scale: 1.0,
@@ -1930,8 +1932,13 @@ export default function NetFloorApp() {
           if (cfg.racks) setRacks(cfg.racks);
           if (cfg.nodes) setNodes(cfg.nodes);
           if (cfg.zones) setZones(cfg.zones);
-          if (cfg.site) setSites([cfg.site]);
-          else if (cfg.sites) setSites(cfg.sites);
+          if (cfg.site) {
+            setSites([cfg.site]);
+            setActiveSiteId(cfg.site.id);
+          } else if (cfg.sites && cfg.sites.length > 0) {
+            setSites(cfg.sites);
+            setActiveSiteId(cfg.sites[0].id);
+          }
           if (cfg.floor) {
             setFloorData({
               widthMm: cfg.floor.widthMm || 60000,
@@ -1975,6 +1982,27 @@ export default function NetFloorApp() {
       setCustomPivots({});
       setSelectedNodeId(null);
       setSelectedNodeIds([]);
+      setSites([DEFAULT_SITE]);
+      setActiveSiteId(DEFAULT_SITE_ID);
+      setFloorData({ widthMm: 60000, heightMm: 35000 });
+      setUnpositionedNodes([]);
+
+      // Nettoyer tous les plans de fond stockés dans IndexedDB et réinitialiser l'état
+      for (const p of allBackgroundPlans) {
+        await deleteBackgroundPlan(p.id).catch(() => {});
+      }
+      setAllBackgroundPlans([]);
+      setBackgroundPlan({
+        imageUrl: null,
+        name: "",
+        opacity: 0.6,
+        isLocked: false,
+        xMm: 0,
+        yMm: 0,
+        scale: 1.0,
+        visible: true,
+      });
+
       setDbSyncStatus("SAVED");
       setLastSavedAt(
         new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
@@ -2026,8 +2054,13 @@ export default function NetFloorApp() {
         if (cfg.racks) setRacks(cfg.racks);
         if (cfg.nodes) setNodes(cfg.nodes);
         if (cfg.zones) setZones(cfg.zones);
-        if (cfg.site) setSites([cfg.site]);
-        else if (cfg.sites) setSites(cfg.sites);
+        if (cfg.site) {
+          setSites([cfg.site]);
+          setActiveSiteId(cfg.site.id);
+        } else if (cfg.sites && cfg.sites.length > 0) {
+          setSites(cfg.sites);
+          setActiveSiteId(cfg.sites[0].id);
+        }
         if (cfg.floor) {
           setFloorData({
             widthMm: cfg.floor.widthMm || 60000,
@@ -2207,6 +2240,39 @@ export default function NetFloorApp() {
             <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
             <span>Gestion des Plans</span>
           </button>
+
+          {/* Bouton de verrouillage / déverrouillage du fond de plan actif */}
+          {(backgroundPlan.imageUrl || allBackgroundPlans.length > 0) && (
+            <button
+              type="button"
+              onClick={() => {
+                const nextLocked = !backgroundPlan.isLocked;
+                handleUpdateBackgroundPlan({ isLocked: nextLocked });
+              }}
+              title={
+                backgroundPlan.isLocked
+                  ? "Fond de plan verrouillé (cliquez pour déverrouiller et déplacer le plan)"
+                  : "Fond de plan mobile (cliquez pour verrouiller sa position)"
+              }
+              className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-sans shadow-sm cursor-pointer ${
+                backgroundPlan.isLocked
+                  ? "bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border-slate-700/60"
+                  : "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
+              }`}
+            >
+              {backgroundPlan.isLocked ? (
+                <>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Plan Verrouillé</span>
+                </>
+              ) : (
+                <>
+                  <Unlock className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden md:inline font-semibold">Plan Mobile</span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* Bouton Outil Règle Permanente & Étalonnage Fusionnés */}
           <button
