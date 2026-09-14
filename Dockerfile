@@ -10,7 +10,7 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS builder
 COPY . .
-RUN pnpm build:next
+RUN pnpm build
 
 FROM deps AS migrator
 COPY . .

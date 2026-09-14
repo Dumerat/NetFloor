@@ -6,8 +6,8 @@
   "packageManager": "pnpm@9.15.5",
   "scripts": {
     "dev": "next dev",
-    "build": "tsc --noEmit",
-    "build:next": "next build",
+    "start": "next start",
+    "build": "next build",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
@@ -15,6 +15,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "check": "prettier --check \"src/**/*.{ts,tsx}\" && eslint src/ && tsc --noEmit && vitest run --coverage",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",

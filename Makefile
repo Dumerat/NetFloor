@@ -1,152 +1,118 @@
-# ==============================================================================
-# NetFloor Architect - Makefile d'automatisation
-# ==============================================================================
+# NetFloor Architect — raccourcis vers le point d'entrée unique ./run.sh
 
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
-# Résolution automatique du gestionnaire pnpm (PATH ou ~/.local/share/pnpm/bin)
-PNPM_BIN := $(shell which pnpm 2>/dev/null || echo "$$HOME/.local/share/pnpm/bin/pnpm")
-PNPM := export PATH="$$HOME/.local/share/pnpm/bin:$$PATH" && $(PNPM_BIN)
-
-# Options configurables
 PORT ?= 3000
 HOST ?= 0.0.0.0
+RUN := ./run.sh
 
-# Couleurs pour le terminal
-CYAN    := \033[1;36m
-GREEN   := \033[1;32m
-YELLOW  := \033[1;33m
-RED     := \033[1;31m
-RESET   := \033[0m
+.PHONY: help install dev start build lint lint-fix format format-check type-check \
+	test test-coverage test-spatial test-ingestion test-pglite test-all ci clean \
+	db-up db-down db-reset db-generate db-push db-migrate db-seed \
+	docker-up docker-down docker-status docker-logs docker-restart \
+	prod-up prod-down prod-status prod-logs prod-restart
 
-.PHONY: help install dev build build-next start lint lint-fix format format-check \
-        type-check test test-coverage test-spatial test-ingestion test-pglite test-all \
-        db-generate db-push db-migrate db-seed clean
+help: ## Affiche l'aide de l'interface de gestion unifiée
+	@$(RUN) --help
 
-##@ 📖 Aide & Informations
-help: ## Affiche l'aide détaillée et les commandes disponibles
-	@echo -e "$(CYAN)====================================================================$(RESET)"
-	@echo -e "$(CYAN)  🏢 NetFloor Architect - Makefile de développement & CI$(RESET)"
-	@echo -e "$(CYAN)====================================================================$(RESET)"
-	@echo -e "Utilisation : $(GREEN)make$(RESET) $(YELLOW)<cible>$(RESET) [PORT=3000] [HOST=0.0.0.0]\n"
-	@awk 'BEGIN {FS = ":.*##"; printf "Commandes disponibles :\n"} \
-		/^[a-zA-Z_-]+:.*?##/ { printf "  $(GREEN)%-18s$(RESET) %s\n", $$1, $$2 } \
-		/^##@/ { printf "\n$(YELLOW)%s$(RESET)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-	@echo ""
+install: ## Installe les dépendances verrouillées
+	@pnpm install
 
-##@ 📦 Installation & Dépendances
-install: ## Installe les dépendances avec pnpm
-	@echo -e "$(CYAN)📦 Installation des dépendances avec pnpm...$(RESET)"
-	@$(PNPM) install
+dev: ## Démarre Next.js et PostgreSQL de développement
+	@$(RUN) dev --port $(PORT) --host $(HOST)
 
-##@ 🚀 Développement & Exécution
-dev: db-up ## Démarre le conteneur PostgreSQL et le serveur Next.js en mode DEV
-	@echo -e "$(CYAN)🚀 Démarrage du serveur Next.js en mode DEV sur http://$(HOST):$(PORT)...$(RESET)"
-	@$(PNPM) dev -p $(PORT) -H $(HOST)
+start: ## Démarre Next.js compilé hors Docker avec PostgreSQL de développement
+	@$(RUN) start --port $(PORT) --host $(HOST)
 
-build: ## Type-checking strict TypeScript
-	@echo -e "$(CYAN)🔨 Validation des types TypeScript...$(RESET)"
-	@$(PNPM) build
+build: ## Vérifie les types puis compile Next.js
+	@$(RUN) build
 
-build-next: ## Compile l'application Next.js pour la production
-	@echo -e "$(CYAN)📦 Compilation Next.js de production...$(RESET)"
-	@$(PNPM) build:next
+lint: ## Exécute ESLint
+	@$(RUN) lint
 
-start: ## Démarre l'application compilée en production
-	@echo -e "$(CYAN)🌐 Démarrage du serveur de production sur http://$(HOST):$(PORT)...$(RESET)"
-	@$(PNPM) start -p $(PORT) -H $(HOST)
+lint-fix: ## Corrige automatiquement ESLint
+	@pnpm lint:fix
 
-##@ 🔍 Qualité de code & Linters
-lint: ## Exécute ESLint sur le code source
-	@echo -e "$(CYAN)🔍 Analyse du code source avec ESLint...$(RESET)"
-	@$(PNPM) lint
+format: ## Applique Prettier
+	@$(RUN) format
 
-lint-fix: ## Corrige automatiquement les erreurs ESLint
-	@echo -e "$(CYAN)✨ Correction automatique ESLint...$(RESET)"
-	@$(PNPM) lint:fix
+format-check: ## Vérifie Prettier sans modifier les fichiers
+	@pnpm format:check
 
-format: ## Formate le code avec Prettier
-	@echo -e "$(CYAN)🎨 Formatage du code avec Prettier...$(RESET)"
-	@$(PNPM) format
+type-check: ## Vérifie TypeScript
+	@$(RUN) type-check
 
-format-check: ## Vérifie le formatage sans modifier les fichiers
-	@echo -e "$(CYAN)🎨 Vérification du formatage Prettier...$(RESET)"
-	@$(PNPM) format:check
+test: test-coverage ## Lance Vitest avec couverture
 
-type-check: ## Exécute la vérification de type TypeScript (tsc --noEmit)
-	@echo -e "$(CYAN)🔎 Contrôle strict TypeScript (tsc --noEmit)...$(RESET)"
-	@$(PNPM) type-check
+test-coverage: ## Lance Vitest et produit coverage/lcov.info
+	@$(RUN) test --test-type coverage
 
-##@ 🧪 Tests & Couverture
-test: test-coverage ## Raccourci pour lancer les tests avec couverture LCOV
+test-spatial: ## Lance les tests du moteur spatial
+	@$(RUN) test --test-type spatial
 
-test-coverage: ## Exécute Vitest avec génération du rapport LCOV dans coverage/
-	@echo -e "$(CYAN)🧪 Exécution des tests unitaires et couverture LCOV (Vitest)...$(RESET)"
-	@$(PNPM) test:coverage
+test-ingestion: ## Lance les tests d'ingestion
+	@$(RUN) test --test-type ingestion
 
-test-spatial: ## Exécute le banc d'essai mathématique du moteur spatial 2D
-	@echo -e "$(CYAN)📐 Exécution du banc d'essai spatial 2D (16 tests géométriques)...$(RESET)"
-	@$(PNPM) test:spatial
+test-pglite: ## Lance les tests PGlite
+	@$(RUN) test --test-type pglite
 
-test-ingestion: ## Exécute le banc d'essai d'ingestion de masse (800+ liens)
-	@echo -e "$(CYAN)🏭 Exécution du banc d'essai d'ingestion de carnet de câblage...$(RESET)"
-	@$(PNPM) test:ingestion
+test-all: ## Lance l'ensemble des tests et contrôles associés
+	@$(RUN) test --test-type all
 
-test-pglite: ## Exécute le banc d'essai embarqué PostgreSQL 16 WASM & CTE récursive
-	@echo -e "$(CYAN)🐘 Exécution du banc d'essai PostgreSQL 16 PGlite WASM...$(RESET)"
-	@$(PNPM) test:pglite
+ci: ## Reproduit localement la CI GitHub
+	@$(RUN) ci
 
-test-all: ## Exécute l'intégralité des bancs d'essais du projet
-	@echo -e "$(CYAN)🏁 Lancement complet de tous les bancs d'essais NetFloor...$(RESET)"
-	@$(MAKE) type-check
-	@$(MAKE) lint
-	@$(MAKE) test-spatial
-	@$(MAKE) test-ingestion
-	@$(MAKE) test-pglite
-	@$(MAKE) test-coverage
-	@echo -e "$(GREEN)🎉 Tous les tests et contrôles sont validés avec succès !$(RESET)"
+db-up: ## Démarre PostgreSQL de développement
+	@$(RUN) docker up --profile dev
 
-##@ 🗄️ Base de données & Drizzle ORM
-db-up: ## Démarre le conteneur Docker PostgreSQL et applique les tables si nécessaire
-	@echo -e "$(CYAN)🐘 Démarrage de PostgreSQL (Docker)...$(RESET)"
-	@docker compose up -d postgres
-	@until docker compose exec -T postgres pg_isready -q 2>/dev/null; do sleep 0.5; done
-	@if [ "$$(docker compose exec -T postgres psql -U postgres -d netfloor -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d '[:space:]')" = "0" ]; then \
-		echo -e "$(CYAN)📜 Application de la migration initiale DDL...$(RESET)"; \
-		docker compose exec -T postgres psql -U postgres -d netfloor < drizzle/0000_conscious_naoko.sql >/dev/null 2>&1 || true; \
-	fi
-	@echo -e "$(GREEN)✅ PostgreSQL est prêt.$(RESET)"
+db-down: ## Arrête PostgreSQL de développement
+	@$(RUN) docker down --profile dev
 
-db-down: ## Arrête le conteneur PostgreSQL
-	@echo -e "$(YELLOW)🛑 Arrêt de PostgreSQL...$(RESET)"
-	@docker compose stop postgres
+db-reset: ## Réinitialise le schéma PostgreSQL de développement
+	@$(RUN) db --db-action reset
 
-db-reset: ## Réinitialise la base de données à un état vierge
-	@echo -e "$(YELLOW)🧹 Réinitialisation de la base PostgreSQL...$(RESET)"
-	@docker compose exec -T postgres psql -U postgres -d netfloor -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1 || true
-	@docker compose exec -T postgres psql -U postgres -d netfloor < drizzle/0000_conscious_naoko.sql >/dev/null 2>&1 || true
-	@echo -e "$(GREEN)✅ Base de données vierge réinitialisée.$(RESET)"
+db-generate: ## Génère une migration Drizzle
+	@$(RUN) db --db-action generate
 
-db-generate: ## Génère les migrations Drizzle SQL à partir du schéma
-	@echo -e "$(CYAN)🗄️ Génération des migrations Drizzle...$(RESET)"
-	@$(PNPM) db:generate
+db-push: ## Synchronise le schéma Drizzle
+	@$(RUN) db --db-action push
 
-db-push: ## Pousse les changements de schéma directement vers la base de données
-	@echo -e "$(CYAN)🗄️ Drizzle schema push...$(RESET)"
-	@$(PNPM) db:push
+db-migrate: ## Applique les migrations Drizzle
+	@$(RUN) db --db-action migrate
 
-db-migrate: ## Applique les migrations Drizzle SQL
-	@echo -e "$(CYAN)🗄️ Application des migrations Drizzle...$(RESET)"
-	@$(PNPM) db:migrate
+db-seed: ## Injecte les données de référence
+	@$(RUN) db --db-action seed
 
-db-seed: ## Peuplement de la base de données avec le jeu de données de référence
-	@echo -e "$(CYAN)🌱 Peuplement initial de la base de données (seed)...$(RESET)"
-	@$(PNPM) db:seed
+docker-up: ## Démarre les services Docker de développement
+	@$(RUN) docker up --profile dev
 
-##@ 🧹 Maintenance & Nettoyage
-clean: ## Supprime les caches et artéfacts de compilation (.next, coverage, dist)
-	@echo -e "$(YELLOW)🧹 Nettoyage des dossiers générés...$(RESET)"
-	@rm -rf .next dist coverage *.tsbuildinfo
-	@echo -e "$(GREEN)✅ Nettoyage terminé.$(RESET)"
+docker-down: ## Arrête les services Docker de développement
+	@$(RUN) docker down --profile dev
 
+docker-status: ## Affiche l'état Docker de développement
+	@$(RUN) docker status --profile dev
+
+docker-logs: ## Affiche les journaux Docker de développement
+	@$(RUN) docker logs --profile dev
+
+docker-restart: ## Redémarre les services Docker de développement
+	@$(RUN) docker restart --profile dev
+
+prod-up: ## Construit et démarre la stack production complète
+	@$(RUN) prod up --build
+
+prod-down: ## Arrête la stack production complète
+	@$(RUN) prod down
+
+prod-status: ## Affiche l'état de la stack production
+	@$(RUN) prod status
+
+prod-logs: ## Affiche les journaux de la stack production
+	@$(RUN) prod logs
+
+prod-restart: ## Redémarre la stack production
+	@$(RUN) prod restart
+
+clean: ## Supprime les artéfacts de build locaux
+	@$(RUN) clean

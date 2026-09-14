@@ -63,11 +63,46 @@
 - `/home/runner/work/NetFloor/NetFloor/docker/postgres/backup.sh`
 - `/home/runner/work/NetFloor/NetFloor/.env.prod.example`
 
-## 6) Démarrage
+## 6) Commande unique de gestion
+
+`./run.sh` est le point d'entrée unique du projet. Il centralise les commandes
+Next.js, qualité, base de données et Docker. Le `Makefile` expose uniquement
+des raccourcis vers ce script, afin que les deux interfaces aient le même
+comportement.
+
+### Développement local
+
+```bash
+./run.sh dev
+# ou : make dev
+```
+
+Cette commande démarre PostgreSQL via `docker-compose.yml`, attend qu'il soit
+prêt, initialise le schéma s'il est vide, puis lance Next.js sur le port 3000.
+
+### Production
 
 ```bash
 cp .env.prod.example .env.prod
-# éditer les secrets
+# renseigner les secrets et le domaine
 
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+./run.sh prod up --build
+# ou : make prod-up
 ```
+
+La commande de production utilise `docker-compose.prod.yml` et démarre Caddy,
+l'application, les migrations, PostgreSQL, les sauvegardes et MinIO dans le
+bon ordre. Elle refuse de démarrer si `.env.prod` est absent.
+
+### Gestion des services Docker
+
+```bash
+./run.sh docker status --profile dev
+./run.sh docker logs --profile dev --follow
+./run.sh prod status
+./run.sh prod logs --follow
+./run.sh prod down
+```
+
+Les actions disponibles sont `up`, `down`, `restart`, `status` et `logs`.
+Utiliser `--service <nom>` pour cibler un service en particulier.

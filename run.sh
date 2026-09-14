@@ -29,6 +29,11 @@ BUILD_TARGET="all"
 DB_ACTION="seed"
 SEED_DB=false
 NO_DOCKER=false
+DOCKER_PROFILE="dev"
+DOCKER_ACTION=""
+DOCKER_BUILD=false
+DOCKER_FOLLOW=false
+DOCKER_SERVICE=""
 
 # Résolution automatique du binaire pnpm
 resolve_pnpm() {
@@ -76,13 +81,15 @@ print_help() {
 
     echo -e "${BOLD}COMMANDES PRINCIPALES :${RESET}"
     echo -e "  ${GREEN}dev${RESET}           Démarre le serveur Next.js en mode développement [DÉFAUT]"
-    echo -e "  ${GREEN}start${RESET}         Démarre l'application compilée en production"
+    echo -e "  ${GREEN}start${RESET}         Démarre l'application compilée hors Docker"
     echo -e "  ${GREEN}build${RESET}         Compile l'application (validation TypeScript + build Next.js)"
     echo -e "  ${GREEN}test${RESET}          Exécute les bancs d'essais (spatial, ingestion, pglite, coverage)"
     echo -e "  ${GREEN}lint${RESET}          Vérifie la qualité du code source avec ESLint"
     echo -e "  ${GREEN}format${RESET}        Vérifie ou applique le formatage avec Prettier"
     echo -e "  ${GREEN}type-check${RESET}    Valide la cohérence des types TypeScript (tsc --noEmit)"
     echo -e "  ${GREEN}db${RESET}            Gère les opérations de base de données Drizzle (seed, migrate, push)"
+    echo -e "  ${GREEN}docker${RESET}        Gère les services Docker (dev : PostgreSQL, prod : stack complète)"
+    echo -e "  ${GREEN}prod${RESET}          Alias de ${GREEN}docker --profile prod${RESET}"
     echo -e "  ${GREEN}ci${RESET}            Simule en local le pipeline complet CI / SonarQube"
     echo -e "  ${GREEN}clean${RESET}         Supprime les dossiers temporaires et artéfacts de build\n"
 
@@ -92,7 +99,11 @@ print_help() {
     echo -e "  ${YELLOW}-e, --env <FICHIER>${RESET}     Charge un fichier d'environnement (.env.local, .env...)"
     echo -e "  ${YELLOW}-o, --open${RESET}              Ouvre l'application dans le navigateur par défaut"
     echo -e "  ${YELLOW}--test-type <TYPE>${RESET}      Sous-type de test : all | spatial | ingestion | pglite | coverage"
-    echo -e "  ${YELLOW}--db-action <ACTION>${RESET}    Action base de données : seed | migrate | push | generate"
+    echo -e "  ${YELLOW}--db-action <ACTION>${RESET}    Action base de données : seed | reset | migrate | push | generate"
+    echo -e "  ${YELLOW}--profile <MODE>${RESET}        Profil Docker : dev | prod (par défaut : dev)"
+    echo -e "  ${YELLOW}--service <NOM>${RESET}         Service Docker ciblé (optionnel)"
+    echo -e "  ${YELLOW}--build${RESET}                  Reconstruit les images avant docker up"
+    echo -e "  ${YELLOW}--follow${RESET}                 Suit les journaux Docker"
     echo -e "  ${YELLOW}-h, --help${RESET}              Affiche ce menu d'aide"
     echo -e "  ${YELLOW}-v, --version${RESET}           Affiche la version de NetFloor Architect\n"
 
@@ -102,13 +113,20 @@ print_help() {
     echo -e "  ./run.sh test --test-type spatial # Exécute le banc d'essai géométrique spatial 2D"
     echo -e "  ./run.sh test --test-type coverage# Exécute Vitest et génère coverage/lcov.info"
     echo -e "  ./run.sh ci                       # Exécute lint + type-check + tests + couverture\n"
+    echo -e "  ./run.sh docker up                # Démarre PostgreSQL pour le développement"
+    echo -e "  ./run.sh prod up --build          # Démarre la stack de production complète"
+    echo -e "  ./run.sh docker logs --profile prod --follow\n"
 }
 
 # Analyse des arguments de la ligne de commande
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        dev|start|build|test|lint|format|type-check|db|ci|clean)
+        dev|start|build|test|lint|format|type-check|db|docker|prod|ci|clean)
             COMMAND="$1"
+            shift
+            ;;
+        up|down|restart|status|logs)
+            DOCKER_ACTION="$1"
             shift
             ;;
         -p|--port)
@@ -141,6 +159,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-docker)
             NO_DOCKER=true
+            shift
+            ;;
+        --profile|--mode)
+            DOCKER_PROFILE="$2"
+            shift 2
+            ;;
+        --service)
+            DOCKER_SERVICE="$2"
+            shift 2
+            ;;
+        --build)
+            DOCKER_BUILD=true
+            shift
+            ;;
+        --follow|-f)
+            DOCKER_FOLLOW=true
             shift
             ;;
         -v|--version)
@@ -186,48 +220,146 @@ open_browser() {
     fi
 }
 
-# Fonction pour assurer la disponibilité et l'initialisation de PostgreSQL (Docker)
+require_docker() {
+    if ! command -v docker >/dev/null 2>&1; then
+        echo -e "${RED}❌ Docker est requis pour cette commande, mais il est introuvable.${RESET}"
+        exit 1
+    fi
+    if ! docker info >/dev/null 2>&1; then
+        echo -e "${RED}❌ Le démon Docker n'est pas accessible. Démarrez Docker puis réessayez.${RESET}"
+        exit 1
+    fi
+}
+
+configure_compose() {
+    case "$DOCKER_PROFILE" in
+        dev)
+            COMPOSE_FILE="$PROJECT_ROOT/docker-compose.yml"
+            COMPOSE_CMD=(docker compose -f "$COMPOSE_FILE")
+            ;;
+        prod)
+            COMPOSE_FILE="$PROJECT_ROOT/docker-compose.prod.yml"
+            ENV_FILE="${ENV_FILE:-$PROJECT_ROOT/.env.prod}"
+            if [ ! -f "$ENV_FILE" ]; then
+                echo -e "${RED}❌ Fichier de production introuvable : $ENV_FILE${RESET}"
+                echo -e "Créez-le à partir de ${YELLOW}.env.prod.example${RESET} puis renseignez les secrets."
+                exit 1
+            fi
+            export NETFLOOR_ENV_FILE="$ENV_FILE"
+            COMPOSE_CMD=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+            ;;
+        *)
+            echo -e "${RED}❌ Profil Docker inconnu : $DOCKER_PROFILE (attendu : dev ou prod)${RESET}"
+            exit 1
+            ;;
+    esac
+}
+
+compose() {
+    "${COMPOSE_CMD[@]}" "$@"
+}
+
+wait_for_postgres() {
+    echo -ne "   • En attente de PostgreSQL... "
+    local retries=30
+    until compose exec -T postgres pg_isready -q >/dev/null 2>&1 || [ "$retries" -eq 0 ]; do
+        echo -ne "."
+        sleep 1
+        retries=$((retries - 1))
+    done
+
+    if [ "$retries" -eq 0 ]; then
+        echo -e " ${RED}Délai dépassé.${RESET}"
+        return 1
+    fi
+    echo -e " ${GREEN}Prêt !${RESET}"
+}
+
+run_docker_command() {
+    require_docker
+    configure_compose
+    local action="${DOCKER_ACTION:-up}"
+    local services=()
+    if [ -n "$DOCKER_SERVICE" ]; then
+        services=("$DOCKER_SERVICE")
+    elif [ "$DOCKER_PROFILE" = "dev" ]; then
+        services=(postgres)
+    fi
+
+    case "$action" in
+        up)
+            echo -e "${CYAN}🐳 Démarrage Docker ($DOCKER_PROFILE)...${RESET}"
+            local up_args=(up -d)
+            if [ "$DOCKER_BUILD" = true ]; then
+                up_args+=(--build)
+            fi
+            compose "${up_args[@]}" "${services[@]}"
+            if [ "$DOCKER_PROFILE" = "dev" ] || [ "$DOCKER_SERVICE" = "postgres" ]; then
+                wait_for_postgres
+            fi
+            compose ps
+            ;;
+        down)
+            echo -e "${YELLOW}🛑 Arrêt Docker ($DOCKER_PROFILE)...${RESET}"
+            if [ -n "$DOCKER_SERVICE" ]; then
+                compose stop "$DOCKER_SERVICE"
+            else
+                compose down
+            fi
+            ;;
+        restart)
+            echo -e "${CYAN}🔄 Redémarrage Docker ($DOCKER_PROFILE)...${RESET}"
+            compose restart "${services[@]}"
+            if [ "$DOCKER_PROFILE" = "dev" ] || [ "$DOCKER_SERVICE" = "postgres" ]; then
+                wait_for_postgres
+            fi
+            ;;
+        status)
+            compose ps
+            ;;
+        logs)
+            local log_args=(logs --tail=100)
+            if [ "$DOCKER_FOLLOW" = true ]; then
+                log_args+=(--follow)
+            fi
+            compose "${log_args[@]}" "${services[@]}"
+            ;;
+        *)
+            echo -e "${RED}❌ Action Docker inconnue : $action${RESET}"
+            echo -e "Actions disponibles : up, down, restart, status, logs"
+            exit 1
+            ;;
+    esac
+}
+
+# Assure la disponibilité et l'initialisation de PostgreSQL pour le développement.
 ensure_database() {
     if [ "$NO_DOCKER" = true ]; then
         echo -e "${YELLOW}⚠️ Option --no-docker spécifiée : contournement du démarrage automatique de PostgreSQL.${RESET}"
         return 0
     fi
 
-    if ! command -v docker >/dev/null 2>&1; then
+    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️ Docker n'est pas détecté. Lancement sans conteneur local (mode hors-ligne ou PostgreSQL externe).${RESET}"
         return 0
     fi
 
-    # Forcer le contexte Docker standard default si présent
-    if docker context inspect default >/dev/null 2>&1; then
-        export DOCKER_CONTEXT="default"
-    fi
-
     echo -e "${CYAN}🐘 Démarrage et vérification de la base PostgreSQL (Docker)...${RESET}"
-    DOCKER_CONFIG=$(mktemp -d 2>/dev/null || echo "/tmp") docker compose up -d postgres >/dev/null 2>&1 || docker compose up -d postgres
+    DOCKER_PROFILE="dev"
+    configure_compose
+    compose up -d postgres
 
-    echo -ne "   • En attente de PostgreSQL... "
-    local RETRIES=15
-    until docker compose exec -T postgres pg_isready -q >/dev/null 2>&1 || [ $RETRIES -eq 0 ]; do
-        echo -ne "."
-        sleep 1
-        RETRIES=$((RETRIES - 1))
-    done
-
-    if [ $RETRIES -eq 0 ]; then
-        echo -e " ${RED}Délai dépassé.${RESET}"
+    if ! wait_for_postgres; then
         echo -e "${YELLOW}   L'application démarrera en mode déconnecté.${RESET}"
         return 0
-    else
-        echo -e " ${GREEN}Prêt !${RESET}"
     fi
 
     # Vérification et application automatique de la migration si la base est neuve
     local TABLE_COUNT
-    TABLE_COUNT=$(docker compose exec -T postgres psql -U postgres -d netfloor -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d '[:space:]' || echo "0")
+    TABLE_COUNT=$(compose exec -T postgres psql -U postgres -d netfloor -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d '[:space:]' || echo "0")
     if [ "$TABLE_COUNT" = "0" ] || [ -z "$TABLE_COUNT" ]; then
         echo -e "${CYAN}📜 Initialisation des tables PostgreSQL (migration initiale DDL)...${RESET}"
-        docker compose exec -T postgres psql -U postgres -d netfloor < "$PROJECT_ROOT/drizzle/0000_conscious_naoko.sql" >/dev/null 2>&1 || true
+        compose exec -T postgres psql -U postgres -d netfloor < "$PROJECT_ROOT/drizzle/0000_conscious_naoko.sql" >/dev/null 2>&1 || true
         echo -e "   ${GREEN}✅ Tables créées avec succès.${RESET}"
     fi
 
@@ -257,7 +389,8 @@ case "$COMMAND" in
 
     start)
         print_banner
-        echo -e "${GREEN}🌐 Démarrage du serveur de PRODUCTION sur http://${HOST}:${PORT}${RESET}\n"
+        echo -e "${GREEN}🌐 Démarrage du serveur compilé hors Docker sur http://${HOST}:${PORT}${RESET}\n"
+        ensure_database
         if [ "$AUTO_OPEN" = true ]; then
             open_browser &
         fi
@@ -268,7 +401,7 @@ case "$COMMAND" in
         print_banner
         echo -e "${CYAN}🔨 Validation TypeScript et compilation de production...${RESET}\n"
         $PNPM_CMD type-check
-        $PNPM_CMD build:next
+        $PNPM_CMD build
         echo -e "\n${GREEN}✅ Compilation réussie ! Prêt pour le déploiement.${RESET}"
         ;;
 
@@ -335,8 +468,8 @@ case "$COMMAND" in
                 ;;
             reset)
                 echo -e "${CYAN}🧹 Réinitialisation complète de la base de données...${RESET}"
-                docker compose exec -T postgres psql -U postgres -d netfloor -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1 || true
-                docker compose exec -T postgres psql -U postgres -d netfloor < "$PROJECT_ROOT/drizzle/0000_conscious_naoko.sql" >/dev/null 2>&1 || true
+                compose exec -T postgres psql -U postgres -d netfloor -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1 || true
+                compose exec -T postgres psql -U postgres -d netfloor < "$PROJECT_ROOT/drizzle/0000_conscious_naoko.sql" >/dev/null 2>&1 || true
                 echo -e "${GREEN}✅ Base de données vierge réinitialisée.${RESET}"
                 ;;
             migrate)
@@ -359,12 +492,21 @@ case "$COMMAND" in
         esac
         ;;
 
+    docker)
+        run_docker_command
+        ;;
+
+    prod)
+        DOCKER_PROFILE="prod"
+        run_docker_command
+        ;;
+
     ci)
         print_banner
         echo -e "${MAGENTA}🚀 Simulation locale du pipeline CI GitHub Actions (Fail-Fast)${RESET}\n"
         
         echo -e "${CYAN}1. Format check (Prettier)${RESET}"
-        $PNPM_CMD format:check || true
+        $PNPM_CMD format:check
         
         echo -e "\n${CYAN}2. Lint check (ESLint)${RESET}"
         $PNPM_CMD lint
@@ -374,6 +516,9 @@ case "$COMMAND" in
         
         echo -e "\n${CYAN}4. Tests & Couverture LCOV (Vitest)${RESET}"
         $PNPM_CMD test:coverage
+
+        echo -e "\n${CYAN}5. Audit des dépendances (high/critical)${RESET}"
+        $PNPM_CMD audit --audit-level=high
         
         echo -e "\n${GREEN}====================================================${RESET}"
         echo -e "${GREEN}🏆 SIMULATION CI RÉUSSIE : Pipeline prêt pour le push !${RESET}"
