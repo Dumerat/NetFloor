@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.2.1...netfloor-architect-v0.2.2) (2026-09-14)
+
+
+### 🐛 Corrections de bugs
+
+* **quality:** fix index.test.ts ([050088a](https://github.com/Dumerat/NetFloor/commit/050088a65375160844c6751d10fc1251ff225414))
+
 ## [0.2.1](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.2.0...netfloor-architect-v0.2.1) (2026-09-14)
 
 
