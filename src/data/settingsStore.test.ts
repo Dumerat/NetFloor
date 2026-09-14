@@ -94,8 +94,8 @@ describe("DEMO_SETTINGS", () => {
   });
 
   it("contient 5 sous-réseaux VLAN de démonstration", () => {
-    expect(DEMO_SETTINGS.subnets.length).toBe(5);
-    expect(DEMO_SETTINGS.subnets[0].vlanId).toBe(1);
+    expect(DEMO_SETTINGS.subnets).toHaveLength(5);
+    expect(DEMO_SETTINGS.subnets[0]).toMatchObject({ vlanId: 1 });
   });
 
   it("toutes les intégrations sont activées en démo", () => {
@@ -156,8 +156,8 @@ describe("loadStoredSettings", () => {
 
     const result = loadStoredSettings();
     expect(result.sso.corporateDomain).toBe("test.com");
-    expect(result.subnets.length).toBe(1);
-    expect(result.subnets[0].vlanId).toBe(42);
+    expect(result.subnets).toHaveLength(1);
+    expect(result.subnets[0]).toMatchObject({ vlanId: 42 });
   });
 
   it("retourne INITIAL_SETTINGS si le JSON est invalide", () => {
