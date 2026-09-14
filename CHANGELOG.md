@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.2.0...netfloor-architect-v0.2.1) (2026-09-14)
+
+
+### 💄 Style / Formatage
+
+* prettier format 3 test files (format:check CI fix) ([deb165d](https://github.com/Dumerat/NetFloor/commit/deb165d09ba816c3068157e549cccdab63e0d40c))
+
+
+### ✅ Tests
+
+* add unit tests for data layer to meet 80% coverage gate ([a6fdd63](https://github.com/Dumerat/NetFloor/commit/a6fdd637e36ba3e532960416962115f1c046ea47))
+
 ## [0.2.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.1.0...netfloor-architect-v0.2.0) (2026-09-14)
 
 
