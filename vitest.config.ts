@@ -18,6 +18,7 @@ export default defineConfig({
         "src/**/tests/**",
         "src/db/test-*.ts",
         "src/types/**",
+        "src/db/seed.ts",
       ],
     },
   },

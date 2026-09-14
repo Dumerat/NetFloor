@@ -57,6 +57,7 @@
     "autoprefixer": "^10.5.5",
     "drizzle-kit": "^0.30.4",
     "eslint": "^9.21.0",
+    "fake-indexeddb": "^6.2.5",
     "husky": "^9.1.7",
     "postcss": "^8.5.28",
     "prettier": "^3.5.2",
