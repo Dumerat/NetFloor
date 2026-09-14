@@ -11,11 +11,45 @@ permissions:
 
 jobs:
   release-please:
+    name: Release Please
     runs-on: ubuntu-latest
+
     steps:
       - name: Run Release Please
         uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # ── Post-release : build (conditionnel au merge de la PR de release) ──
+      - name: Checkout (post-release)
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v4
+
+      - name: Install pnpm (post-release)
+        if: ${{ steps.release.outputs.release_created }}
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js 22 (post-release)
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies (post-release)
+        if: ${{ steps.release.outputs.release_created }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (post-release)
+        if: ${{ steps.release.outputs.release_created }}
+        run: pnpm build
+
+      # Optionnel : décommenter pour publier sur npm
+      # - name: Publish to npm
+      #   if: ${{ steps.release.outputs.release_created }}
+      #   run: pnpm publish --no-git-checks
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

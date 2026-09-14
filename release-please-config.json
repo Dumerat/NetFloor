@@ -6,7 +6,24 @@
       "release-type": "node",
       "package-name": "netfloor-architect",
       "changelog-path": "CHANGELOG.md",
-      "include-v-in-tag": true
+      "include-v-in-tag": true,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false,
+      "changelog-sections": [
+        { "type": "feat",     "section": "✨ Nouvelles fonctionnalités", "hidden": false },
+        { "type": "fix",      "section": "🐛 Corrections de bugs",       "hidden": false },
+        { "type": "perf",     "section": "⚡ Performances",              "hidden": false },
+        { "type": "refactor", "section": "♻️ Refactoring",               "hidden": false },
+        { "type": "docs",     "section": "📖 Documentation",             "hidden": false },
+        { "type": "style",    "section": "💄 Style / Formatage",         "hidden": false },
+        { "type": "test",     "section": "✅ Tests",                     "hidden": false },
+        { "type": "build",    "section": "🔧 Build / Config",            "hidden": false },
+        { "type": "ci",       "section": "👷 CI/CD",                     "hidden": false },
+        { "type": "chore",    "section": "🔨 Maintenance",               "hidden": true  },
+        { "type": "revert",   "section": "⏪ Reverts",                   "hidden": false }
+      ]
     }
   }
 }

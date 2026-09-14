@@ -1,0 +1,30 @@
+# Conventional Commits — NetFloor Architect
+# Documentation : https://www.conventionalcommits.org/fr/v1.0.0/
+#
+# Format obligatoire :
+#   <type>(<portée optionnelle>): <description courte>
+#
+#   [corps optionnel]
+#
+#   [pied(s) optionnel(s)]
+#
+# Types autorisés :
+#   feat     → nouvelle fonctionnalité  (bump MINOR)
+#   fix      → correction de bug        (bump PATCH)
+#   perf     → amélioration de perf     (bump PATCH)
+#   refactor → refactoring sans bug/feat
+#   docs     → documentation seulement
+#   style    → formatage, prettier, etc.
+#   test     → ajout / modification de tests
+#   build    → système de build, deps
+#   ci       → configuration CI/CD
+#   chore    → tâches de maintenance
+#   revert   → annulation d'un commit précédent
+#
+# BREAKING CHANGE → bump MAJOR (via "!" après le type ou footer "BREAKING CHANGE: ...")
+#
+# Exemples :
+#   feat(rack): ajout du glisser-déposer pour les équipements
+#   fix(snmp): correction du timeout lors de la découverte
+#   feat!: refonte complète du système de sites
+#   docs: mise à jour du README avec les instructions Docker
