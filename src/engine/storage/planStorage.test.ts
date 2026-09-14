@@ -5,12 +5,7 @@
  *        un environnement browser et sont couvertes via les tests d'intégration.
  */
 import { describe, it, expect } from "vitest";
-import {
-  DEFAULT_SITE,
-  DEFAULT_SITE_ID,
-  generatePlanId,
-  generateSiteId,
-} from "./planStorage";
+import { DEFAULT_SITE, DEFAULT_SITE_ID, generatePlanId, generateSiteId } from "./planStorage";
 
 // ── DEFAULT_SITE ─────────────────────────────────────────────────────────────
 describe("DEFAULT_SITE", () => {

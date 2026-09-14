@@ -20,9 +20,15 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: vi.fn((key: string) => store[key] ?? null),
-    setItem: vi.fn((key: string, value: string) => { store[key] = value; }),
-    removeItem: vi.fn((key: string) => { delete store[key]; }),
-    clear: vi.fn(() => { store = {}; }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: vi.fn(() => {
+      store = {};
+    }),
   };
 })();
 
@@ -133,7 +139,17 @@ describe("loadStoredSettings", () => {
   it("fusionne les données localStorage avec INITIAL_SETTINGS", () => {
     const partial = {
       sso: { status: "CONNECTED", corporateDomain: "test.com" },
-      subnets: [{ vlanId: 42, vlanName: "TEST", cidr: "192.168.1.0/24", gateway: "192.168.1.1", dhcpRange: "", usedIps: 0, totalIps: 254 }],
+      subnets: [
+        {
+          vlanId: 42,
+          vlanName: "TEST",
+          cidr: "192.168.1.0/24",
+          gateway: "192.168.1.1",
+          dhcpRange: "",
+          usedIps: 0,
+          totalIps: 254,
+        },
+      ],
     };
     localStorageMock.setItem(STORAGE_KEY, JSON.stringify(partial));
     localStorageMock.getItem.mockReturnValueOnce(JSON.stringify(partial));

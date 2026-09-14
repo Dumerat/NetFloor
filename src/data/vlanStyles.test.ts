@@ -19,9 +19,15 @@ const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
     getItem: vi.fn((key: string) => store[key] ?? null),
-    setItem: vi.fn((key: string, value: string) => { store[key] = value; }),
-    removeItem: vi.fn((key: string) => { delete store[key]; }),
-    clear: vi.fn(() => { store = {}; }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: vi.fn(() => {
+      store = {};
+    }),
   };
 })();
 
@@ -100,7 +106,13 @@ describe("loadStoredVlanStyles", () => {
 
   it("fusionne les styles localStorage avec DEFAULT_VLAN_STYLES", () => {
     const stored = {
-      99: { vlanId: 99, vlanName: "Trunk", color: "#f43f5e", strokePattern: "SOLID", thickness: "THICK" },
+      99: {
+        vlanId: 99,
+        vlanName: "Trunk",
+        color: "#f43f5e",
+        strokePattern: "SOLID",
+        thickness: "THICK",
+      },
     };
     localStorageMock.getItem.mockReturnValueOnce(JSON.stringify(stored));
     const result = loadStoredVlanStyles();
@@ -164,25 +176,49 @@ describe("getKonvaStrokeConfig", () => {
   });
 
   it("thickness FINE → baseWidth 8", () => {
-    const style: VlanStyle = { vlanId: 40, vlanName: "Print", color: "#f59e0b", strokePattern: "SOLID", thickness: "FINE" };
+    const style: VlanStyle = {
+      vlanId: 40,
+      vlanName: "Print",
+      color: "#f59e0b",
+      strokePattern: "SOLID",
+      thickness: "FINE",
+    };
     const { strokeWidth } = getKonvaStrokeConfig(style);
     expect(strokeWidth).toBe(8);
   });
 
   it("thickness THICK → baseWidth 22", () => {
-    const style: VlanStyle = { vlanId: 50, vlanName: "WiFi", color: "#6366f1", strokePattern: "SOLID", thickness: "THICK" };
+    const style: VlanStyle = {
+      vlanId: 50,
+      vlanName: "WiFi",
+      color: "#6366f1",
+      strokePattern: "SOLID",
+      thickness: "THICK",
+    };
     const { strokeWidth } = getKonvaStrokeConfig(style);
     expect(strokeWidth).toBe(22);
   });
 
   it("thickness NORMAL → baseWidth 14", () => {
-    const style: VlanStyle = { vlanId: 20, vlanName: "Data", color: "#3b82f6", strokePattern: "SOLID", thickness: "NORMAL" };
+    const style: VlanStyle = {
+      vlanId: 20,
+      vlanName: "Data",
+      color: "#3b82f6",
+      strokePattern: "SOLID",
+      thickness: "NORMAL",
+    };
     const { strokeWidth } = getKonvaStrokeConfig(style);
     expect(strokeWidth).toBe(14);
   });
 
   it("strokePattern DASHED → dash array avec 2 valeurs", () => {
-    const style: VlanStyle = { vlanId: 30, vlanName: "VoIP", color: "#a855f7", strokePattern: "DASHED", thickness: "NORMAL" };
+    const style: VlanStyle = {
+      vlanId: 30,
+      vlanName: "VoIP",
+      color: "#a855f7",
+      strokePattern: "DASHED",
+      thickness: "NORMAL",
+    };
     const { dash } = getKonvaStrokeConfig(style);
     expect(Array.isArray(dash)).toBe(true);
     expect(dash).toHaveLength(2);
@@ -192,7 +228,13 @@ describe("getKonvaStrokeConfig", () => {
   });
 
   it("strokePattern DOTTED → dash array [1, round(width*2.4)]", () => {
-    const style: VlanStyle = { vlanId: 40, vlanName: "Print", color: "#f59e0b", strokePattern: "DOTTED", thickness: "FINE" };
+    const style: VlanStyle = {
+      vlanId: 40,
+      vlanName: "Print",
+      color: "#f59e0b",
+      strokePattern: "DOTTED",
+      thickness: "FINE",
+    };
     const { strokeWidth, dash } = getKonvaStrokeConfig(style);
     expect(strokeWidth).toBe(8);
     expect(Array.isArray(dash)).toBe(true);
@@ -201,20 +243,38 @@ describe("getKonvaStrokeConfig", () => {
   });
 
   it("strokePattern SOLID → dash undefined", () => {
-    const style: VlanStyle = { vlanId: 20, vlanName: "Data", color: "#3b82f6", strokePattern: "SOLID", thickness: "NORMAL" };
+    const style: VlanStyle = {
+      vlanId: 20,
+      vlanName: "Data",
+      color: "#3b82f6",
+      strokePattern: "SOLID",
+      thickness: "NORMAL",
+    };
     const { dash } = getKonvaStrokeConfig(style);
     expect(dash).toBeUndefined();
   });
 
   it("highlight avec style THICK → strokeWidth = 22 + 6 = 28", () => {
-    const style: VlanStyle = { vlanId: 50, vlanName: "WiFi", color: "#6366f1", strokePattern: "SOLID", thickness: "THICK" };
+    const style: VlanStyle = {
+      vlanId: 50,
+      vlanName: "WiFi",
+      color: "#6366f1",
+      strokePattern: "SOLID",
+      thickness: "THICK",
+    };
     const { strokeWidth, strokeColor } = getKonvaStrokeConfig(style, true);
     expect(strokeWidth).toBe(28);
     expect(strokeColor).toBe("#38bdf8");
   });
 
   it("utilise la couleur du style quand non highlighted", () => {
-    const style: VlanStyle = { vlanId: 99, vlanName: "Trunk", color: "#f43f5e", strokePattern: "SOLID", thickness: "THICK" };
+    const style: VlanStyle = {
+      vlanId: 99,
+      vlanName: "Trunk",
+      color: "#f43f5e",
+      strokePattern: "SOLID",
+      thickness: "THICK",
+    };
     const { strokeColor } = getKonvaStrokeConfig(style, false);
     expect(strokeColor).toBe("#f43f5e");
   });
