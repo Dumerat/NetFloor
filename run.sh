@@ -178,7 +178,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -v|--version)
-            echo "NetFloor Architect v0.1.0"
+            echo "NetFloor Architect v0.2.2"
             exit 0
             ;;
         -h|--help)
