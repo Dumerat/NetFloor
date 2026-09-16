@@ -152,7 +152,6 @@ export const PALETTE_CATALOG: PaletteItem[] = [
     iconName: "Plug",
     portCount: 1,
     poeMode: "NONE",
-    vlanId: 20,
     customEmote: "🔌",
   },
   {

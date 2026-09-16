@@ -55,6 +55,9 @@ if ($BashExe) {
         "format" { pnpm format }
         "type-check" { pnpm type-check }
         "clean" { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue .next, coverage, dist, *.tsbuildinfo }
+        "docker" { docker compose up -d --build }
+        "prod" { docker compose -f docker-compose.prod.yml up -d --build }
+        "stop" { docker compose down }
         default { pnpm $action }
     }
     exit $LASTEXITCODE

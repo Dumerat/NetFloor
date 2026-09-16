@@ -287,10 +287,7 @@ run_docker_command() {
     case "$action" in
         up)
             echo -e "${CYAN}🐳 Démarrage Docker ($DOCKER_PROFILE)...${RESET}"
-            local up_args=(up -d)
-            if [ "$DOCKER_BUILD" = true ]; then
-                up_args+=(--build)
-            fi
+            local up_args=(up -d --build)
             compose "${up_args[@]}" "${services[@]}"
             if [ "$DOCKER_PROFILE" = "dev" ] || [ "$DOCKER_SERVICE" = "postgres" ]; then
                 wait_for_postgres
