@@ -77,18 +77,15 @@ import {
 import { VlanStyleCustomizer } from "@/components/ui/VlanStyleCustomizer";
 
 // Chargement dynamique du canvas Konva sans SSR
-const DynamicFloorCanvas = dynamic(
-  () => import("@/components/canvas/FloorCanvas"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full h-full flex items-center justify-center bg-slate-950 text-slate-500 font-mono text-xs">
-        <Activity className="w-5 h-5 animate-spin mr-2 text-blue-500" />
-        Initialisation du moteur spatial React-Konva...
-      </div>
-    ),
-  }
-);
+const DynamicFloorCanvas = dynamic(() => import("@/components/canvas/FloorCanvas"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center bg-slate-950 text-slate-500 font-mono text-xs">
+      <Activity className="w-5 h-5 animate-spin mr-2 text-blue-500" />
+      Initialisation du moteur spatial React-Konva...
+    </div>
+  ),
+});
 
 function CameraScaleIndicator() {
   const scale = useCameraStore((s) => s.viewport.scale);

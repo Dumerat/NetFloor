@@ -94,9 +94,15 @@ export async function getDb(): Promise<Database> {
         await pgliteClient.exec(stmt).catch(() => {});
       }
       // Migration défensive pour garantir la présence des colonnes metadata
-      await pgliteClient.exec("ALTER TABLE floors ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;").catch(() => {});
-      await pgliteClient.exec("ALTER TABLE racks ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;").catch(() => {});
-      await pgliteClient.exec("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;").catch(() => {});
+      await pgliteClient
+        .exec("ALTER TABLE floors ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;")
+        .catch(() => {});
+      await pgliteClient
+        .exec("ALTER TABLE racks ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;")
+        .catch(() => {});
+      await pgliteClient
+        .exec("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;")
+        .catch(() => {});
     }
 
     activeDb = drizzlePglite(pgliteClient, { schema });
