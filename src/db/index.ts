@@ -68,6 +68,15 @@ export async function getDb(): Promise<Database> {
       try {
         const client = postgres(connectionString, { max: 10, timeout: 2 });
         activePostgresClient = client;
+        await client`ALTER TABLE floors ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;`.catch(
+          () => {}
+        );
+        await client`ALTER TABLE racks ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;`.catch(
+          () => {}
+        );
+        await client`ALTER TABLE nodes ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;`.catch(
+          () => {}
+        );
         const pgDb = drizzlePostgres(client, { schema });
         activeDb = pgDb;
         return activeDb;

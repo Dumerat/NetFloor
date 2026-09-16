@@ -15,126 +15,18 @@ interface CloudSwitchDiscoveryModalProps {
 
 type DiscoveryTab = "ARUBA" | "NEBULA" | "SNMP";
 
-// Modèles réels de commutateurs Aruba Central
-const MOCK_ARUBA_SWITCHES: Array<{
+export interface CloudDiscoveredSwitch {
   name: string;
   model: string;
   portsCount: number;
-  poeBudgetW: number;
+  poeBudgetW?: number;
   ipAddress: string;
   macAddress: string;
   serial: string;
-  firmware: string;
+  firmware?: string;
+  nebulaPack?: string;
   cloudStatus: "SYNCED" | "ONLINE";
-}> = [
-  {
-    name: "SW-ARUBA-CX6200F-24G",
-    model: "Aruba CX 6200F 24G Class 4 PoE 4SFP+ 370W",
-    portsCount: 24,
-    poeBudgetW: 370,
-    ipAddress: "10.42.0.25",
-    macAddress: "B4:0C:25:88:1A:25",
-    serial: "SG239FA012",
-    firmware: "FL.10.12.0005",
-    cloudStatus: "SYNCED",
-  },
-  {
-    name: "SW-ARUBA-2930F-48G",
-    model: "Aruba 2930F 48G PoE+ 4SFP+ 370W",
-    portsCount: 48,
-    poeBudgetW: 370,
-    ipAddress: "10.42.0.26",
-    macAddress: "B4:0C:25:99:3B:48",
-    serial: "SG239FA048",
-    firmware: "WC.16.11.0014",
-    cloudStatus: "ONLINE",
-  },
-  {
-    name: "SW-ARUBA-CX6100-12G",
-    model: "Aruba CX 6100 12G Class 4 PoE 2G/2SFP+ 139W",
-    portsCount: 12,
-    poeBudgetW: 139,
-    ipAddress: "10.42.0.27",
-    macAddress: "B4:0C:25:AA:12:0C",
-    serial: "SG239FA012C",
-    firmware: "PL.10.10.1030",
-    cloudStatus: "SYNCED",
-  },
-  {
-    name: "SW-ARUBA-CX6300M-24SR",
-    model: "Aruba CX 6300M 24-port SFP+ and 4-port SFP56 Switch",
-    portsCount: 28,
-    poeBudgetW: 0,
-    ipAddress: "10.42.0.28",
-    macAddress: "B4:0C:25:CC:28:10",
-    serial: "SG239FA6300",
-    firmware: "FL.10.13.0001",
-    cloudStatus: "SYNCED",
-  },
-];
-
-// Modèles réels de commutateurs Zyxel Nebula Cloud
-const MOCK_NEBULA_SWITCHES: Array<{
-  name: string;
-  model: string;
-  portsCount: number;
-  poeBudgetW: number;
-  ipAddress: string;
-  macAddress: string;
-  serial: string;
-  firmware: string;
-  nebulaPack: string;
-  cloudStatus: "SYNCED" | "ONLINE";
-}> = [
-  {
-    name: "SW-ZYXEL-GS1920-24HP",
-    model: "Zyxel GS1920-24HP NebulaFlex 24-Port GbE Smart Managed PoE+ 375W",
-    portsCount: 24,
-    poeBudgetW: 375,
-    ipAddress: "10.42.0.31",
-    macAddress: "BC:CF:4F:91:02:44",
-    serial: "S190Z2300044",
-    firmware: "V4.80(ABVU.2)",
-    nebulaPack: "Nebula Cloud Managed",
-    cloudStatus: "SYNCED",
-  },
-  {
-    name: "SW-ZYXEL-XGS1930-28HP",
-    model: "Zyxel XGS1930-28HP 24-Port GbE PoE+ with 4 10G SFP+ Uplink 375W",
-    portsCount: 28,
-    poeBudgetW: 375,
-    ipAddress: "10.42.0.32",
-    macAddress: "BC:CF:4F:92:05:28",
-    serial: "S190Z2400128",
-    firmware: "V4.70(ABVY.1)",
-    nebulaPack: "Nebula Pro Pack Active",
-    cloudStatus: "ONLINE",
-  },
-  {
-    name: "SW-ZYXEL-NSW100-28P",
-    model: "Zyxel Nebula NSW100-28P 24-Port GbE Cloud Managed PoE+ 375W",
-    portsCount: 28,
-    poeBudgetW: 375,
-    ipAddress: "10.42.0.33",
-    macAddress: "BC:CF:4F:88:12:33",
-    serial: "S190Z2100890",
-    firmware: "V2.50(ABLE.0)",
-    nebulaPack: "Nebula Cloud Native",
-    cloudStatus: "SYNCED",
-  },
-  {
-    name: "SW-ZYXEL-XS3800-28",
-    model: "Zyxel XS3800-28 28-Port 10GbE Aggregation Managed Switch",
-    portsCount: 28,
-    poeBudgetW: 0,
-    ipAddress: "10.42.0.34",
-    macAddress: "BC:CF:4F:77:90:28",
-    serial: "S190Z2500788",
-    firmware: "V4.80(ABZJ.0)",
-    nebulaPack: "Nebula Enterprise Pack",
-    cloudStatus: "SYNCED",
-  },
-];
+}
 
 export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
   isOpen,
@@ -150,13 +42,13 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
   const [arubaToken, setArubaToken] = useState("");
   const [arubaCluster, setArubaCluster] = useState("eu-central-1.central.arubanetworks.com");
   const [isSyncingAruba, setIsSyncingAruba] = useState(false);
-  const [arubaSwitches, setArubaSwitches] = useState<typeof MOCK_ARUBA_SWITCHES>([]);
+  const [arubaSwitches, setArubaSwitches] = useState<CloudDiscoveredSwitch[]>([]);
 
   // Configuration Zyxel Nebula
   const [nebulaOrg, setNebulaOrg] = useState("");
   const [nebulaApiKey, setNebulaApiKey] = useState("");
   const [isSyncingNebula, setIsSyncingNebula] = useState(false);
-  const [nebulaSwitches, setNebulaSwitches] = useState<typeof MOCK_NEBULA_SWITCHES>([]);
+  const [nebulaSwitches, setNebulaSwitches] = useState<CloudDiscoveredSwitch[]>([]);
 
   // Configuration SNMP Local
   const [snmpSubnet, setSnmpSubnet] = useState("10.42.0.0/24");
@@ -192,7 +84,7 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
     return 1;
   };
 
-  const handleAddArubaSwitch = (sw: (typeof MOCK_ARUBA_SWITCHES)[0]) => {
+  const handleAddArubaSwitch = (sw: CloudDiscoveredSwitch) => {
     const freeSlot = getNextFreeSlotU();
     const newDev: RackDeviceItem = {
       id: `dev-aruba-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -213,7 +105,7 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
     setTimeout(() => setAddedToast(null), 3000);
   };
 
-  const handleAddNebulaSwitch = (sw: (typeof MOCK_NEBULA_SWITCHES)[0]) => {
+  const handleAddNebulaSwitch = (sw: CloudDiscoveredSwitch) => {
     const freeSlot = getNextFreeSlotU();
     const newDev: RackDeviceItem = {
       id: `dev-nebula-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -255,26 +147,70 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
     setTimeout(() => setAddedToast(null), 3000);
   };
 
-  // Synchronisation simulée Aruba Central
-  const handleRefreshAruba = () => {
+  // Synchronisation Aruba Central (authentique sans données factices)
+  const handleRefreshAruba = async () => {
     setIsSyncingAruba(true);
-    setTimeout(() => {
+    if (!arubaToken.trim()) {
       setIsSyncingAruba(false);
-      setArubaSwitches(MOCK_ARUBA_SWITCHES);
-      setAddedToast("🔄 Liaison Aruba Central synchronisée (4 commutateurs interrogés)");
-      setTimeout(() => setAddedToast(null), 3000);
-    }, 800);
+      setArubaSwitches([]);
+      setAddedToast("⚠️ Aucun commutateur détecté : renseignez un token d'accès Aruba Central.");
+      setTimeout(() => setAddedToast(null), 3500);
+      return;
+    }
+    try {
+      const res = await fetch("/api/integrations/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "aruba", cluster: arubaCluster, token: arubaToken }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.switches) && data.switches.length > 0) {
+        setArubaSwitches(data.switches);
+        setAddedToast(`✅ ${data.switches.length} commutateur(s) Aruba synchronisé(s) !`);
+      } else {
+        setArubaSwitches([]);
+        setAddedToast("⚠️ Aucun commutateur actif détecté sur ce compte Aruba Central.");
+      }
+    } catch {
+      setArubaSwitches([]);
+      setAddedToast("❌ Erreur de liaison avec l'API Aruba Central.");
+    } finally {
+      setIsSyncingAruba(false);
+      setTimeout(() => setAddedToast(null), 3500);
+    }
   };
 
-  // Synchronisation simulée Nebula
-  const handleRefreshNebula = () => {
+  // Synchronisation Zyxel Nebula (authentique sans données factices)
+  const handleRefreshNebula = async () => {
     setIsSyncingNebula(true);
-    setTimeout(() => {
+    if (!nebulaApiKey.trim()) {
       setIsSyncingNebula(false);
-      setNebulaSwitches(MOCK_NEBULA_SWITCHES);
-      setAddedToast("🔄 Zyxel Nebula Cloud synchronisé (Organisation à jour)");
-      setTimeout(() => setAddedToast(null), 3000);
-    }, 800);
+      setNebulaSwitches([]);
+      setAddedToast("⚠️ Aucun commutateur détecté : renseignez une clé d'API Zyxel Nebula.");
+      setTimeout(() => setAddedToast(null), 3500);
+      return;
+    }
+    try {
+      const res = await fetch("/api/integrations/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "zyxel", org: nebulaOrg, apiKey: nebulaApiKey }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.switches) && data.switches.length > 0) {
+        setNebulaSwitches(data.switches);
+        setAddedToast(`✅ ${data.switches.length} commutateur(s) Zyxel Nebula synchronisé(s) !`);
+      } else {
+        setNebulaSwitches([]);
+        setAddedToast("⚠️ Aucun commutateur actif détecté sur cette organisation Nebula.");
+      }
+    } catch {
+      setNebulaSwitches([]);
+      setAddedToast("❌ Erreur de liaison avec l'API Zyxel Nebula.");
+    } finally {
+      setIsSyncingNebula(false);
+      setTimeout(() => setAddedToast(null), 3500);
+    }
   };
 
   // Scan SNMP via l'API locale
@@ -578,9 +514,8 @@ export const CloudSwitchDiscoveryModal: FC<CloudSwitchDiscoveryModalProps> = ({
                             <span>MAC: {sw.macAddress}</span>
                             <span>•</span>
                             <span>{sw.portsCount} Ports GbE</span>
-                            {sw.poeBudgetW > 0 && <span>• PoE+ {sw.poeBudgetW}W</span>}
-                            <span>•</span>
-                            <span>Firmware: {sw.firmware}</span>
+                            {(sw.poeBudgetW ?? 0) > 0 && <span>• PoE+ {sw.poeBudgetW}W</span>}
+                            {sw.firmware && <span>• Firmware: {sw.firmware}</span>}
                           </div>
                         </div>
 

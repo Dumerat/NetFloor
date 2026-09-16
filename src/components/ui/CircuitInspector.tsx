@@ -69,82 +69,7 @@ import { FloorZone } from "@/types/zones";
 import { FloorSite, DEFAULT_SITE_ID } from "@/engine/storage/planStorage";
 import { resolveEffectiveOutletNetwork } from "@/engine/spatial/networkProfiles";
 
-export const DEFAULT_RACK_DEVICES: RackDeviceItem[] = [
-  {
-    id: "dev-sw-aruba-01",
-    name: "SW-ARUBA-2930F-24G",
-    slotU: 24,
-    uSize: 1,
-    deviceType: "SWITCH",
-    brand: "ARUBA",
-    model: "Aruba 2930F 24G PoE+ 4SFP+ 370W",
-    ipAddress: "10.42.0.21",
-    macAddress: "B4:0C:25:88:1A:01",
-    status: "ONLINE",
-    portsCount: 24,
-    cloudManagedBy: "ARUBA_CENTRAL",
-  },
-  {
-    id: "dev-sw-zyxel-01",
-    name: "SW-ZYXEL-GS1920-24HP",
-    slotU: 22,
-    uSize: 1,
-    deviceType: "SWITCH",
-    brand: "ZYXEL_NEBULA",
-    model: "Zyxel GS1920-24HP NebulaFlex 24-Port GbE PoE+ 375W",
-    ipAddress: "10.42.0.22",
-    macAddress: "BC:CF:4F:91:02:44",
-    status: "ONLINE",
-    portsCount: 24,
-    cloudManagedBy: "NEBULA_CLOUD",
-  },
-  {
-    id: "dev-pp-01",
-    name: "PP-24P-CAT6A (U20)",
-    slotU: 20,
-    uSize: 1,
-    deviceType: "PATCH_PANEL",
-    brand: "GENERIC",
-    model: "Panneau de Brassage 24 Ports RJ45 STP Blindé",
-    status: "SYNCED",
-    portsCount: 24,
-  },
-  {
-    id: "dev-fw-01",
-    name: "FW-FORTIGATE-100F (U15)",
-    slotU: 15,
-    uSize: 1,
-    deviceType: "FIREWALL",
-    brand: "FORTINET",
-    model: "Fortinet FortiGate 100F Next-Gen Firewall",
-    ipAddress: "10.42.0.1",
-    macAddress: "70:4C:A5:11:22:33",
-    status: "ONLINE",
-    cloudManagedBy: "FORTICLOUD",
-  },
-  {
-    id: "dev-srv-01",
-    name: "SRV-ESXI-POWEREDGE (U10)",
-    slotU: 10,
-    uSize: 2,
-    deviceType: "SERVER",
-    brand: "GENERIC",
-    model: "Dell PowerEdge R650 VMware ESXi 8.0",
-    ipAddress: "10.42.0.50",
-    macAddress: "F8:F2:1E:44:55:66",
-    status: "ONLINE",
-  },
-  {
-    id: "dev-pdu-01",
-    name: "PDU-APC-16A (U01)",
-    slotU: 1,
-    uSize: 1,
-    deviceType: "PDU",
-    brand: "GENERIC",
-    model: "Bandeau PDU Ondulé 16A Secouru",
-    status: "ONLINE",
-  },
-];
+export const DEFAULT_RACK_DEVICES: RackDeviceItem[] = [];
 
 export interface InternalRackPatch {
   id: string;
@@ -5087,7 +5012,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   const isStacked = Boolean(outlet.stackedPorts && outlet.stackedPorts.length > 0);
                   const vColor =
                     vlanStyles?.[outlet.vlanId ?? 20]?.color ??
-                    DEFAULT_VLAN_STYLES[outlet.vlanId ?? 20]?.color ??
+                    DEFAULT_VLAN_STYLES[outlet.vlanId ?? 0]?.color ??
                     "#38bdf8";
 
                   return (

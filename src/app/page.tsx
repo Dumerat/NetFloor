@@ -1598,7 +1598,7 @@ export default function NetFloorApp() {
     const isCustom = Boolean(item.isCustomProfile);
     const isGenericPort = item.subType === "GENERIC_PORT";
     const portCount = item.portCount ?? 1;
-    const assignedVlan = item.vlanId ?? (item.outletRole === "VOIP" ? 30 : 20);
+    const assignedVlan = item.vlanId ?? (item.outletRole === "VOIP" ? 30 : undefined);
 
     const computeName = () => {
       if (isCustom) {
