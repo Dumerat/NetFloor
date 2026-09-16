@@ -44,7 +44,7 @@ if ($BashExe) {
 } else {
     # Repli natif si aucun Bash n'est trouve
     Write-Host "NetFloor Architect (Repli PowerShell direct - Bash non detecte)" -ForegroundColor Cyan
-    $action = if ($ScriptArgs.Count -gt 0) { $ScriptArgs[0] } else { "dev" }
+    $action = if ($ScriptArgs.Count -gt 0) { $ScriptArgs[0] } else { "docker" }
     
     switch ($action) {
         "dev" { pnpm dev }

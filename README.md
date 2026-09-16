@@ -160,7 +160,7 @@ pnpm test
 ```text
 NetFloor/
 ├── src/
-│   ├── app/                      # Next.js App Router (page.tsx, layout, API routes)
+│   ├── app/                      # Next.js App Router (page.tsx, layout, routes /api/*)
 │   ├── components/
 │   │   ├── canvas/               # Rendu Konva (FloorCanvas, EquipmentLayer, CableLayer, ZoneLayer...)
 │   │   └── ui/                   # Panneaux (EquipmentPalette, CircuitInspector, InventoryPanel...)
@@ -170,6 +170,9 @@ NetFloor/
 │   │   ├── ingestion/            # Moteur d'import et audit matriciel CSV
 │   │   └── storage/              # Persistance locale (IndexedDB / Zustand)
 │   └── data/                     # Annuaire collaborateurs, VLANs et équipements initiaux
+├── docs/                         # Documentation technique, passation IA & guides de déploiement
+│   ├── ANTIGRAVITY_HANDOVER.md   # Dossier d'architecture complet pour l'agent Antigravity
+│   └── DEPLOYMENT_PRODUCTION.md  # Guide de mise en production haute disponibilité
 ├── drizzle/                      # Migrations SQL versionnées (DDL)
 ├── docker/                       # Configurations Caddy, MinIO et conteneurs
 ├── Dockerfile                    # Image multi-stage de l'application (Next.js standalone)
@@ -177,7 +180,7 @@ NetFloor/
 ├── run.sh                        # Script d'exécution unifié (Linux / macOS / Git Bash)
 ├── run.ps1                       # Script d'exécution unifié (Windows PowerShell)
 ├── Makefile                      # Raccourcis de commandes pour développeurs
-└── ANTIGRAVITY_HANDOVER.md       # Dossier technique complet pour passation machine / IA
+└── README.md                     # Documentation générale d'accueil et prise en main
 ```
 
 ---

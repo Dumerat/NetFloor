@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetFloor Architect — Visualiseur & Banc d'Essai 2D</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { margin: 0; overflow: hidden; user-select: none; }
+    canvas { touch-action: none; }
+    .glass {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .pulse-glow {
+      box-shadow: 0 0 25px rgba(59, 130, 246, 0.6);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col font-sans">
+
+  <!-- Header / Navigation Bar -->
+  <header class="h-14 border-b border-slate-800 px-5 flex items-center justify-between glass z-20">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30">
+        NF
+      </div>
+      <div>
+        <h1 class="text-sm font-semibold tracking-wide text-white flex items-center gap-2">
+          NetFloor Architect
+          <span class="text-[10px] uppercase tracking-wider bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded border border-blue-500/30 font-mono">Banc d'Essai 2D</span>
+        </h1>
+        <p class="text-xs text-slate-400">Étage 4 - Plateau Open Space (60m x 35m) • 800+ Collaborateurs</p>
+      </div>
+    </div>
+
+    <!-- Actions & Stats -->
+    <div class="flex items-center gap-4 text-xs font-mono">
+      <div class="bg-slate-900 border border-slate-800 rounded px-3 py-1.5 flex items-center gap-3">
+        <span class="text-slate-400">Échelle: <span id="scaleDisplay" class="text-blue-400 font-semibold">1m = 30px</span></span>
+        <span class="text-slate-600">|</span>
+        <span class="text-slate-400">Curseur Monde: <span id="worldCoords" class="text-emerald-400">X: 0mm, Y: 0mm</span></span>
+      </div>
+
+      <button id="btnTrace" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded shadow-lg shadow-blue-600/30 flex items-center gap-2 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Lancer Traçage CTE Récursif
+      </button>
+
+      <button id="btnFit" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 transition">
+        Cadrer Étage
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="flex-1 relative overflow-hidden flex">
+    
+    <!-- Canvas Area -->
+    <canvas id="viewportCanvas" class="flex-1 w-full h-full cursor-grab active:cursor-grabbing"></canvas>
+
+    <!-- Floating Top-Left Controls: Snapping & Grid -->
+    <div class="absolute top-4 left-4 glass rounded-xl p-3.5 flex flex-col gap-2.5 text-xs shadow-2xl z-10 w-64">
+      <div class="font-semibold text-slate-200 border-b border-slate-800 pb-2 flex justify-between items-center">
+        <span>Contrôles Moteur Spatial</span>
+        <span class="text-[10px] text-blue-400 font-mono">Pilier 2</span>
+      </div>
+      <label class="flex items-center justify-between cursor-pointer">
+        <span class="text-slate-300">Magnétisme Grille (500mm)</span>
+        <input type="checkbox" id="checkSnap" checked class="rounded border-slate-700 text-blue-600 focus:ring-0">
+      </label>
+      <label class="flex items-center justify-between cursor-pointer">
+        <span class="text-slate-300">Afficher Câblage Faux-Plafond</span>
+        <input type="checkbox" id="checkCables" checked class="rounded border-slate-700 text-blue-600 focus:ring-0">
+      </label>
+      <div class="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+        💡 <kbd class="px-1 py-0.5 bg-slate-800 rounded font-mono">Molette</kbd> : Zoom invariant au curseur<br>
+        💡 <kbd class="px-1 py-0.5 bg-slate-800 rounded font-mono">Clic G / Drag</kbd> : Déplacement (Pan)
+      </div>
+    </div>
+
+    <!-- Floating Right Inspector: CTE Trace Results (Pillar 1 & 3) -->
+    <div id="inspectorPanel" class="absolute top-4 right-4 bottom-4 w-96 glass rounded-xl p-4 flex flex-col shadow-2xl z-10">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-100 flex items-center gap-2">
+            Inspecteur de Traçage CTE
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          </h2>
+          <p class="text-[11px] text-slate-400">Résultat de la requête SQL récursive en temps réel</p>
+        </div>
+      </div>
+
+      <!-- Circuit Info Summary Card -->
+      <div id="traceSummary" class="my-3 p-3 rounded-lg bg-slate-900/90 border border-slate-800 text-xs flex flex-col gap-1.5 font-mono">
+        <div class="flex justify-between">
+          <span class="text-slate-400">Statut :</span>
+          <span id="traceStatus" class="text-emerald-400 font-semibold">CIRCUIT COMPLET ACTIF</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">Longueur totale :</span>
+          <span id="traceLength" class="text-blue-400 font-semibold">45.70 m (45 700 mm)</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">VLAN Actif :</span>
+          <span id="traceVlan" class="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30">VID 20 - VLAN_CORP_DATA</span>
+        </div>
+      </div>
+
+      <!-- Hop Steps List -->
+      <div class="text-xs font-semibold text-slate-300 mb-2 flex justify-between items-center">
+        <span>Sauts du Graphe (4 étapes)</span>
+        <span class="text-[10px] text-slate-500 font-mono">CYCLE PROTÉGÉ</span>
+      </div>
+
+      <div id="hopsContainer" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+        <!-- Hop 0 -->
+        <div class="p-2.5 rounded bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 transition">
+          <div class="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span class="text-amber-400 font-semibold">[Hop 0] ORIGIN</span>
+            <span>Bureau Tech Lead</span>
+          </div>
+          <div class="font-medium text-slate-200">PRISE-DESK-408-A</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">Port RJ45-1 (Faceplate Plastron 2xRJ45)</div>
+        </div>
+
+        <!-- Hop 1 -->
+        <div class="p-2.5 rounded bg-slate-900/60 border border-blue-900/50 hover:border-blue-700 transition">
+          <div class="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span class="text-blue-400 font-semibold">[Hop 1] CÂBLE HORIZONTAL</span>
+            <span>44.20 m (Cat6A)</span>
+          </div>
+          <div class="font-medium text-slate-200">PP-24P-CAT6A-U24</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">Arrivée Bornier Arrière Punchdown [PORT-08 (REAR)]</div>
+        </div>
+
+        <!-- Hop 2 -->
+        <div class="p-2.5 rounded bg-slate-900/60 border border-purple-900/50 hover:border-purple-700 transition">
+          <div class="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span class="text-purple-400 font-semibold">[Hop 2] CONTINUITÉ INTERNE</span>
+            <span>Pass-through</span>
+          </div>
+          <div class="font-medium text-slate-200">Bandeau de Brassage (U24)</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">Traversée matérielle : PORT-08 REAR ➜ PORT-08 FRONT RJ45</div>
+        </div>
+
+        <!-- Hop 3 -->
+        <div class="p-2.5 rounded bg-slate-900/60 border border-emerald-900/50 hover:border-emerald-700 transition">
+          <div class="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span class="text-emerald-400 font-semibold">[Hop 3] CORDON DE BRASSAGE</span>
+            <span>1.50 m (Jaune)</span>
+          </div>
+          <div class="font-medium text-slate-200">SW-ACCESS-4A-U22 (Cisco C9300)</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">Port GigabitEthernet1/0/8 • <span class="text-blue-400 font-mono">Access VLAN 20</span></div>
+        </div>
+      </div>
+
+      <div class="mt-3 pt-2.5 border-t border-slate-800 text-[11px] text-slate-500 font-mono text-center">
+        NetFloor Architect Core • Production Ready
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configuration du Monde Spatial (Coordonnées Réelles en Millimètres)
+    const FLOOR = {
+      widthMm: 60000, // 60 mètres
+      heightMm: 35000 // 35 mètres
+    };
+
+    // Équipements réels positionnés en millimètres
+    const NODES = {
+      rack: {
+        id: "rack-1",
+        name: "BAIE-LT4A-01",
+        x: 8500,
+        y: 6500,
+        width: 800,  // 800mm de profondeur
+        height: 600, // 600mm de large standard 19"
+        color: "#1e293b",
+        borderColor: "#3b82f6"
+      },
+      desk: {
+        id: "desk-408",
+        name: "Bureau 408 (Tech Lead)",
+        x: 42000,
+        y: 18000,
+        width: 1600,
+        height: 800,
+        color: "#0f172a",
+        borderColor: "#475569"
+      },
+      wallOutlet: {
+        id: "outlet-408-a",
+        name: "PRISE-DESK-408-A",
+        x: 43600,
+        y: 18400,
+        width: 120,
+        height: 120,
+        color: "#2563eb",
+        borderColor: "#60a5fa"
+      }
+    };
+
+    // Viewport State (Caméra en Pixels)
+    const viewport = {
+      panX: 80,
+      panY: 80,
+      scale: 0.025, // 1m = 25px
+      minScale: 0.005,
+      maxScale: 1.0
+    };
+
+    let isPanning = false;
+    let startPointer = { x: 0, y: 0 };
+    let startPan = { x: 0, y: 0 };
+    let traceAnimationProgress = 1.0;
+    let isTracing = false;
+
+    const canvas = document.getElementById("viewportCanvas");
+    const ctx = canvas.getContext("2d");
+    const scaleDisplay = document.getElementById("scaleDisplay");
+    const worldCoords = document.getElementById("worldCoords");
+    const btnFit = document.getElementById("btnFit");
+    const btnTrace = document.getElementById("btnTrace");
+    const checkSnap = document.getElementById("checkSnap");
+    const checkCables = document.getElementById("checkCables");
+
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+      render();
+    }
+    window.addEventListener("resize", resizeCanvas);
+
+    // Transformations Pures Screen <-> World
+    function screenToWorld(sx, sy) {
+      return {
+        x: (sx - viewport.panX) / viewport.scale,
+        y: (sy - viewport.panY) / viewport.scale
+      };
+    }
+
+    function worldToScreen(wx, wy) {
+      return {
+        x: wx * viewport.scale + viewport.panX,
+        y: wy * viewport.scale + viewport.panY
+      };
+    }
+
+    // Zoom Invariant au Curseur (Zoom-To-Pointer)
+    function zoomAt(screenX, screenY, scaleFactor) {
+      const newScale = Math.min(Math.max(viewport.scale * scaleFactor, viewport.minScale), viewport.maxScale);
+      if (newScale === viewport.scale) return;
+
+      const ratio = newScale / viewport.scale;
+      viewport.panX = screenX - (screenX - viewport.panX) * ratio;
+      viewport.panY = screenY - (screenY - viewport.panY) * ratio;
+      viewport.scale = newScale;
+
+      updateScaleDisplay();
+      render();
+    }
+
+    function fitFloor() {
+      const padding = 80;
+      const scaleX = (canvas.width - padding * 2) / FLOOR.widthMm;
+      const scaleY = (canvas.height - padding * 2) / FLOOR.heightMm;
+      viewport.scale = Math.min(scaleX, scaleY);
+      viewport.panX = canvas.width / 2 - (FLOOR.widthMm / 2) * viewport.scale;
+      viewport.panY = canvas.height / 2 - (FLOOR.heightMm / 2) * viewport.scale;
+      updateScaleDisplay();
+      render();
+    }
+
+    function updateScaleDisplay() {
+      const pixelsPerMeter = (1000 * viewport.scale).toFixed(1);
+      scaleDisplay.textContent = `1m = ${pixelsPerMeter}px`;
+    }
+
+    // Rendu Canvas
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 1. Fond et Grille Métrique (500mm / 5000mm)
+      drawFloorAndGrid();
+
+      // 2. Câblage Physique (Horizontal Run & Patch Cord)
+      if (checkCables.checked) {
+        drawCables();
+      }
+
+      // 3. Équipements (Baie, Bureau, Prise Murale)
+      drawEquipment();
+    }
+
+    function drawFloorAndGrid() {
+      const origin = worldToScreen(0, 0);
+      const floorW = FLOOR.widthMm * viewport.scale;
+      const floorH = FLOOR.heightMm * viewport.scale;
+
+      // Fond de l'étage
+      ctx.fillStyle = "#090d16";
+      ctx.fillRect(origin.x, origin.y, floorW, floorH);
+
+      // Bordure de l'étage
+      ctx.strokeStyle = "#1e293b";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(origin.x, origin.y, floorW, floorH);
+
+      // Grille Métrique
+      const stepMm = 2000; // Pas de grille visuel principal : 2 mètres
+      ctx.strokeStyle = "rgba(30, 41, 59, 0.4)";
+      ctx.lineWidth = 1;
+
+      ctx.beginPath();
+      for (let x = 0; x <= FLOOR.widthMm; x += stepMm) {
+        const p1 = worldToScreen(x, 0);
+        const p2 = worldToScreen(x, FLOOR.heightMm);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      for (let y = 0; y <= FLOOR.heightMm; y += stepMm) {
+        const p1 = worldToScreen(0, y);
+        const p2 = worldToScreen(FLOOR.widthMm, y);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+      }
+      ctx.stroke();
+
+      // Repères de dimensions
+      ctx.fillStyle = "#64748b";
+      ctx.font = "11px monospace";
+      ctx.fillText("0,0", origin.x + 8, origin.y + 18);
+      ctx.fillText(`60.0m x 35.0m`, origin.x + floorW - 110, origin.y + floorH - 12);
+    }
+
+    function drawEquipment() {
+      // 1. Bureau Tech Lead
+      const deskS = worldToScreen(NODES.desk.x, NODES.desk.y);
+      const deskW = NODES.desk.width * viewport.scale;
+      const deskH = NODES.desk.height * viewport.scale;
+
+      ctx.fillStyle = NODES.desk.color;
+      ctx.strokeStyle = NODES.desk.borderColor;
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(deskS.x, deskS.y, deskW, deskH);
+      ctx.strokeRect(deskS.x, deskS.y, deskW, deskH);
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.fillText(NODES.desk.name, deskS.x + 8, deskS.y + deskH / 2);
+
+      // 2. Prise Murale (Wall Outlet)
+      const outletS = worldToScreen(NODES.wallOutlet.x, NODES.wallOutlet.y);
+      const outletW = Math.max(NODES.wallOutlet.width * viewport.scale, 16);
+      const outletH = Math.max(NODES.wallOutlet.height * viewport.scale, 16);
+
+      ctx.fillStyle = NODES.wallOutlet.color;
+      ctx.strokeStyle = NODES.wallOutlet.borderColor;
+      ctx.lineWidth = 2;
+      ctx.fillRect(outletS.x - outletW / 2, outletS.y - outletH / 2, outletW, outletH);
+      ctx.strokeRect(outletS.x - outletW / 2, outletS.y - outletH / 2, outletW, outletH);
+
+      // Label Prise
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "11px monospace";
+      ctx.fillText(NODES.wallOutlet.name, outletS.x + outletW, outletS.y + 4);
+
+      // 3. Baie RACK-01
+      const rackS = worldToScreen(NODES.rack.x, NODES.rack.y);
+      const rackW = NODES.rack.width * viewport.scale;
+      const rackH = NODES.rack.height * viewport.scale;
+
+      ctx.fillStyle = NODES.rack.color;
+      ctx.strokeStyle = NODES.rack.borderColor;
+      ctx.lineWidth = 2;
+      ctx.fillRect(rackS.x, rackS.y, rackW, rackH);
+      ctx.strokeRect(rackS.x, rackS.y, rackW, rackH);
+
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 11px monospace";
+      ctx.fillText(NODES.rack.name + " (42U)", rackS.x + 8, rackS.y + 20);
+
+      // Représentation interne en baie : Patch Panel (U24) & Switch (U22)
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(rackS.x + 6, rackS.y + 30, rackW - 12, 14);
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "9px monospace";
+      ctx.fillText("U24: PP-24P-CAT6A", rackS.x + 10, rackS.y + 41);
+
+      ctx.fillStyle = "#1e3a8a";
+      ctx.fillRect(rackS.x + 6, rackS.y + 50, rackW - 12, 14);
+      ctx.fillStyle = "#93c5fd";
+      ctx.fillText("U22: CISCO C9300", rackS.x + 10, rackS.y + 61);
+    }
+
+    function drawCables() {
+      const outletS = worldToScreen(NODES.wallOutlet.x, NODES.wallOutlet.y);
+      const rackS = worldToScreen(NODES.rack.x + 50, NODES.rack.y + 37);
+
+      // Câble Horizontal (Bleu) passant en faux-plafond avec routage à angle droit
+      const corner1 = worldToScreen(NODES.wallOutlet.x, 10000);
+      const corner2 = worldToScreen(NODES.rack.x + 50, 10000);
+
+      ctx.strokeStyle = "rgba(59, 130, 246, 0.7)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(outletS.x, outletS.y);
+      ctx.lineTo(corner1.x, corner1.y);
+      ctx.lineTo(corner2.x, corner2.y);
+      ctx.lineTo(rackS.x, rackS.y);
+      ctx.stroke();
+
+      // Cordon de brassage en baie (U24 -> U22, Jaune)
+      const patchStart = worldToScreen(NODES.rack.x + 20, NODES.rack.y + 37);
+      const patchEnd = worldToScreen(NODES.rack.x + 20, NODES.rack.y + 57);
+
+      ctx.strokeStyle = "#eab308";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(patchStart.x, patchStart.y);
+      ctx.bezierCurveTo(patchStart.x - 30, patchStart.y, patchEnd.x - 30, patchEnd.y, patchEnd.x, patchEnd.y);
+      ctx.stroke();
+
+      // Animation lumineuse de l'impulsion de traçage si active
+      if (isTracing) {
+        drawTracePulse(outletS, corner1, corner2, rackS);
+      }
+    }
+
+    function drawTracePulse(p0, p1, p2, p3) {
+      const t = traceAnimationProgress;
+      // Interpolation simple sur segments
+      let cur = p0;
+      if (t < 0.33) {
+        const u = t / 0.33;
+        cur = { x: p0.x + (p1.x - p0.x) * u, y: p0.y + (p1.y - p0.y) * u };
+      } else if (t < 0.66) {
+        const u = (t - 0.33) / 0.33;
+        cur = { x: p1.x + (p2.x - p1.x) * u, y: p1.y + (p2.y - p1.y) * u };
+      } else {
+        const u = (t - 0.66) / 0.34;
+        cur = { x: p2.x + (p3.x - p2.x) * u, y: p2.y + (p3.y - p2.y) * u };
+      }
+
+      ctx.fillStyle = "#60a5fa";
+      ctx.shadowColor = "#3b82f6";
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.arc(cur.x, cur.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // Gestion de la Souris & Pan/Zoom
+    canvas.addEventListener("pointerdown", (e) => {
+      isPanning = true;
+      startPointer = { x: e.clientX, y: e.clientY };
+      startPan = { x: viewport.panX, y: viewport.panY };
+    });
+
+    window.addEventListener("pointermove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const world = screenToWorld(sx, sy);
+      worldCoords.textContent = `X: ${Math.round(world.x)}mm, Y: ${Math.round(world.y)}mm`;
+
+      if (isPanning) {
+        viewport.panX = startPan.x + (e.clientX - startPointer.x);
+        viewport.panY = startPan.y + (e.clientY - startPointer.y);
+        render();
+      }
+    });
+
+    window.addEventListener("pointerup", () => {
+      isPanning = false;
+    });
+
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.15 : 0.85;
+      zoomAt(sx, sy, factor);
+    }, { passive: false });
+
+    btnFit.addEventListener("click", fitFloor);
+
+    // Animation du Traçage CTE
+    btnTrace.addEventListener("click", () => {
+      isTracing = true;
+      traceAnimationProgress = 0;
+      const startTime = performance.now();
+      const duration = 1800; // 1.8s
+
+      function animate(now) {
+        const elapsed = now - startTime;
+        traceAnimationProgress = Math.min(elapsed / duration, 1.0);
+        render();
+        if (traceAnimationProgress < 1.0) {
+          requestAnimationFrame(animate);
+        } else {
+          isTracing = false;
+          render();
+        }
+      }
+      requestAnimationFrame(animate);
+    });
+
+    // Initialisation
+    resizeCanvas();
+    fitFloor();
+  </script>
+</body>
+</html>

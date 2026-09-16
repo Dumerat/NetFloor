@@ -725,3 +725,5 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     </div>
   );
 };
+
+export default FloorCanvas;

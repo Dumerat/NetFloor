@@ -78,7 +78,7 @@ import { VlanStyleCustomizer } from "@/components/ui/VlanStyleCustomizer";
 
 // Chargement dynamique du canvas Konva sans SSR
 const DynamicFloorCanvas = dynamic(
-  () => import("@/components/canvas/FloorCanvas").then((mod) => mod.FloorCanvas),
+  () => import("@/components/canvas/FloorCanvas"),
   {
     ssr: false,
     loading: () => (

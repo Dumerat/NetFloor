@@ -15,7 +15,7 @@ const connectionString =
 
 export type Database = PostgresJsDatabase<typeof schema> | PgliteDatabase<typeof schema>;
 
-function checkTcpPort(host: string, port: number, timeoutMs = 250): Promise<boolean> {
+function checkTcpPort(host: string, port: number, timeoutMs = 2000): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(timeoutMs);
@@ -93,6 +93,10 @@ export async function getDb(): Promise<Database> {
       for (const stmt of statements) {
         await pgliteClient.exec(stmt).catch(() => {});
       }
+      // Migration défensive pour garantir la présence des colonnes metadata
+      await pgliteClient.exec("ALTER TABLE floors ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;").catch(() => {});
+      await pgliteClient.exec("ALTER TABLE racks ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;").catch(() => {});
+      await pgliteClient.exec("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;").catch(() => {});
     }
 
     activeDb = drizzlePglite(pgliteClient, { schema });

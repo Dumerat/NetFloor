@@ -19,7 +19,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
 # Valeurs par défaut
-COMMAND="dev"
+COMMAND="docker"
 PORT="3000"
 HOST="0.0.0.0"
 ENV_FILE=""
