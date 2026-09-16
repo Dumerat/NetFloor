@@ -8,10 +8,43 @@
 ![Next.js 16](https://img.shields.io/badge/Next.js-16.3.4-black?style=flat-square&logo=next.js)
 ![React 19](https://img.shields.io/badge/React-19.2.8-blue?style=flat-square&logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9_Strict-blue?style=flat-square&logo=typescript)
+![Docker](https://img.shields.io/badge/Docker-100%25_Conteneuris%C3%A9-2496ED?style=flat-square&logo=docker)
 ![Konva Canvas](https://img.shields.io/badge/Canvas-Konva_60FPS-0D9488?style=flat-square)
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16_CTE-336791?style=flat-square&logo=postgresql)
-![Drizzle ORM](https://img.shields.io/badge/ORM-Drizzle_0.45-C5F74F?style=flat-square)
-![Vitest](https://img.shields.io/badge/Tests-66_Passés-729B1B?style=flat-square&logo=vitest)
+![Vitest](https://img.shields.io/badge/Tests-66_Pass%C3%A9s-729B1B?style=flat-square&logo=vitest)
+
+---
+
+## ⚡ Lancement Immédiat (100% Conteneurisé — ZÉRO Prérequis)
+
+Si votre objectif est **uniquement de lancer et tester le projet entier**, vous n'avez besoin **ni de Node.js, ni de pnpm, ni de Git** sur votre machine.
+
+### **Seul Docker Desktop est requis !**
+
+```bash
+# 1. Lancez la stack complète conteneurisée (Base PostgreSQL 16 + Migrations DDL + Application Next.js) :
+docker compose up
+
+# 2. Ouvrez votre navigateur sur :
+# http://localhost:3000
+```
+
+> **Que se passe-t-il automatiquement en coulisse ?**
+> 1. Docker démarre le conteneur `netfloor-postgres` (PostgreSQL 16).
+> 2. Le script SQL initial `drizzle/0000_conscious_naoko.sql` est automatiquement exécuté au premier démarrage via `/docker-entrypoint-initdb.d/` pour initialiser le schéma.
+> 3. Dès que la base est saine (`pg_isready`), le conteneur `netfloor-app` démarre le serveur web Next.js standalone.
+> 4. L'application est prête et accessible sur le port 3000.
+
+---
+
+## 🛠️ Deux Façons de Lancer le Projet
+
+Selon votre besoin, choisissez le mode approprié :
+
+| Mode | Prérequis Machine | Commande | Idéal pour |
+|---|---|---|---|
+| **🐳 Mode 1 : 100% Conteneurisé** | **Docker uniquement** | `docker compose up`<br>*(ou `./run.sh docker up` / `.un.ps1 docker`)* | Démonstration, test rapide, déploiement sans rien installer d'autre. |
+| **💻 Mode 2 : Développement Local** | Node.js `>= 20`, pnpm `>= 9` | `./run.sh dev`<br>*(ou `.un.ps1 dev` / `pnpm dev`)* | Développement actif, édition du code avec rechargement à chaud (Hot-Reload), tests Vitest. |
 
 ---
 
@@ -32,128 +65,72 @@
 
 ---
 
-## 📋 Prérequis
+## 💻 Mode 2 : Développement Local (Hot-Reload)
 
-Avant de lancer le projet, assurez-vous d'avoir installé sur votre machine :
+Si vous souhaitez modifier le code source et bénéficier du rechargement à chaud :
 
-| Outil | Version Minimale | Remarque |
-|---|---|---|
-| **Node.js** | `>= 20.x` *(recommandé 22+)* | Exécution Next.js et scripts TypeScript |
-| **pnpm** | `>= 9.x` *(recommandé 9.15.5)* | Gestionnaire de paquets ultra-rapide |
-| **Git** | Dernière version | Versioning du code (fournit aussi Git Bash sous Windows) |
-| **Docker & Docker Compose** | Optionnel | Requis pour lancer PostgreSQL localement sous Docker |
+### 1. Prérequis Développeur
+- **Node.js** `>= 20.x` *(recommandé 22+)*
+- **pnpm** `>= 9.x` *(installation : `corepack enable pnpm` ou `npm i -g pnpm@9`)*
+- **Docker** *(facultatif : si absent, le projet bascule automatiquement sur la base embarquée PGlite)*
 
-> 💡 **Installation de pnpm** si non présent :
-> ```bash
-> corepack enable pnpm
-> # ou
-> npm install -g pnpm@9
-> ```
-
----
-
-## 🚀 Démarrage Rapide
-
-### 1. Cloner le dépôt
-
-```bash
-git clone https://github.com/Dumerat/NetFloor.git
-cd NetFloor
-```
-
-### 2. Installer les dépendances
-
+### 2. Installation des Dépendances
 ```bash
 pnpm install
-```
-
-### 3. Configurer l'environnement
-
-Un fichier `.env` est déjà fourni par défaut. Vous pouvez le dupliquer depuis `.env.example` si nécessaire :
-
-```bash
 cp .env.example .env
 ```
 
-Contenu par défaut de `.env` :
-```env
-DATABASE_URL=postgres://postgres:postgrespassword@localhost:5432/netfloor
-NODE_ENV=development
-```
-
----
-
-## 🎛️ Lancement Entier via le Script Unique
-
-NetFloor Architect dispose d'un **script unifié d'orchestration** qui prend en charge l'intégralité du cycle de vie du projet :
-- Démarrage automatique de PostgreSQL sous Docker (si disponible).
-- Attente active de disponibilité de la base (`pg_isready`).
-- Application automatique de la migration DDL (`drizzle/0000_conscious_naoko.sql`) si la base est vierge.
-- Injection optionnelle du jeu de données de référence (`--seed`).
-- Repli transparent en mode autonome si Docker n'est pas actif.
-- Lancement du serveur Next.js avec ouverture facultative du navigateur (`--open`).
-
-### Exécution du script selon votre système d'exploitation :
+### 3. Lancement du Serveur de Développement
+Le script unifié gère tout (démarrage automatique de PostgreSQL, migrations DDL et lancement de Next.js) :
 
 #### 🐧 Linux / macOS / Git Bash :
 ```bash
 ./run.sh dev
-# ou simplement :
-./run.sh
+# Avec injection du carnet d'exemple et ouverture automatique du navigateur :
+./run.sh dev --seed --open
 ```
 
 #### 🪟 Windows (PowerShell) :
 ```powershell
 .un.ps1 dev
-# ou simplement :
-.un.ps1
-```
-
-#### ⚡ Via Makefile (Linux/macOS) :
-```bash
-make dev
+# Avec options :
+.un.ps1 dev -Seed -Open
 ```
 
 ---
 
-## 📖 Commandes Disponibles via le Script
-
-Le script unique (`run.sh` / `run.ps1`) expose l'ensemble des commandes d'administration :
+## 📖 Commandes Disponibles via le Script (`run.sh` / `run.ps1`)
 
 | Commande | Exemple Linux / Mac | Exemple Windows PowerShell | Description |
 |---|---|---|---|
-| **dev** | `./run.sh dev` | `.un.ps1 dev` | Lance PostgreSQL (Docker) + migrations + Next.js en développement |
-| **dev avec seed** | `./run.sh dev --seed` | `.un.ps1 dev -Seed` | Lance le projet avec injection du carnet de câblage d'exemple |
-| **dev sur autre port** | `./run.sh dev -p 8080 -o` | `.un.ps1 dev -p 8080 -o` | Lance sur le port 8080 et ouvre automatiquement le navigateur |
+| **docker up** | `./run.sh docker up` | `.un.ps1 docker` | Lance l'intégralité de la stack en conteneurs Docker (Postgres + App) |
+| **dev** | `./run.sh dev` | `.un.ps1 dev` | Mode dev local : Postgres Docker + Next.js hot-reload |
+| **dev avec seed** | `./run.sh dev --seed` | `.un.ps1 dev -Seed` | Lance le projet avec injection du carnet d'exemple en base |
 | **start** | `./run.sh start` | `.un.ps1 start` | Démarre l'application compilée de production hors Docker |
-| **build** | `./run.sh build` | `.un.ps1 build` | Validation stricte des types TypeScript + compilation Next.js |
-| **type-check** | `./run.sh type-check` | `.un.ps1 type-check` | Exécute `tsc --noEmit` sans erreur |
+| **build** | `./run.sh build` | `.un.ps1 build` | Contrôle TypeScript (`tsc --noEmit`) + compilation Next.js |
+| **type-check** | `./run.sh type-check` | `.un.ps1 type-check` | Validation stricte des types TypeScript |
 | **lint** | `./run.sh lint` | `.un.ps1 lint` | Analyse statique du code source avec ESLint |
-| **format** | `./run.sh format` | `.un.ps1 format` | Applique le formatage automatique Prettier |
+| **format** | `./run.sh format` | `.un.ps1 format` | Formatage automatique avec Prettier |
 | **test:spatial** | `./run.sh test --test-type spatial` | `.un.ps1 test -TestType spatial` | Exécute les 16 bancs d'essais géométriques 2D |
 | **test:ingestion**| `./run.sh test --test-type ingestion`| `.un.ps1 test -TestType ingestion`| Teste l'audit et l'import de 800+ liaisons |
 | **test:pglite** | `./run.sh test --test-type pglite` | `.un.ps1 test -TestType pglite` | Valide la CTE récursive sur PostgreSQL WASM |
-| **test (tous)** | `./run.sh test` | `.un.ps1 test` | Exécute tous les bancs d'essais et la suite Vitest |
+| **test (tous)** | `./run.sh test` | `.un.ps1 test` | Exécute tous les bancs d'essais et la suite Vitest (66 tests) |
 | **ci** | `./run.sh ci` | `.un.ps1 ci` | Simule en local le pipeline CI complet (format, lint, tsc, tests, audit) |
 | **db seed** | `./run.sh db --db-action seed` | `.un.ps1 db -DbAction seed` | Injecte la topologie d'entreprise de référence |
 | **db reset** | `./run.sh db --db-action reset` | `.un.ps1 db -DbAction reset` | Réinitialise et recrée le schéma PostgreSQL |
-| **db migrate** | `./run.sh db --db-action migrate` | `.un.ps1 db -DbAction migrate` | Applique les migrations Drizzle |
-| **docker up** | `./run.sh docker up` | `.un.ps1 docker` | Démarre le conteneur PostgreSQL seul |
-| **prod** | `./run.sh prod up --build` | `.un.ps1 prod` | Déploie la stack complète de production (Caddy, App, Postgres, MinIO) |
 | **clean** | `./run.sh clean` | `.un.ps1 clean` | Supprime `.next`, `dist`, `coverage` et artéfacts de compilation |
 
 ---
 
 ## 🧪 Bancs d'Essais & Validation Qualité
 
-Le projet intègre une suite complète de tests unitaires, spatiaux et relationnels :
+Le projet intègre une suite de 66 tests automatisés :
 
 ```bash
-# Lancement de l'intégralité des 66 tests :
+# Lancement de l'intégralité des tests :
 pnpm test
-
-# Ou via le script unifié :
-./run.sh test --test-type all
+# ou :
+./run.sh test
 ```
 
 ### Détail des bancs d'essais :
@@ -167,7 +144,7 @@ pnpm test
    - Dézoom macro 0.0002 certifié jusqu'à 5 km de campus multi-bâtiments.
 2. **Ingestion & Intégrité (`test:ingestion`)** :
    - Détection de 5 types d'anomalies (doublons de ports, conflits de VLAN, dépassement de VID).
-   - Génération et validation d'un carnet de 800 liaisons d'entreprise en <75 ms.
+   - Validation d'un carnet de 800 liaisons d'entreprise en <75 ms.
    - Insertion transactionnelle atomique dans PostgreSQL.
 3. **Moteur SQL / CTE Récursive (`test:pglite`)** :
    - Exécution de la CTE récursive de traçage bout en bout sur moteur PostgreSQL 16 WASM.
@@ -180,51 +157,25 @@ pnpm test
 ```text
 NetFloor/
 ├── src/
-│   ├── app/                      # Next.js App Router
-│   │   ├── page.tsx              # Page principale & orchestrateur d'état de l'application
-│   │   ├── layout.tsx            # Layout racine & polices
-│   │   └── api/                  # Endpoints REST (traçage, topologie, ingestion, SNMP)
+│   ├── app/                      # Next.js App Router (page.tsx, layout, API routes)
 │   ├── components/
-│   │   ├── canvas/               # Rendu Canvas interactif (React-Konva)
-│   │   │   ├── FloorCanvas.tsx   # Conteneur Stage & gestionnaire de caméra
-│   │   │   ├── EquipmentLayer.tsx# Baies, bureaux, prises RJ45, téléphones, imprimantes
-│   │   │   ├── CableLayer.tsx    # Câblage orthogonal, faisceaux & poignées de pivot
-│   │   │   ├── ZoneLayer.tsx     # Zones délimitées & cartouches de service
-│   │   │   └── GridLayer.tsx     # Grille métrique vectorielle 60 FPS
-│   │   └── ui/                   # Panneaux de contrôle & inspecteurs
-│   │       ├── EquipmentPalette.tsx # Palette de composants glisser-déposer
-│   │       ├── CircuitInspector.tsx # Fiche technique de l'équipement ou de la zone
-│   │       ├── InventoryPanel.tsx   # Inventaire des ports, utilisateurs et relais
-│   │       └── PlanDimensionsModal.tsx # Réglage métrique du plan et des zones
-│   ├── db/                       # Base de données PostgreSQL & Drizzle ORM
-│   │   ├── schema.ts             # Schéma relationnel (floors, racks, nodes, ports, cables...)
-│   │   ├── seed.ts               # Données de référence entreprise
-│   │   └── index.ts              # Client DB avec fallback automatique PGlite
+│   │   ├── canvas/               # Rendu Konva (FloorCanvas, EquipmentLayer, CableLayer, ZoneLayer...)
+│   │   └── ui/                   # Panneaux (EquipmentPalette, CircuitInspector, InventoryPanel...)
+│   ├── db/                       # Schéma PostgreSQL Drizzle & client hybride (Postgres/PGlite)
 │   ├── engine/
-│   │   ├── spatial/              # Moteur géométrique 2D & snapping métrique
+│   │   ├── spatial/              # Moteur géométrique 2D & calculs métriques
 │   │   ├── ingestion/            # Moteur d'import et audit matriciel CSV
-│   │   └── storage/              # Persistance locale (IndexedDB / store Zustand)
-│   ├── types/                    # Déclarations TypeScript strictes
+│   │   └── storage/              # Persistance locale (IndexedDB / Zustand)
 │   └── data/                     # Annuaire collaborateurs, VLANs et équipements initiaux
 ├── drizzle/                      # Migrations SQL versionnées (DDL)
 ├── docker/                       # Configurations Caddy, MinIO et conteneurs
+├── Dockerfile                    # Image multi-stage de l'application (Next.js standalone)
+├── docker-compose.yml            # Stack conteneurisée complète (PostgreSQL 16 + Next.js App)
 ├── run.sh                        # Script d'exécution unifié (Linux / macOS / Git Bash)
 ├── run.ps1                       # Script d'exécution unifié (Windows PowerShell)
 ├── Makefile                      # Raccourcis de commandes pour développeurs
-├── docker-compose.yml            # Stack de développement (PostgreSQL 16)
-├── docker-compose.prod.yml       # Stack de production complète
-├── ANTIGRAVITY_HANDOVER.md       # Dossier technique complet pour passation machine / IA
-└── package.json                  # Dépendances et scripts pnpm
+└── ANTIGRAVITY_HANDOVER.md       # Dossier technique complet pour passation machine / IA
 ```
-
----
-
-## 🔒 Règles de Contribution & Bonnes Pratiques
-
-- **TypeScript Strict** : `exactOptionalPropertyTypes` est activé. Ne jamais assigner explicitement `undefined` à une propriété optionnelle (utiliser la déstructuration conditionnelle).
-- **Règle Konva 60 FPS** : Ne jamais ajouter de `shadowBlur` ou d'effets de flou lourd sur les éléments du Canvas grand format (`ZoneLayer`, `GridLayer`). Privilégier `shadowForStrokeEnabled={false}` et `listening={false}` sur les éléments non interactifs.
-- **Tests Obligatoires** : Tout nouvel équipement ou comportement géométrique doit être couvert par les bancs d'essais `pnpm test`.
-- **Validation CI Locale** : Avant tout push ou commit important, exécutez `./run.sh ci` (ou `.un.ps1 ci`).
 
 ---
 

@@ -282,8 +282,6 @@ run_docker_command() {
     local services=()
     if [ -n "$DOCKER_SERVICE" ]; then
         services=("$DOCKER_SERVICE")
-    elif [ "$DOCKER_PROFILE" = "dev" ]; then
-        services=(postgres)
     fi
 
     case "$action" in

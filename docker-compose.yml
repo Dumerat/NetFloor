@@ -11,6 +11,30 @@ services:
       - "5432:5432"
     volumes:
       - netfloor_pgdata:/var/lib/postgresql/data
+      - ./drizzle/0000_conscious_naoko.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d netfloor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: netfloor-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/netfloor
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   netfloor_pgdata:
