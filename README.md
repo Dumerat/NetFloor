@@ -22,7 +22,7 @@ Si votre objectif est **uniquement de lancer et tester le projet entier**, vous 
 ### **Seul Docker Desktop est requis !**
 
 ```bash
-# 1. Lancez la stack complète conteneurisée (Base PostgreSQL 16 + Migrations DDL + Application Next.js) :
+# 1. Lancez la stack complète conteneurisée :
 docker compose up
 
 # 2. Ouvrez votre navigateur sur :
@@ -31,9 +31,9 @@ docker compose up
 
 > **Que se passe-t-il automatiquement en coulisse ?**
 > 1. Docker démarre le conteneur `netfloor-postgres` (PostgreSQL 16).
-> 2. Le script SQL initial `drizzle/0000_conscious_naoko.sql` est automatiquement exécuté au premier démarrage via `/docker-entrypoint-initdb.d/` pour initialiser le schéma.
-> 3. Dès que la base est saine (`pg_isready`), le conteneur `netfloor-app` démarre le serveur web Next.js standalone.
-> 4. L'application est prête et accessible sur le port 3000.
+> 2. Le script SQL initial `drizzle/0000_conscious_naoko.sql` est automatiquement exécuté au premier démarrage via `/docker-entrypoint-initdb.d/` pour initialiser l'ensemble des tables.
+> 3. Dès que la base est prête (`pg_isready`), le conteneur `netfloor-app` démarre le serveur web Next.js standalone.
+> 4. L'application est immédiatement opérationnelle sur le port 3000.
 
 ---
 
@@ -41,16 +41,16 @@ docker compose up
 
 Selon votre besoin, choisissez le mode approprié :
 
-| Mode | Prérequis Machine | Commande | Idéal pour |
+| Mode | Prérequis | Commande | Usage |
 |---|---|---|---|
-| **🐳 Mode 1 : 100% Conteneurisé** | **Docker uniquement** | `docker compose up`<br>*(ou `./run.sh docker up` / `.un.ps1 docker`)* | Démonstration, test rapide, déploiement sans rien installer d'autre. |
-| **💻 Mode 2 : Développement Local** | Node.js `>= 20`, pnpm `>= 9` | `./run.sh dev`<br>*(ou `.un.ps1 dev` / `pnpm dev`)* | Développement actif, édition du code avec rechargement à chaud (Hot-Reload), tests Vitest. |
+| **🐳 Mode 1 : 100% Conteneurisé** | Docker uniquement | `docker compose up` | Démonstration, test rapide, utilisation immédiate |
+| **💻 Mode 2 : Développement Local** | Node.js `>= 20`, pnpm `>= 9` | `./run.sh dev` ou `.\run.ps1 dev` | Édition du code, rechargement à chaud (Hot-Reload) |
 
 ---
 
 ## 🌟 Fonctionnalités Clés
 
-- **Canvas Haute Performance (60 FPS Constant)** : Moteur Konva découplé avec gestion fine des layers (Grille, Zones, Câbles, Équipements). Aucun lag lors du pan/zoom grâce au binding GPU natif et Zustand.
+- **Canvas Haute Performance (60 FPS Constant)** : Moteur Konva découplé avec gestion fine des calques (Grille, Zones, Câbles, Équipements). Aucun lag lors du pan/zoom grâce au binding GPU natif et Zustand.
 - **Moteur Spatial Métrique au Millimètre** : Snapping métrique (500mm), alignement dynamique (Smart Guides), attraction magnétique sur connecteurs, et invariance absolue du zoom au curseur.
 - **Routage Automatique & Rubanage Orthogonal** : Détection des cheminements optimaux à 90° vers les baies de brassage, gestion du rubanage multi-câbles (6mm d'écart par conducteur) et anti-collision stricte sur les ports de switch.
 - **Arborescence Complète d'Équipements** :
@@ -83,42 +83,42 @@ cp .env.example .env
 ### 3. Lancement du Serveur de Développement
 Le script unifié gère tout (démarrage automatique de PostgreSQL, migrations DDL et lancement de Next.js) :
 
-#### 🐧 Linux / macOS / Git Bash :
+#### Linux / macOS / Git Bash :
 ```bash
 ./run.sh dev
 # Avec injection du carnet d'exemple et ouverture automatique du navigateur :
 ./run.sh dev --seed --open
 ```
 
-#### 🪟 Windows (PowerShell) :
+#### Windows (PowerShell) :
 ```powershell
-.un.ps1 dev
-# Avec options :
-.un.ps1 dev -Seed -Open
+.\run.ps1 dev
+# Avec injection du carnet d'exemple et ouverture automatique du navigateur :
+.\run.ps1 dev -Seed -Open
 ```
 
 ---
 
 ## 📖 Commandes Disponibles via le Script (`run.sh` / `run.ps1`)
 
-| Commande | Exemple Linux / Mac | Exemple Windows PowerShell | Description |
+| Commande | Linux / macOS / Git Bash | Windows (PowerShell) | Description |
 |---|---|---|---|
-| **docker up** | `./run.sh docker up` | `.un.ps1 docker` | Lance l'intégralité de la stack en conteneurs Docker (Postgres + App) |
-| **dev** | `./run.sh dev` | `.un.ps1 dev` | Mode dev local : Postgres Docker + Next.js hot-reload |
-| **dev avec seed** | `./run.sh dev --seed` | `.un.ps1 dev -Seed` | Lance le projet avec injection du carnet d'exemple en base |
-| **start** | `./run.sh start` | `.un.ps1 start` | Démarre l'application compilée de production hors Docker |
-| **build** | `./run.sh build` | `.un.ps1 build` | Contrôle TypeScript (`tsc --noEmit`) + compilation Next.js |
-| **type-check** | `./run.sh type-check` | `.un.ps1 type-check` | Validation stricte des types TypeScript |
-| **lint** | `./run.sh lint` | `.un.ps1 lint` | Analyse statique du code source avec ESLint |
-| **format** | `./run.sh format` | `.un.ps1 format` | Formatage automatique avec Prettier |
-| **test:spatial** | `./run.sh test --test-type spatial` | `.un.ps1 test -TestType spatial` | Exécute les 16 bancs d'essais géométriques 2D |
-| **test:ingestion**| `./run.sh test --test-type ingestion`| `.un.ps1 test -TestType ingestion`| Teste l'audit et l'import de 800+ liaisons |
-| **test:pglite** | `./run.sh test --test-type pglite` | `.un.ps1 test -TestType pglite` | Valide la CTE récursive sur PostgreSQL WASM |
-| **test (tous)** | `./run.sh test` | `.un.ps1 test` | Exécute tous les bancs d'essais et la suite Vitest (66 tests) |
-| **ci** | `./run.sh ci` | `.un.ps1 ci` | Simule en local le pipeline CI complet (format, lint, tsc, tests, audit) |
-| **db seed** | `./run.sh db --db-action seed` | `.un.ps1 db -DbAction seed` | Injecte la topologie d'entreprise de référence |
-| **db reset** | `./run.sh db --db-action reset` | `.un.ps1 db -DbAction reset` | Réinitialise et recrée le schéma PostgreSQL |
-| **clean** | `./run.sh clean` | `.un.ps1 clean` | Supprime `.next`, `dist`, `coverage` et artéfacts de compilation |
+| **docker up** | `./run.sh docker up` | `.\run.ps1 docker` | Lance l'intégralité de la stack en conteneurs Docker (Postgres + App) |
+| **dev** | `./run.sh dev` | `.\run.ps1 dev` | Mode dev local : Postgres Docker + Next.js hot-reload |
+| **dev avec seed** | `./run.sh dev --seed` | `.\run.ps1 dev -Seed` | Lance le projet avec injection du carnet d'exemple en base |
+| **start** | `./run.sh start` | `.\run.ps1 start` | Démarre l'application compilée de production hors Docker |
+| **build** | `./run.sh build` | `.\run.ps1 build` | Contrôle TypeScript (`tsc --noEmit`) + compilation Next.js |
+| **type-check** | `./run.sh type-check` | `.\run.ps1 type-check` | Validation stricte des types TypeScript |
+| **lint** | `./run.sh lint` | `.\run.ps1 lint` | Analyse statique du code source avec ESLint |
+| **format** | `./run.sh format` | `.\run.ps1 format` | Formatage automatique avec Prettier |
+| **test:spatial** | `./run.sh test --test-type spatial` | `.\run.ps1 test -TestType spatial` | Exécute les 16 bancs d'essais géométriques 2D |
+| **test:ingestion**| `./run.sh test --test-type ingestion`| `.\run.ps1 test -TestType ingestion`| Teste l'audit et l'import de 800+ liaisons |
+| **test:pglite** | `./run.sh test --test-type pglite` | `.\run.ps1 test -TestType pglite` | Valide la CTE récursive sur PostgreSQL WASM |
+| **test (tous)** | `./run.sh test` | `.\run.ps1 test` | Exécute tous les bancs d'essais et la suite Vitest (66 tests) |
+| **ci** | `./run.sh ci` | `.\run.ps1 ci` | Simule en local le pipeline CI complet (format, lint, tsc, tests, audit) |
+| **db seed** | `./run.sh db --db-action seed` | `.\run.ps1 db -DbAction seed` | Injecte la topologie d'entreprise de référence |
+| **db reset** | `./run.sh db --db-action reset` | `.\run.ps1 db -DbAction reset` | Réinitialise et recrée le schéma PostgreSQL |
+| **clean** | `./run.sh clean` | `.\run.ps1 clean` | Supprime `.next`, `dist`, `coverage` et artéfacts de compilation |
 
 ---
 
@@ -129,8 +129,11 @@ Le projet intègre une suite de 66 tests automatisés :
 ```bash
 # Lancement de l'intégralité des tests :
 pnpm test
-# ou :
+
+# Ou via le script unifié :
 ./run.sh test
+# Ou sous Windows :
+.\run.ps1 test
 ```
 
 ### Détail des bancs d'essais :
