@@ -55,7 +55,7 @@ Selon votre besoin, choisissez le mode approprié :
 - **Routage Automatique & Rubanage Orthogonal** : Détection des cheminements optimaux à 90° vers les baies de brassage, gestion du rubanage multi-câbles (6mm d'écart par conducteur) et anti-collision stricte sur les ports de switch.
 - **Arborescence Complète d'Équipements** :
   - **Baies & Racks** : 42U, 24U, 18U avec châssis, bandeaux passe-câbles, PDU, patch panels Cat6A et commutateurs Aruba/Cisco.
-  - **Bureaux & Mobilier** : Bureaux individuels, benchs doubles/quadruples, tables de réunion visio, colonnettes, boîtes de sol.
+  - **Bureaux & Mobilier** : Bureaux individuels, benchs doubles/quadruples, tables de réunion visio, blocs de prises RJ45, boîtes de sol.
   - **Périphériques Réseau** : Prises RJ45 simples et empilées, téléphones IP avec assignation VLAN/VoIP, traceurs, imprimantes réseau, caméras IP, bornes Wi-Fi AP.
   - **Zones de Service** : Délimitation visuelle et verrouillable par couleur (Lab R&D, DSI NOC, Direction, etc.) avec cartouches d'identification.
 - **Annuaire d'Entreprise Intégré** : Gestion des collaborateurs, postes assignés, affectation d'IP statique/DHCP et liaisons téléphoniques directes.

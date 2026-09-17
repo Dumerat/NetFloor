@@ -834,7 +834,7 @@ export default function NetFloorApp() {
     [zones.length, activeSiteId]
   );
 
-  // Calcul dynamique des câbles : regroupement en faisceau par colonnette + baie cible avec décalage ruban parallèle
+  // Calcul dynamique des câbles : regroupement en faisceau par bloc de prises RJ45 + baie cible avec décalage ruban parallèle
   const cables: CableData[] = useMemo(() => {
     if (activeViewMode === "HR") return [];
     if (visibleRacks.length === 0) return [];
@@ -851,7 +851,7 @@ export default function NetFloorApp() {
         outlet.subType === "FLOOR_BOX" || (outlet.stackedPorts && outlet.stackedPorts.length > 0);
 
       if (isStacked && outlet.stackedPorts && outlet.stackedPorts.length > 0) {
-        // Filtrer les ports branchés de la colonnette
+        // Filtrer les ports branchés du bloc
         const patchedPorts = outlet.stackedPorts
           .map((sp, originalIdx) => ({ sp, originalIdx }))
           .filter(({ sp }) => sp.isPatched);
@@ -875,7 +875,7 @@ export default function NetFloorApp() {
           const bundleKey = `bundle-${outlet.id}-${rack.id}`;
           const targetBasePos = { x: rack.xMm + 400, y: rack.yMm + 240 + globalIndex * 25 };
 
-          // Pivot partagé pour l'ensemble du faisceau de cette colonnette vers cette baie
+          // Pivot partagé pour l'ensemble du faisceau de ce bloc vers cette baie
           const customPivot = customPivots[bundleKey] ?? customPivots[`cable-run-${outlet.id}`];
           const bundlePivot = customPivot ?? {
             x: outlet.xMm,
@@ -1094,7 +1094,14 @@ export default function NetFloorApp() {
           if (n.id === id) {
             return { ...n, xMm: newPos.x, yMm: newPos.y };
           }
-          if (n.attachedToDeskId === id) {
+          // Seules les prises rattachées exclusivement à CE bureau bougent solidairement ; les blocs partagés restent fixes au sol
+          const isExclusiveToDesk =
+            n.attachedToDeskId === id &&
+            (!n.attachedDeskIds || n.attachedDeskIds.length <= 1) &&
+            (!n.stackedPorts ||
+              new Set(n.stackedPorts.map((p) => p.attachedToDeskId).filter(Boolean)).size <= 1);
+
+          if (isExclusiveToDesk) {
             return { ...n, xMm: n.xMm + deltaX, yMm: n.yMm + deltaY };
           }
           return n;
@@ -1153,6 +1160,150 @@ export default function NetFloorApp() {
       setNodes((prev) => {
         const node = prev.find((n) => n.id === id);
         if (node && node.type === "WALL_OUTLET") {
+          // A. Glisser-déposer DANS un bloc : si une prise simple est lâchée sur un bloc existant, l'absorber !
+          const isSingleOutlet =
+            (!node.stackedPorts || node.stackedPorts.length <= 1) &&
+            node.subType !== "SOCKET_BLOCK";
+
+          if (isSingleOutlet) {
+            // A1. Glisser-déposer sur un bloc existant -> Absorption
+            const hitBlock = prev.find(
+              (b) =>
+                b.id !== id &&
+                b.type === "WALL_OUTLET" &&
+                (b.subType === "SOCKET_BLOCK" || (b.stackedPorts && b.stackedPorts.length > 0)) &&
+                Math.hypot(newPos.x - b.xMm, newPos.y - b.yMm) < 260
+            );
+
+            if (hitBlock) {
+              const curStacked = hitBlock.stackedPorts || [];
+              if (curStacked.length < 8) {
+                const newIdx = curStacked.length;
+                const absorbedPort: StackedPortItem = {
+                  portIndex: newIdx,
+                  portLabel: node.name.startsWith("Prise") ? `P${newIdx + 1}` : node.name,
+                  outletRole: node.outletRole || "DATA",
+                  vlanId: node.vlanId,
+                  poeMode: node.poeMode || "NONE",
+                  isPatched: node.isPatched,
+                  connectedRackId: node.connectedRackId,
+                  connectedSwitchId: node.connectedSwitchId,
+                  connectedSwitchPort: node.connectedSwitchPort,
+                  assignedPerson: node.assignedPerson,
+                  attachedSeatIndex: node.attachedSeatIndex,
+                  attachedToDeskId: node.attachedToDeskId,
+                  ipAddress: node.ipAddress,
+                  macAddress: node.macAddress,
+                  pingStatus: node.pingStatus,
+                  pingLatencyMs: node.pingLatencyMs,
+                };
+
+                const allDeskIds = Array.from(
+                  new Set(
+                    [
+                      hitBlock.attachedToDeskId,
+                      ...(hitBlock.attachedDeskIds || []),
+                      node.attachedToDeskId,
+                      ...curStacked.map((p) => p.attachedToDeskId),
+                    ].filter(Boolean) as string[]
+                  )
+                );
+
+                return prev
+                  .filter((n) => n.id !== id)
+                  .map((n) =>
+                    n.id === hitBlock.id
+                      ? {
+                          ...n,
+                          subType: "SOCKET_BLOCK",
+                          portCount: curStacked.length + 1,
+                          stackedPorts: [...curStacked, absorbedPort],
+                          attachedDeskIds: allDeskIds,
+                          attachedToDeskId: hitBlock.attachedToDeskId || node.attachedToDeskId,
+                        }
+                      : n
+                  );
+              }
+            }
+
+            // A2. Glisser-déposer sur une AUTRE prise simple -> Fusion immédiate en Bloc de prises RJ45 !
+            const hitOutlet = prev.find(
+              (o) =>
+                o.id !== id &&
+                o.type === "WALL_OUTLET" &&
+                o.subType !== "SOCKET_BLOCK" &&
+                (!o.stackedPorts || o.stackedPorts.length <= 1) &&
+                o.subType !== "FLOOR_BOX" &&
+                o.subType !== "WIFI_AP" &&
+                o.subType !== "PRINTER_STATION" &&
+                Math.hypot(newPos.x - o.xMm, newPos.y - o.yMm) < 260
+            );
+
+            if (hitOutlet) {
+              const port1: StackedPortItem = {
+                portIndex: 0,
+                portLabel: hitOutlet.name.startsWith("Prise") ? "P1" : hitOutlet.name,
+                outletRole: hitOutlet.outletRole || "DATA",
+                vlanId: hitOutlet.vlanId,
+                poeMode: hitOutlet.poeMode || "NONE",
+                isPatched: hitOutlet.isPatched,
+                connectedRackId: hitOutlet.connectedRackId,
+                connectedSwitchId: hitOutlet.connectedSwitchId,
+                connectedSwitchPort: hitOutlet.connectedSwitchPort,
+                assignedPerson: hitOutlet.assignedPerson,
+                attachedSeatIndex: hitOutlet.attachedSeatIndex,
+                attachedToDeskId: hitOutlet.attachedToDeskId,
+                ipAddress: hitOutlet.ipAddress,
+                macAddress: hitOutlet.macAddress,
+                pingStatus: hitOutlet.pingStatus,
+                pingLatencyMs: hitOutlet.pingLatencyMs,
+              };
+
+              const port2: StackedPortItem = {
+                portIndex: 1,
+                portLabel: node.name.startsWith("Prise") ? "P2" : node.name,
+                outletRole: node.outletRole || "DATA",
+                vlanId: node.vlanId,
+                poeMode: node.poeMode || "NONE",
+                isPatched: node.isPatched,
+                connectedRackId: node.connectedRackId,
+                connectedSwitchId: node.connectedSwitchId,
+                connectedSwitchPort: node.connectedSwitchPort,
+                assignedPerson: node.assignedPerson,
+                attachedSeatIndex: node.attachedSeatIndex,
+                attachedToDeskId: node.attachedToDeskId,
+                ipAddress: node.ipAddress,
+                macAddress: node.macAddress,
+                pingStatus: node.pingStatus,
+                pingLatencyMs: node.pingLatencyMs,
+              };
+
+              const combinedDeskIds = Array.from(
+                new Set(
+                  [hitOutlet.attachedToDeskId, node.attachedToDeskId].filter(Boolean) as string[]
+                )
+              );
+
+              return prev
+                .filter((n) => n.id !== id)
+                .map((n) =>
+                  n.id === hitOutlet.id
+                    ? {
+                        ...n,
+                        subType: "SOCKET_BLOCK",
+                        name: n.name.startsWith("Prise")
+                          ? n.name.replace(/^Prise\s*/i, "Bloc RJ45 ")
+                          : `Bloc RJ45 ${n.name}`,
+                        portCount: 2,
+                        stackedPorts: [port1, port2],
+                        attachedDeskIds: combinedDeskIds,
+                        attachedToDeskId: hitOutlet.attachedToDeskId || node.attachedToDeskId,
+                      }
+                    : n
+                );
+            }
+          }
+
           // 1. Détection si la prise est déposée sur un bureau
           const hitDesk = prev.find((d) => {
             if (d.type !== "DESK") return false;
@@ -1291,6 +1442,76 @@ export default function NetFloorApp() {
     );
   };
 
+  // Extraction d'un port RJ45 depuis un bloc multi-ports vers le plateau en tant que prise autonome
+  const handleExtractPortFromBlock = useCallback(
+    (blockId: string, portIndex: number, worldPos?: { x: number; y: number }) => {
+      setNodes((prev) => {
+        const block = prev.find((n) => n.id === blockId);
+        if (!block || !block.stackedPorts || block.stackedPorts.length === 0) return prev;
+
+        const targetPort = block.stackedPorts[portIndex];
+        if (!targetPort) return prev;
+
+        const spawnX = worldPos ? Math.round(worldPos.x) : block.xMm + 250;
+        const spawnY = worldPos ? Math.round(worldPos.y) : block.yMm + 250;
+        const newOutletId = `outlet-extracted-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+        const deskForExtracted = targetPort.attachedToDeskId || block.attachedToDeskId;
+        const newOutlet: NodeDisplay = {
+          id: newOutletId,
+          type: "WALL_OUTLET",
+          subType: "WALL_OUTLET",
+          name:
+            targetPort.portLabel && !targetPort.portLabel.startsWith("P")
+              ? targetPort.portLabel
+              : `Prise ${block.name.replace(/^Bloc\s*/i, "")}-${targetPort.portLabel || `P${portIndex + 1}`}`,
+          xMm: spawnX,
+          yMm: spawnY,
+          siteId: block.siteId,
+          attachedToDeskId: deskForExtracted,
+          attachedSeatIndex: targetPort.attachedSeatIndex,
+          outletRole: targetPort.outletRole || "DATA",
+          vlanId: targetPort.vlanId,
+          poeMode: targetPort.poeMode,
+          isPatched: targetPort.isPatched,
+          connectedRackId: targetPort.connectedRackId,
+          connectedSwitchId: targetPort.connectedSwitchId,
+          connectedSwitchPort: targetPort.connectedSwitchPort,
+          assignedPerson: targetPort.assignedPerson,
+          ipAddress: targetPort.ipAddress,
+          macAddress: targetPort.macAddress,
+          pingStatus: targetPort.pingStatus,
+          pingLatencyMs: targetPort.pingLatencyMs,
+        };
+
+        const remainingPorts = block.stackedPorts
+          .filter((_, idx) => idx !== portIndex)
+          .map((p, idx) => ({ ...p, portIndex: idx }));
+
+        const remainingDeskIds = Array.from(
+          new Set(remainingPorts.map((p) => p.attachedToDeskId).filter(Boolean) as string[])
+        );
+
+        return [
+          ...prev.map((n) =>
+            n.id === blockId
+              ? {
+                  ...n,
+                  portCount: remainingPorts.length,
+                  stackedPorts: remainingPorts,
+                  attachedDeskIds:
+                    remainingDeskIds.length > 0 ? remainingDeskIds : n.attachedDeskIds || [],
+                  attachedToDeskId: remainingDeskIds[0] || n.attachedToDeskId,
+                }
+              : n
+          ),
+          newOutlet,
+        ];
+      });
+    },
+    []
+  );
+
   // Option : Ajouter une prise à un bureau existant
   const handleAddOutletToDesk = (deskId: string, role: OutletRole) => {
     setNodes((prev) => {
@@ -1300,11 +1521,7 @@ export default function NetFloorApp() {
       const deskW = desk.widthMm ?? 1600;
       const existingDeskOutlets = prev.filter((n) => n.attachedToDeskId === deskId);
       const suffixLetter = String.fromCharCode(65 + existingDeskOutlets.length);
-      const isVoip = role === "VOIP";
       const newOutletId = `outlet-${deskId}-${role.toLowerCase()}-${Date.now()}`;
-      const newPortId = isVoip
-        ? "2bb9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9d"
-        : "1aa9f3ad-d38e-4f2c-b2cb-8fb9a7e9cc9c";
 
       const yOffset = 200 + existingDeskOutlets.length * 450;
       const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
@@ -1320,22 +1537,17 @@ export default function NetFloorApp() {
 
       const deskNum = desk.name.replace(/^Bureau\s*/i, "").trim();
       const primaryOccupant = desk.assignedPerson || desk.seats?.find((s) => s.fullName)?.fullName;
-      const deskNumDigits = deskNum.match(/\d+/) ? deskNum.match(/\d+/)![0] : "10";
-      const ipAddress = isVoip
-        ? `10.42.30.${100 + (Number(deskNumDigits) % 150)}`
-        : `10.42.20.${100 + (Number(deskNumDigits) % 150)}`;
 
       const newOutlet: NodeDisplay = {
         id: newOutletId,
         type: "WALL_OUTLET",
+        subType: "WALL_OUTLET",
         name: `Prise ${deskNum}-${suffixLetter}`,
         xMm: Math.round(worldX),
         yMm: Math.round(worldY),
-        portId: newPortId,
         attachedToDeskId: deskId,
         outletRole: role,
-        vlanId: isVoip ? 30 : 20,
-        ipAddress,
+        vlanId: undefined, // Cuivre passif : hérite de l'équipement actif au brassage
         assignedPerson: primaryOccupant || undefined,
         attachedSeatIndex: desk.seats && desk.seats.length > 0 ? 0 : undefined,
         siteId: desk.siteId ?? activeSiteId ?? DEFAULT_SITE_ID,
@@ -1345,8 +1557,8 @@ export default function NetFloorApp() {
     });
   };
 
-  // Option : Ajouter une colonnette multi-ports RJ45 (jusqu'à 8 ports) au centre d'un bureau
-  const handleAddColonnetteToDesk = (deskId: string, portsCount: number = 4) => {
+  // Option : Ajouter un bloc de prises RJ45 (jusqu'à 8 ports) au centre d'un bureau
+  const handleAddSocketBlockToDesk = (deskId: string, portsCount: number = 4) => {
     setNodes((prev) => {
       const desk = prev.find((d) => d.id === deskId);
       if (!desk) return prev;
@@ -1363,40 +1575,37 @@ export default function NetFloorApp() {
       const worldCenterX = desk.xMm + localCenterX * cos - localCenterY * sin;
       const worldCenterY = desk.yMm + localCenterX * sin + localCenterY * cos;
 
-      const colonnetteId = `colonnette-${deskId}-${Date.now()}`;
+      const blockId = `socket-block-${deskId}-${Date.now()}`;
       const deskNum = desk.name.replace(/^Bureau\s*/i, "").trim();
 
       const numPorts = Math.min(8, Math.max(2, portsCount));
       const initialPorts: StackedPortItem[] = Array.from({ length: numPorts }).map((_, i) => {
-        const isEven = i % 2 === 0;
         const seatOccupant = desk.seats && desk.seats[i] ? desk.seats[i] : undefined;
         return {
           portIndex: i,
-          portLabel: `RJ45-${i + 1}`,
-          outletRole: isEven ? "DATA" : "VOIP",
-          vlanId: isEven ? 20 : 30,
+          portLabel: `P${i + 1}`,
+          outletRole: "DATA",
+          vlanId: undefined, // Cuivre passif : hérité dynamiquement
           assignedPerson: seatOccupant?.fullName,
           attachedSeatIndex: seatOccupant ? i : undefined,
-          ipAddress: `10.42.${isEven ? 20 : 30}.${100 + i}`,
-          macAddress: `00:1A:2B:3C:4D:${String(i + 10).padStart(2, "0")}`,
-          pingStatus: "ONLINE",
-          pingLatencyMs: 2 + i,
         };
       });
 
-      const newColonnette: NodeDisplay = {
-        id: colonnetteId,
+      const newSocketBlock: NodeDisplay = {
+        id: blockId,
         type: "WALL_OUTLET",
-        name: `Colonnette ${deskNum}`,
+        subType: "SOCKET_BLOCK",
+        name: `Bloc RJ45 ${deskNum}`,
         xMm: Math.round(worldCenterX),
         yMm: Math.round(worldCenterY),
         attachedToDeskId: deskId,
         outletRole: "DATA",
+        portCount: numPorts,
         stackedPorts: initialPorts,
         siteId: desk.siteId ?? activeSiteId ?? DEFAULT_SITE_ID,
       };
 
-      return [...prev, newColonnette];
+      return [...prev, newSocketBlock];
     });
   };
 
@@ -1515,8 +1724,14 @@ export default function NetFloorApp() {
               rotationDeg: newRotDeg,
             };
           }
-          // Faire pivoter les prises rattachées autour du même centre
-          if (n.attachedToDeskId === nodeId) {
+          // Faire pivoter les prises exclusivement rattachées autour du même centre (les blocs partagés restent fixes)
+          const isExclusiveToDesk =
+            n.attachedToDeskId === nodeId &&
+            (!n.attachedDeskIds || n.attachedDeskIds.length <= 1) &&
+            (!n.stackedPorts ||
+              new Set(n.stackedPorts.map((p) => p.attachedToDeskId).filter(Boolean)).size <= 1);
+
+          if (isExclusiveToDesk) {
             const dx = n.xMm - centerX;
             const dy = n.yMm - centerY;
             const rotatedX = centerX + dx * cosDelta - dy * sinDelta;
@@ -1548,7 +1763,7 @@ export default function NetFloorApp() {
       newY = Math.round(position.y - (item.heightMm ?? 800) / 2);
     }
 
-    // Liaison automatique : si une prise / colonnette est déposée sur un bureau, lier immédiatement !
+    // Liaison automatique : si une prise / bloc de prises est déposé sur un bureau, lier immédiatement !
     let linkedDeskId: string | undefined = undefined;
     let seatIndex: number | undefined = undefined;
 
@@ -1623,11 +1838,19 @@ export default function NetFloorApp() {
         const wifiCount = nodes.filter((n) => n.subType === "WIFI_AP").length;
         return `Wi-Fi 0${wifiCount + 5}`;
       }
+      if (item.subType === "SOCKET_BLOCK") {
+        const blockCount =
+          nodes.filter((n) => n.subType === "SOCKET_BLOCK" || n.name.startsWith("Bloc RJ45"))
+            .length + 1;
+        return `Bloc RJ45 0${blockCount}`;
+      }
       if (item.subType === "PRINTER_STATION") {
         const pCount = nodes.filter((n) => n.subType === "PRINTER_STATION").length;
         return `Copieur RH ${pCount + 1}`;
       }
-      const outletCount = nodes.filter((n) => n.type === "WALL_OUTLET" && !n.subType).length;
+      const outletCount = nodes.filter(
+        (n) => n.type === "WALL_OUTLET" && (!n.subType || n.subType === "WALL_OUTLET")
+      ).length;
       return `Prise ${403 + outletCount}`;
     };
 
@@ -1654,13 +1877,14 @@ export default function NetFloorApp() {
     }
 
     let stackedPorts: StackedPortItem[] | undefined = undefined;
-    if (portCount > 1) {
-      stackedPorts = Array.from({ length: portCount }).map((_, idx) => ({
+    if (item.subType === "SOCKET_BLOCK" || portCount > 1) {
+      const pCount = item.subType === "SOCKET_BLOCK" ? (item.portCount ?? 4) : portCount;
+      stackedPorts = Array.from({ length: pCount }).map((_, idx) => ({
         portIndex: idx,
-        portLabel: `RJ45-${idx + 1}`,
-        outletRole: item.outletRole ?? "GENERIC",
-        vlanId: assignedVlan,
-        poeMode: item.poeMode ?? "NONE",
+        portLabel: `P${idx + 1}`,
+        outletRole: "DATA",
+        vlanId: undefined, // Cuivre passif : hérité dynamiquement
+        poeMode: "NONE",
       }));
     }
 
@@ -1680,7 +1904,7 @@ export default function NetFloorApp() {
       seats: initialSeats,
       attachedToDeskId: linkedDeskId,
       attachedSeatIndex: seatIndex,
-      vlanId: assignedVlan,
+      vlanId: item.targetType === "WALL_OUTLET" ? undefined : assignedVlan,
       poeMode: item.poeMode,
       customEmote: item.customEmote,
       portCount: portCount,
@@ -2846,6 +3070,7 @@ export default function NetFloorApp() {
             onNodeDragMove={handleThrottledNodeDragMove}
             onRackDragMove={handleThrottledRackDragMove}
             onPivotChange={handleThrottledPivotChange}
+            onExtractPortFromBlock={handleExtractPortFromBlock}
             backgroundPlan={{
               ...backgroundPlan,
               plans:
@@ -2907,8 +3132,8 @@ export default function NetFloorApp() {
           <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-800 backdrop-blur rounded-lg p-2.5 text-[11px] text-slate-400 shadow-xl font-mono flex items-center gap-2 pointer-events-none z-10">
             <Sparkles className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
             <span>
-              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Colonnettes
-              RJ45 stackées jusqu&apos;à 8 ports • Tracés orthogonaux 90° avec pivot unique
+              <strong>Fidélité 2D Réelle :</strong> Bureaux avec fauteuils et écrans • Blocs de
+              prises RJ45 stackés jusqu&apos;à 8 ports • Tracés orthogonaux 90° avec pivot unique
               ajustable.
             </span>
           </div>
@@ -2946,7 +3171,8 @@ export default function NetFloorApp() {
             onSelectNode={handleSelectNode}
             onChangeRole={handleChangeRole}
             onAddOutletToDesk={handleAddOutletToDesk}
-            onAddColonnetteToDesk={handleAddColonnetteToDesk}
+            onAddSocketBlockToDesk={handleAddSocketBlockToDesk}
+            onExtractPortFromBlock={handleExtractPortFromBlock}
             onUpdateNodeProperties={handleUpdateNodeProperties}
             onDeleteNode={handleDeleteNode}
             onUpdateZone={handleUpdateZone}

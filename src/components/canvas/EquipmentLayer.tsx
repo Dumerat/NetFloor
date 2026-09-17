@@ -62,6 +62,7 @@ export type NodeSubType =
   | "MEETING_TABLE"
   | "WALL_OUTLET"
   | "GENERIC_PORT"
+  | "SOCKET_BLOCK"
   | "FLOOR_BOX"
   | "WIFI_AP"
   | "PRINTER_STATION"
@@ -105,6 +106,7 @@ export interface StackedPortItem {
   assignedPerson?: string | undefined;
   assignedUserId?: string | undefined;
   attachedSeatIndex?: number | undefined;
+  attachedToDeskId?: string | undefined;
   ipAddress?: string | undefined;
   macAddress?: string | undefined;
   pingStatus?: "ONLINE" | "OFFLINE" | "DEGRADED" | undefined;
@@ -130,6 +132,7 @@ export interface NodeDisplay {
   subType?: NodeSubType | undefined;
   portId?: string | undefined;
   attachedToDeskId?: string | undefined;
+  attachedDeskIds?: string[] | undefined;
   outletRole?: OutletRole | undefined;
   assignedPerson?: string | undefined;
   assignedUserId?: string | undefined;
@@ -197,6 +200,8 @@ interface EquipmentLayerProps {
     ((nodeIds: string[], delta: { deltaX: number; deltaY: number }) => void) | undefined;
   onNodeDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
   onRackDragMove?: ((id: string, newPos: { x: number; y: number }) => void) | undefined;
+  onExtractPortFromBlock?:
+    ((blockId: string, portIndex: number, worldPos: { x: number; y: number }) => void) | undefined;
   isMarqueeJustEnded?: (() => boolean) | undefined;
 }
 
@@ -217,6 +222,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   onGroupNodeMoveEnd,
   onNodeDragMove,
   onRackDragMove,
+  onExtractPortFromBlock,
   isMarqueeJustEnded,
 }) => {
   const isNodeSelected = (id: string) => {
@@ -400,7 +406,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
     initGroupDragIfMulti(desk.id, e);
 
     const attached = nodes.filter(
-      (n) => n.type === "WALL_OUTLET" && n.attachedToDeskId === desk.id
+      (n) =>
+        n.type === "WALL_OUTLET" &&
+        (n.attachedToDeskId === desk.id ||
+          n.attachedDeskIds?.includes(desk.id) ||
+          n.stackedPorts?.some((p) => p.attachedToDeskId === desk.id))
     );
     const deskW = desk.widthMm ?? 1600;
     const deskH = desk.heightMm ?? 800;
@@ -422,8 +432,14 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             localAnchorY = sIdx === 0 ? deskH / 4 : (3 * deskH) / 4;
           }
         }
+        const isShared = Boolean(
+          (outlet.attachedDeskIds && outlet.attachedDeskIds.length > 1) ||
+          (outlet.stackedPorts &&
+            new Set(outlet.stackedPorts.map((p) => p.attachedToDeskId).filter(Boolean)).size > 1)
+        );
         return {
           id: outlet.id,
+          isShared,
           startPos: { x: outlet.xMm, y: outlet.yMm },
           localAnchorX,
           localAnchorY,
@@ -451,21 +467,25 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
       if (stage) {
         for (const item of state.attachedOutlets) {
-          const currentOutletX = item.startPos.x + deltaX;
-          const currentOutletY = item.startPos.y + deltaY;
+          // Si le bloc est partagé entre plusieurs bureaux, il reste fixe au sol !
+          const targetX = (item as any).isShared ? item.startPos.x : item.startPos.x + deltaX;
+          const targetY = (item as any).isShared ? item.startPos.y : item.startPos.y + deltaY;
 
-          // 1. Déplacer instantanément le nœud Konva de la prise solidaire
-          const outletNode = stage.findOne("#" + item.id);
-          if (outletNode) {
-            outletNode.position({ x: currentOutletX, y: currentOutletY });
+          if (!(item as any).isShared) {
+            const outletNode = stage.findOne("#" + item.id);
+            if (outletNode) {
+              outletNode.position({ x: targetX, y: targetY });
+            }
           }
 
-          // 2. Mettre à jour la ligne d'ancrage en pointillés
-          const anchorLineNode = stage.findOne("#anchor-line-" + item.id) as any;
+          const anchorX = currentDeskX + item.localAnchorX * cosR - item.localAnchorY * sinR;
+          const anchorY = currentDeskY + item.localAnchorX * sinR + item.localAnchorY * cosR;
+
+          const anchorLineNode =
+            (stage.findOne("#anchor-line-" + item.id + "-" + desk.id) as any) ||
+            (stage.findOne("#anchor-line-" + item.id) as any);
           if (anchorLineNode && typeof anchorLineNode.points === "function") {
-            const anchorX = currentDeskX + item.localAnchorX * cosR - item.localAnchorY * sinR;
-            const anchorY = currentDeskY + item.localAnchorX * sinR + item.localAnchorY * cosR;
-            anchorLineNode.points([anchorX, anchorY, currentOutletX, currentOutletY]);
+            anchorLineNode.points([anchorX, anchorY, targetX, targetY]);
           }
         }
 
@@ -491,20 +511,23 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   };
 
   const handleNodeDragStart = (id: string, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
     e.cancelBubble = true;
     initGroupDragIfMulti(id, e);
   };
 
   const handleNodeDragMove = (id: string, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
     e.cancelBubble = true;
     updateGroupDragMove(id, e);
-    onNodeDragMove?.(id, { x: e.target.x(), y: e.target.y() });
+    onNodeDragMove?.(id, { x: e.currentTarget.x(), y: e.currentTarget.y() });
   };
 
   const handleDragEnd = (id: string, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
     e.cancelBubble = true;
     if (finishGroupDragIfMulti(id, e)) return;
-    onNodeMoveEnd(id, { x: e.target.x(), y: e.target.y() });
+    onNodeMoveEnd(id, { x: e.currentTarget.x(), y: e.currentTarget.y() });
   };
 
   return (
@@ -512,52 +535,84 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
       {/* 0. Lignes d'ancrage en pointillés reliant les prises solidaires à leur bureau (masquées en vue RH) */}
       {activeViewMode !== "HR" &&
         nodes
-          .filter((n) => n.type === "WALL_OUTLET" && n.attachedToDeskId)
-          .map((outlet) => {
-            const desk = nodes.find((d) => d.id === outlet.attachedToDeskId);
-            if (!desk) return null;
-            const deskW = desk.widthMm ?? 1600;
-            const deskH = desk.heightMm ?? 800;
-            const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+          .filter((n) => n.type === "WALL_OUTLET")
+          .flatMap((outlet) => {
+            const deskLinks: { deskId: string; seatIdx?: number | undefined }[] = [];
+            const seenDesks = new Set<string>();
 
-            // Point d'ancrage sur le meuble : si la prise est liée à une place précise, on ancre vers sa place !
-            let localAnchorX = deskW / 2;
-            let localAnchorY = deskH / 2;
-
-            if (outlet.attachedSeatIndex !== undefined) {
-              if (desk.subType === "BENCH_QUAD") {
-                const sIdx = outlet.attachedSeatIndex;
-                localAnchorX = sIdx === 0 || sIdx === 2 ? deskW / 4 : (3 * deskW) / 4;
-                localAnchorY = sIdx === 0 || sIdx === 1 ? deskH / 4 : (3 * deskH) / 4;
-              } else if (desk.subType === "BENCH_DOUBLE") {
-                const sIdx = outlet.attachedSeatIndex;
-                localAnchorX = deskW / 2;
-                localAnchorY = sIdx === 0 ? deskH / 4 : (3 * deskH) / 4;
-              }
+            if (outlet.stackedPorts && outlet.stackedPorts.length > 0) {
+              outlet.stackedPorts.forEach((sp) => {
+                const dId = sp.attachedToDeskId || outlet.attachedToDeskId;
+                if (dId && !seenDesks.has(dId)) {
+                  seenDesks.add(dId);
+                  deskLinks.push({
+                    deskId: dId,
+                    seatIdx: sp.attachedSeatIndex ?? outlet.attachedSeatIndex,
+                  });
+                }
+              });
             }
 
-            const anchorX =
-              desk.xMm + localAnchorX * Math.cos(rotRad) - localAnchorY * Math.sin(rotRad);
-            const anchorY =
-              desk.yMm + localAnchorX * Math.sin(rotRad) + localAnchorY * Math.cos(rotRad);
+            if (outlet.attachedDeskIds) {
+              outlet.attachedDeskIds.forEach((dId) => {
+                if (dId && !seenDesks.has(dId)) {
+                  seenDesks.add(dId);
+                  deskLinks.push({ deskId: dId, seatIdx: outlet.attachedSeatIndex });
+                }
+              });
+            }
 
-            const isVoip = outlet.outletRole === "VOIP";
-            const isPrinter = outlet.outletRole === "PRINTER";
-            const lineColor = isVoip ? "#c084fc" : isPrinter ? "#fbbf24" : "#38bdf8";
+            if (outlet.attachedToDeskId && !seenDesks.has(outlet.attachedToDeskId)) {
+              seenDesks.add(outlet.attachedToDeskId);
+              deskLinks.push({
+                deskId: outlet.attachedToDeskId,
+                seatIdx: outlet.attachedSeatIndex,
+              });
+            }
 
-            return (
-              <Group key={`anchor-link-${outlet.id}`} listening={false}>
-                <Line
-                  id={`anchor-line-${outlet.id}`}
-                  points={[anchorX, anchorY, outlet.xMm, outlet.yMm]}
-                  stroke={lineColor}
-                  strokeWidth={8}
-                  dash={isVoip ? [40, 30] : [50, 35]}
-                  opacity={0.75}
-                  listening={false}
-                />
-              </Group>
-            );
+            return deskLinks.map(({ deskId, seatIdx }) => {
+              const desk = nodes.find((d) => d.id === deskId);
+              if (!desk) return null;
+              const deskW = desk.widthMm ?? 1600;
+              const deskH = desk.heightMm ?? 800;
+              const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
+
+              let localAnchorX = deskW / 2;
+              let localAnchorY = deskH / 2;
+
+              if (seatIdx !== undefined) {
+                if (desk.subType === "BENCH_QUAD") {
+                  localAnchorX = seatIdx === 0 || seatIdx === 2 ? deskW / 4 : (3 * deskW) / 4;
+                  localAnchorY = seatIdx === 0 || seatIdx === 1 ? deskH / 4 : (3 * deskH) / 4;
+                } else if (desk.subType === "BENCH_DOUBLE") {
+                  localAnchorX = deskW / 2;
+                  localAnchorY = seatIdx === 0 ? deskH / 4 : (3 * deskH) / 4;
+                }
+              }
+
+              const anchorX =
+                desk.xMm + localAnchorX * Math.cos(rotRad) - localAnchorY * Math.sin(rotRad);
+              const anchorY =
+                desk.yMm + localAnchorX * Math.sin(rotRad) + localAnchorY * Math.cos(rotRad);
+
+              const isVoip = outlet.outletRole === "VOIP";
+              const isPrinter = outlet.outletRole === "PRINTER";
+              const lineColor = isVoip ? "#c084fc" : isPrinter ? "#fbbf24" : "#38bdf8";
+
+              return (
+                <Group key={`anchor-link-${outlet.id}-${deskId}`} listening={false}>
+                  <Line
+                    id={`anchor-line-${outlet.id}-${deskId}`}
+                    points={[anchorX, anchorY, outlet.xMm, outlet.yMm]}
+                    stroke={lineColor}
+                    strokeWidth={8}
+                    dash={isVoip ? [40, 30] : [50, 35]}
+                    opacity={0.75}
+                    listening={false}
+                  />
+                </Group>
+              );
+            });
           })}
 
       {/* 1. Baies Informatiques 19" Réalistes (Racks 42U) - Masquées en vue RH */}
@@ -2309,9 +2364,12 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             );
           }
 
-          // Rendu Colonnette / Plastron Multi-Ports RJ45 (Stacké 2 à 8 ports)
-          if (outlet.stackedPorts && outlet.stackedPorts.length > 1) {
-            const portsCount = Math.min(8, outlet.stackedPorts.length);
+          // Rendu Bloc de prises RJ45 / Regroupement Multi-Ports (Stacké 2 à 8 ports)
+          if (
+            (outlet.stackedPorts && outlet.stackedPorts.length > 1) ||
+            outlet.subType === "SOCKET_BLOCK"
+          ) {
+            const portsCount = Math.min(8, Math.max(2, outlet.stackedPorts?.length ?? 4));
             const isTwoColumns = portsCount >= 5;
             const blockWidth = isTwoColumns ? 520 : 340;
             const rows = isTwoColumns ? Math.ceil(portsCount / 2) : portsCount;
@@ -2325,7 +2383,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 y={outlet.yMm}
                 {...interactiveProps}
               >
-                {/* Châssis métallique de la colonnette multi-ports */}
+                {/* Châssis métallique du bloc de prises multi-ports */}
                 <Rect
                   x={-blockWidth / 2}
                   y={-blockHeight / 2}
@@ -2336,7 +2394,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   strokeWidth={isSelected ? 24 : 14}
                   cornerRadius={20}
                 />
-                {/* En-tête bandeau colonnette épuré */}
+                {/* En-tête bandeau bloc épuré */}
                 <Rect
                   x={-blockWidth / 2 + 10}
                   y={-blockHeight / 2 + 10}
@@ -2349,7 +2407,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 <Text
                   x={-blockWidth / 2 + 20}
                   y={-blockHeight / 2 + 18}
-                  text={`COLONNETTE ${portsCount}x RJ45`}
+                  text={`BLOC ${portsCount}x RJ45`}
                   fontSize={22}
                   fontFamily="sans-serif"
                   fontStyle="bold"
@@ -2357,29 +2415,59 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   listening={false}
                 />
 
-                {/* Ports RJ45 individuels : contour couleur du VLAN, vert (connecté) ou rouge (déconnecté) */}
-                {outlet.stackedPorts.map((sp, idx) => {
+                {/* Ports RJ45 individuels : glissables hors du bloc pour extraction */}
+                {(outlet.stackedPorts ?? []).map((sp, idx) => {
                   const col = isTwoColumns ? (idx % 2 === 0 ? 0 : 1) : 0;
                   const row = isTwoColumns ? Math.floor(idx / 2) : idx;
                   const portX = isTwoColumns ? (col === 0 ? -blockWidth / 4 : blockWidth / 4) : 0;
                   const portY = -blockHeight / 2 + 70 + row * 82;
 
-                  const portVlan = sp.vlanId ?? outlet.vlanId ?? 20;
-                  const vlanColor =
-                    vlanStyles?.[portVlan]?.color ??
-                    DEFAULT_VLAN_STYLES[portVlan]?.color ??
-                    "#38bdf8";
+                  const portVlan = sp.vlanId ?? outlet.vlanId;
+                  const vlanColor = portVlan
+                    ? (vlanStyles?.[portVlan]?.color ??
+                      DEFAULT_VLAN_STYLES[portVlan]?.color ??
+                      "#38bdf8")
+                    : "#64748b";
                   const isConnected =
                     sp.isPatched !== undefined
                       ? sp.isPatched
                       : outlet.isPatched !== undefined
                         ? outlet.isPatched
                         : sp.pingStatus === "ONLINE";
-                  const statusColor = isConnected ? "#22c55e" : "#ef4444";
+                  const statusColor = isConnected ? "#22c55e" : "#64748b";
 
                   return (
-                    <Group key={`sp-${sp.portIndex}`} x={portX} y={portY} listening={false}>
-                      {/* Embase RJ45 avec contour à la couleur du VLAN */}
+                    <Group
+                      key={`sp-${sp.portIndex}`}
+                      x={portX}
+                      y={portY}
+                      draggable={true}
+                      onDragStart={(e) => {
+                        e.cancelBubble = true;
+                      }}
+                      onDragMove={(e) => {
+                        e.cancelBubble = true;
+                      }}
+                      onDragEnd={(e) => {
+                        e.cancelBubble = true;
+                        const dropWorldX = outlet.xMm + e.target.x();
+                        const dropWorldY = outlet.yMm + e.target.y();
+                        const distMoved = Math.hypot(e.target.x() - portX, e.target.y() - portY);
+                        // Si le port est glissé hors du bloc (> 140mm), extraction sur le plateau !
+                        if (distMoved > 140) {
+                          onExtractPortFromBlock?.(outlet.id, sp.portIndex, {
+                            x: Math.round(dropWorldX),
+                            y: Math.round(dropWorldY),
+                          });
+                        }
+                        // Réinitialisation de la position visuelle dans Konva
+                        e.target.position({ x: portX, y: portY });
+                        e.target.getStage()?.batchDraw();
+                      }}
+                      onMouseEnter={handleMouseEnter}
+                      onMouseLeave={handleMouseLeave}
+                    >
+                      {/* Embase RJ45 avec contour à la couleur du VLAN ou neutre si passif */}
                       <Rect
                         x={-80}
                         y={-30}
@@ -2390,7 +2478,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         strokeWidth={6}
                         cornerRadius={10}
                       />
-                      {/* Prise RJ45 centrale colorée avec statut vert/rouge */}
+                      {/* Prise RJ45 centrale colorée avec statut vert/neutre */}
                       <Rect
                         x={-65}
                         y={-20}
@@ -2401,17 +2489,17 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                         strokeWidth={4}
                         cornerRadius={6}
                       />
-                      {/* Voyant / LED de statut vert/rouge */}
+                      {/* Voyant / LED de statut vert ou neutre éteint */}
                       <Circle
                         x={-15}
                         y={0}
                         radius={8}
                         fill={statusColor}
-                        stroke={statusColor === "#22c55e" ? "#166534" : "#991b1b"}
+                        stroke={statusColor === "#22c55e" ? "#166534" : "#334155"}
                         strokeWidth={2}
                         listening={false}
                       />
-                      {/* Numéro de port sobre et lisible sans texte surchargé */}
+                      {/* Numéro de port sobre et lisible */}
                       <Text
                         x={10}
                         y={-12}
@@ -2438,16 +2526,17 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                             ? " • ⚡PoE"
                             : "";
                     const vlanText = outlet.vlanId ? ` [VLAN ${outlet.vlanId}]` : "";
-                    const title = `${icon} Colonnette (${portsCount}P)${poeText}${vlanText} • ${outlet.name}`;
+                    const title = `${icon} Bloc RJ45 (${portsCount}P)${poeText}${vlanText} • ${outlet.name}`;
                     const badgeHeight = 88;
                     const textFontSize = 50;
                     const badgeWidth = Math.min(950, Math.max(380, title.length * 28 + 60));
                     const labelPos = outlet.labelPosition || "RIGHT";
-                    const colonnetteVlan = outlet.vlanId ?? outlet.stackedPorts?.[0]?.vlanId ?? 20;
-                    const badgeVlanColor =
-                      vlanStyles?.[colonnetteVlan]?.color ??
-                      DEFAULT_VLAN_STYLES[colonnetteVlan]?.color ??
-                      "#38bdf8";
+                    const blockVlan = outlet.vlanId ?? outlet.stackedPorts?.[0]?.vlanId;
+                    const badgeVlanColor = blockVlan
+                      ? (vlanStyles?.[blockVlan]?.color ??
+                        DEFAULT_VLAN_STYLES[blockVlan]?.color ??
+                        "#38bdf8")
+                      : "#64748b";
                     const { x: groupX, y: groupY } = getLabelCoordinates(
                       labelPos,
                       blockWidth,
@@ -2491,14 +2580,13 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
           // Rendu Plastron Mural Standard RJ45 (Data ou VoIP ou Générique avec Émote & PoE)
           const isVoipRole = outlet.outletRole === "VOIP";
           const roleIcon = outlet.customEmote || (isVoipRole ? "📞" : "🔌");
-          const vlanId = outlet.vlanId ?? (isVoipRole ? 30 : 20);
-          const vlanColor =
-            vlanStyles?.[vlanId]?.color ??
-            DEFAULT_VLAN_STYLES[vlanId]?.color ??
-            (isVoipRole ? "#c084fc" : "#38bdf8");
+          const vlanId = outlet.vlanId;
+          const vlanColor = vlanId
+            ? (vlanStyles?.[vlanId]?.color ?? DEFAULT_VLAN_STYLES[vlanId]?.color ?? "#38bdf8")
+            : "#64748b";
           const isConnected =
             outlet.isPatched !== undefined ? outlet.isPatched : outlet.pingStatus === "ONLINE";
-          const statusColor = isConnected ? "#22c55e" : "#ef4444";
+          const statusColor = isConnected ? "#22c55e" : "#64748b";
 
           return (
             <Group

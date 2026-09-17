@@ -102,13 +102,13 @@ NetFloor/
 3. **Câblage Physique Réseau Avancé (`CableLayer`)** :
    - Tracés orthogonaux stricts à 90° sans angles diagonaux ni coudes orphelins.
    - Poignée de pivot Konva déplaçable librement pour chaque câble ou faisceau.
-   - **Regroupement en faisceau (ribbon bundle)** pour les colonnettes multi-ports : les câbles partent ensemble parallèlement avec un écart régulier et se séparent automatiquement au pivot s'ils vont vers des baies différentes.
+   - **Regroupement en faisceau (ribbon bundle)** pour les blocs de prises multi-ports : les câbles partent ensemble parallèlement avec un écart régulier et se séparent automatiquement au pivot s'ils vont vers des baies différentes.
    - Traçage automatique récursif SQL CTE via `/api/trace`.
    - Couleurs et motifs pleins/pointillés éditables par VLAN via `VlanStyleCustomizer`.
 
 4. **Mobilier & Prises Solidaires (`EquipmentLayer`)** :
    - Bureaux Solo, Bench Double (2 personnes) et Îlot Quad (4 personnes) avec sièges, écrans et occupants nommés.
-   - Déplacement solidaire : lorsqu'un bureau bouge, toutes ses prises réseau et colonnettes RJ45 rattachées se déplacent synchroniquement sans latence.
+   - Déplacement solidaire : lorsqu'un bureau bouge, toutes ses prises réseau et blocs de prises RJ45 rattachés se déplacent synchroniquement sans latence.
    - Détection bord-à-bord (magnétisme d'accostage entre bureaux).
    - Prises murales et boîtes de sol avec adresses IP, MAC, VLAN, statut ping et ports de switch assignés.
 

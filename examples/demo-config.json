@@ -424,9 +424,10 @@
       "pingLatencyMs": 2
     },
     {
-      "id": "colonnette-402",
+      "id": "socket-block-402",
       "type": "WALL_OUTLET",
-      "name": "Colonnette 402",
+      "subType": "SOCKET_BLOCK",
+      "name": "Bloc RJ45 402",
       "xMm": 23600,
       "yMm": 14800,
       "attachedToDeskId": "bench-402",
@@ -626,9 +627,10 @@
       ]
     },
     {
-      "id": "colonnette-502",
+      "id": "socket-block-502",
       "type": "WALL_OUTLET",
-      "name": "Colonnette 502",
+      "subType": "SOCKET_BLOCK",
+      "name": "Bloc RJ45 502",
       "xMm": 48600,
       "yMm": 18800,
       "attachedToDeskId": "bench-502",
@@ -762,9 +764,10 @@
       ]
     },
     {
-      "id": "colonnette-403",
+      "id": "socket-block-403",
       "type": "WALL_OUTLET",
-      "name": "Colonnette 403",
+      "subType": "SOCKET_BLOCK",
+      "name": "Bloc RJ45 403",
       "xMm": 23600,
       "yMm": 18800,
       "attachedToDeskId": "bench-403",

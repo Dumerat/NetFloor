@@ -60,7 +60,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
     return nodes.filter((n) => n.type === "DESK");
   }, [nodes]);
 
-  // Liste consolidée de toutes les prises murales et colonnettes
+  // Liste consolidée de toutes les prises murales et blocs de prises RJ45
   const outletNodes = useMemo(() => {
     return nodes.filter((n) => n.type === "WALL_OUTLET");
   }, [nodes]);
@@ -173,7 +173,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
       // Prises assignées nommément à l'utilisateur
       for (const outlet of outletNodes) {
-        // Colonnette multi-ports
+        // Bloc de prises RJ45 multi-ports
         if (outlet.stackedPorts && outlet.stackedPorts.length > 0) {
           outlet.stackedPorts.forEach((sp) => {
             if (sp.assignedPerson === user.fullName) {
@@ -201,7 +201,12 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
       // Prises solidaires des bureaux occupés par l'utilisateur
       assignedDesks.forEach(({ desk }) => {
-        const linkedOutlets = outletNodes.filter((o) => o.attachedToDeskId === desk.id);
+        const linkedOutlets = outletNodes.filter(
+          (o) =>
+            o.attachedToDeskId === desk.id ||
+            o.attachedDeskIds?.includes(desk.id) ||
+            o.stackedPorts?.some((p) => p.attachedToDeskId === desk.id)
+        );
         linkedOutlets.forEach((lo) => {
           const alreadyInList = assignedOutlets.some((ao) => ao.outlet.id === lo.id);
           if (!alreadyInList) {
@@ -269,14 +274,14 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
     });
   }, [deskNodes, outletNodes]);
 
-  // Tous les ports individuels consolidés (Prises simples + chaque port de colonnette P1..P8)
+  // Tous les ports individuels consolidés (Prises simples + chaque port de bloc P1..P8)
   const allConsolidatedPorts = useMemo(() => {
     interface PortItem {
       id: string;
       parentOutlet: NodeDisplay;
       portLabel: string;
       outletRole: string;
-      vlanId: number;
+      vlanId?: number | undefined;
       isPatched: boolean;
       emote: string;
       connectedRackId?: string | undefined;
@@ -313,7 +318,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
             parentOutlet: outlet,
             portLabel: sp.portLabel || `P${idx + 1}`,
             outletRole: sp.outletRole || "DATA",
-            vlanId: sp.vlanId ?? 20,
+            vlanId: sp.vlanId,
             isPatched: !!sp.isPatched,
             emote: getEmoteForRole(sp.outletRole || "DATA"),
             connectedRackId: sp.connectedRackId || outlet.connectedRackId,
@@ -330,7 +335,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
           parentOutlet: outlet,
           portLabel: "P1 (Principal)",
           outletRole: outlet.outletRole || "DATA",
-          vlanId: outlet.vlanId ?? 20,
+          vlanId: outlet.vlanId,
           isPatched: !!outlet.isPatched,
           emote: getEmoteForRole(outlet.outletRole || "DATA", outlet.customEmote),
           connectedRackId: outlet.connectedRackId,
@@ -1028,7 +1033,12 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
             ) : (
               filteredDesks.map((desk) => {
                 // Trouver les prises liées à ce bureau
-                const linkedOutlets = outletNodes.filter((o) => o.attachedToDeskId === desk.id);
+                const linkedOutlets = outletNodes.filter(
+                  (o) =>
+                    o.attachedToDeskId === desk.id ||
+                    o.attachedDeskIds?.includes(desk.id) ||
+                    o.stackedPorts?.some((p) => p.attachedToDeskId === desk.id)
+                );
 
                 // Trouver si un téléphone IP VoIP est présent sur ce bureau
                 const voipOutlet = linkedOutlets.find(
@@ -1196,7 +1206,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
               </div>
             ) : (
               filteredPorts.map((port) => {
-                const vlanStyle = vlanStyles[port.vlanId];
+                const vlanStyle = port.vlanId !== undefined ? vlanStyles[port.vlanId] : undefined;
 
                 return (
                   <div
@@ -1237,16 +1247,22 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                         </div>
                       </div>
 
-                      <span
-                        className="px-1.5 py-0.5 rounded text-[9px] font-mono border"
-                        style={{
-                          color: vlanStyle?.color ?? "#38bdf8",
-                          borderColor: `${vlanStyle?.color ?? "#38bdf8"}40`,
-                          backgroundColor: `${vlanStyle?.color ?? "#38bdf8"}15`,
-                        }}
-                      >
-                        VLAN {port.vlanId}
-                      </span>
+                      {port.vlanId !== undefined ? (
+                        <span
+                          className="px-1.5 py-0.5 rounded text-[9px] font-mono border"
+                          style={{
+                            color: vlanStyle?.color ?? "#38bdf8",
+                            borderColor: `${vlanStyle?.color ?? "#38bdf8"}40`,
+                            backgroundColor: `${vlanStyle?.color ?? "#38bdf8"}15`,
+                          }}
+                        >
+                          VLAN {port.vlanId}
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono border border-slate-700 bg-slate-800 text-slate-400">
+                          Passif (Non raccordé)
+                        </span>
+                      )}
                     </div>
 
                     {/* Brassage Baie / Switch / Port */}

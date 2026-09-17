@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, memo, type FC } from "react";
+import { useState, memo, type FC } from "react";
 import {
   Monitor,
   Users,
@@ -18,8 +18,6 @@ import {
   Sparkles,
   Sliders,
   Plug,
-  Trash2,
-  Check,
   GripVertical,
   Network,
   Camera,
@@ -27,7 +25,7 @@ import {
   Building2,
 } from "lucide-react";
 import { OutletRole, NodeSubType, PoeMode } from "@/components/canvas/EquipmentLayer";
-import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
+import type { VlanStyle } from "@/data/vlanStyles";
 
 export type PaletteCategory = "FURNITURE" | "CONNECTIVITY" | "INFRASTRUCTURE";
 
@@ -51,39 +49,6 @@ export interface PaletteItem {
   customPortCount?: number | undefined;
   customPoeMode?: PoeMode | undefined;
   customVlanId?: number | undefined;
-}
-
-export interface CustomPortProfile {
-  id: string;
-  name: string;
-  portCount: number; // 1 à 8 ports
-  poeMode: PoeMode; // "NONE" | "POE" | "POE_PLUS" | "POE_PLUS_PLUS"
-  vlanId: number;
-  customEmote: string;
-  createdAtIso: string;
-}
-
-const STORAGE_KEY_PROFILES = "netfloor_custom_port_profiles_v1";
-
-export function loadCustomPortProfiles(): CustomPortProfile[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_PROFILES);
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error("Erreur de lecture des profils de ports dans localStorage", err);
-    return [];
-  }
-}
-
-export function saveCustomPortProfiles(profiles: CustomPortProfile[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(profiles));
-  } catch (err) {
-    console.error("Erreur de sauvegarde des profils de ports dans localStorage", err);
-  }
 }
 
 export const PALETTE_CATALOG: PaletteItem[] = [
@@ -137,56 +102,36 @@ export const PALETTE_CATALOG: PaletteItem[] = [
     iconName: "Users",
   },
 
-  // 2. Connectique & Prises (Maintenance & Câblage) - Port Générique + Standards
+  // 2. Connectique & Prises (Maintenance & Câblage) - Prise RJ45 & Bloc de prises RJ45
   {
-    id: "conn-generic-port",
+    id: "conn-rj45-single",
     category: "CONNECTIVITY",
-    name: "Port Réseau Générique",
-    subType: "GENERIC_PORT",
+    name: "Prise RJ45",
+    subType: "WALL_OUTLET",
     targetType: "WALL_OUTLET",
     outletRole: "GENERIC",
     widthMm: 250,
     heightMm: 250,
-    description: "Port RJ45 universel paramétrable (multi-ports, PoE, VLAN direct, émote)",
+    description: "Prise RJ45 Cat6A unitaire passive (propriétés dynamiques selon switch)",
     personaTag: "MAINTENANCE",
     iconName: "Plug",
     portCount: 1,
     poeMode: "NONE",
-    customEmote: "🔌",
   },
   {
-    id: "conn-wall-data",
+    id: "conn-socket-block",
     category: "CONNECTIVITY",
-    name: "Plastron Mural PC Data",
-    subType: "WALL_OUTLET",
+    name: "Bloc de prises RJ45",
+    subType: "SOCKET_BLOCK",
     targetType: "WALL_OUTLET",
-    outletRole: "DATA",
-    widthMm: 250,
-    heightMm: 250,
-    description: "Prise murale Cat6A sur plinthe/goulotte (VLAN 20 Data)",
+    outletRole: "GENERIC",
+    widthMm: 340,
+    heightMm: 255,
+    description: "Regroupement visuel de 4 ports RJ45 (supporte 2 à 8 ports, glisser-déposer)",
     personaTag: "MAINTENANCE",
-    iconName: "Laptop",
-    portCount: 1,
+    iconName: "Layers",
+    portCount: 4,
     poeMode: "NONE",
-    vlanId: 20,
-    customEmote: "💻",
-  },
-  {
-    id: "conn-wall-voip",
-    category: "CONNECTIVITY",
-    name: "Plastron Mural Téléphonie VoIP",
-    subType: "WALL_OUTLET",
-    targetType: "WALL_OUTLET",
-    outletRole: "VOIP",
-    widthMm: 250,
-    heightMm: 250,
-    description: "Prise murale IP Phone Cat6A PoE (VLAN 30 Voice QoS)",
-    personaTag: "MAINTENANCE",
-    iconName: "Phone",
-    portCount: 1,
-    poeMode: "POE",
-    vlanId: 30,
-    customEmote: "📞",
   },
 
   // 3. Infrastructure & Réseau (DSI)
@@ -255,23 +200,6 @@ export const PALETTE_CATALOG: PaletteItem[] = [
   },
 ];
 
-const EMOTE_OPTIONS = [
-  "🔌",
-  "💻",
-  "📞",
-  "🖨️",
-  "📶",
-  "🖥️",
-  "🎥",
-  "⚡",
-  "🌐",
-  "🔒",
-  "🚪",
-  "⚙️",
-  "📦",
-  "🏷️",
-];
-
 interface EquipmentPaletteProps {
   isOpen: boolean;
   onToggle: () => void;
@@ -304,7 +232,6 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   isTopologyOpen = false,
   onOpenInventory,
   isInventoryOpen = false,
-  vlanStyles = DEFAULT_VLAN_STYLES,
   width = 340,
   onResizeStart,
   topologyContent,
@@ -315,74 +242,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   // 3 sous-menus d'équipements dans la seconde fenêtre latérale
   const [selectedCategory, setSelectedCategory] = useState<PaletteCategory>("FURNITURE");
 
-  // Profils personnalisés créés par l'utilisateur
-  const [customProfiles, setCustomProfiles] = useState<CustomPortProfile[]>([]);
-  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
-
-  // État du formulaire de création de profil
-  const [newProfileName, setNewProfileName] = useState("Prise Polyvalente");
-  const [newProfilePorts, setNewProfilePorts] = useState<number>(2);
-  const [newProfilePoe, setNewProfilePoe] = useState<PoeMode>("POE_PLUS");
-  const [newProfileVlan, setNewProfileVlan] = useState<number>(20);
-  const [newProfileEmote, setNewProfileEmote] = useState<string>("🔌");
-
-  useEffect(() => {
-    setCustomProfiles(loadCustomPortProfiles());
-  }, []);
-
-  const handleSaveProfile = () => {
-    if (!newProfileName.trim()) return;
-    const newProfile: CustomPortProfile = {
-      id: `profile-${Date.now()}`,
-      name: newProfileName.trim(),
-      portCount: newProfilePorts,
-      poeMode: newProfilePoe,
-      vlanId: newProfileVlan,
-      customEmote: newProfileEmote,
-      createdAtIso: new Date().toISOString(),
-    };
-
-    const updated = [newProfile, ...customProfiles];
-    setCustomProfiles(updated);
-    saveCustomPortProfiles(updated);
-    setIsCreatingProfile(false);
-    setNewProfileName("Nouveau Port");
-  };
-
-  const handleDeleteProfile = (profileId: string) => {
-    const updated = customProfiles.filter((p) => p.id !== profileId);
-    setCustomProfiles(updated);
-    saveCustomPortProfiles(updated);
-  };
-
-  const handleAddCustomProfileItem = (profile: CustomPortProfile) => {
-    const isMulti = profile.portCount > 1;
-    const customItem: PaletteItem = {
-      id: `custom-item-${profile.id}-${Date.now()}`,
-      category: "CONNECTIVITY",
-      name: profile.name,
-      subType: isMulti ? "WALL_OUTLET" : "GENERIC_PORT",
-      targetType: "WALL_OUTLET",
-      outletRole: "GENERIC",
-      widthMm: isMulti ? 400 : 250,
-      heightMm: isMulti ? 400 : 250,
-      description: `${profile.portCount} port(s) RJ45 • ${
-        profile.poeMode !== "NONE" ? profile.poeMode.replace("_", "+") : "Non-PoE"
-      } • VLAN ${profile.vlanId}`,
-      personaTag: "MAINTENANCE",
-      iconName: "Plug",
-      portCount: profile.portCount,
-      poeMode: profile.poeMode,
-      vlanId: profile.vlanId,
-      customEmote: profile.customEmote,
-      isCustomProfile: true,
-    };
-    onAddItem(customItem);
-  };
-
   const filteredItems = PALETTE_CATALOG.filter((item) => item.category === selectedCategory);
-
-  const availableVlans = Object.values(vlanStyles).sort((a, b) => a.vlanId - b.vlanId);
 
   const renderIcon = (iconName: string, className: string = "w-4 h-4") => {
     switch (iconName) {
@@ -458,6 +318,20 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
           <span style="font-size:18px;">🖥️</span>
           <span style="font-size:9px;font-weight:bold;color:#c084fc;font-family:sans-serif;">${item.subType === "RACK_18U" ? "18U" : "42U"}</span>
+        </div>
+      `;
+    } else if (item.subType === "SOCKET_BLOCK") {
+      widthPx = 80;
+      heightPx = 54;
+      ghost.style.width = `${widthPx}px`;
+      ghost.style.height = `${heightPx}px`;
+      ghost.style.backgroundColor = "#1e293b";
+      ghost.style.border = "2px solid #38bdf8";
+      ghost.style.borderRadius = "8px";
+      ghost.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+          <span style="font-size:14px;">🔲</span>
+          <span style="font-size:9px;font-weight:bold;color:#38bdf8;font-family:sans-serif;">Bloc 4x RJ45</span>
         </div>
       `;
     } else {
@@ -686,243 +560,8 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                   </div>
                 )}
 
-                {/* Dans le sous-menu Prises & Ports : Bouton & Formulaire de Création de Profil Personnalisé */}
-                {selectedCategory === "CONNECTIVITY" && (
-                  <div className="p-2.5 bg-slate-900/90 border border-blue-500/30 rounded-lg space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-300">
-                        <Plug className="w-3.5 h-3.5 text-blue-400" />
-                        <span>Créer un Profil de Port</span>
-                      </div>
-                      <button
-                        onClick={() => setIsCreatingProfile((prev) => !prev)}
-                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white transition flex items-center gap-1"
-                      >
-                        <Plus className="w-3 h-3" />
-                        {isCreatingProfile ? "Fermer" : "Nouveau"}
-                      </button>
-                    </div>
-
-                    {isCreatingProfile && (
-                      <div className="space-y-2 pt-1.5 border-t border-slate-800 text-[10px] font-mono">
-                        {/* Nom du profil */}
-                        <div>
-                          <label className="text-slate-400 block mb-0.5">Nom du profil :</label>
-                          <input
-                            type="text"
-                            value={newProfileName}
-                            onChange={(e) => setNewProfileName(e.target.value)}
-                            placeholder="Ex: Borne Wi-Fi PoE+, Double Desk..."
-                            className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded text-slate-200 text-xs focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-
-                        {/* Nombre de ports stackés (1 à 8) */}
-                        <div>
-                          <label className="text-slate-400 block mb-0.5">
-                            Nombre de ports ({newProfilePorts}P) :
-                          </label>
-                          <div className="grid grid-cols-5 gap-1 text-center">
-                            {[1, 2, 4, 6, 8].map((cnt) => (
-                              <button
-                                key={cnt}
-                                type="button"
-                                onClick={() => setNewProfilePorts(cnt)}
-                                className={`py-1 rounded border transition ${
-                                  newProfilePorts === cnt
-                                    ? "bg-blue-600 text-white border-blue-500 font-bold"
-                                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
-                                }`}
-                              >
-                                {cnt}P
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Mode PoE */}
-                        <div>
-                          <label className="text-slate-400 block mb-0.5">Alimentation PoE :</label>
-                          <div className="grid grid-cols-2 gap-1">
-                            {[
-                              { id: "NONE" as PoeMode, label: "Non-PoE" },
-                              { id: "POE" as PoeMode, label: "PoE (15W)" },
-                              { id: "POE_PLUS" as PoeMode, label: "PoE+ (30W)" },
-                              { id: "POE_PLUS_PLUS" as PoeMode, label: "PoE++ (60W)" },
-                            ].map((poe) => (
-                              <button
-                                key={poe.id}
-                                type="button"
-                                onClick={() => setNewProfilePoe(poe.id)}
-                                className={`py-1 px-1 rounded border transition text-center ${
-                                  newProfilePoe === poe.id
-                                    ? "bg-amber-600/30 text-amber-300 border-amber-500 font-bold"
-                                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
-                                }`}
-                              >
-                                {poe.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Attribution du VLAN */}
-                        <div>
-                          <label className="text-slate-400 block mb-0.5">
-                            Attribution du VLAN :
-                          </label>
-                          <div className="grid grid-cols-3 gap-1">
-                            {availableVlans.map((v) => (
-                              <button
-                                key={v.vlanId}
-                                type="button"
-                                onClick={() => setNewProfileVlan(v.vlanId)}
-                                className={`py-1 px-1 rounded border transition flex items-center justify-center gap-1 ${
-                                  newProfileVlan === v.vlanId
-                                    ? "bg-slate-800 text-white border-blue-500 font-bold ring-1 ring-blue-500/40"
-                                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200"
-                                }`}
-                              >
-                                <span
-                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: v.color }}
-                                />
-                                <span>V{v.vlanId}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Choix de l'Émote */}
-                        <div>
-                          <label className="text-slate-400 block mb-0.5">Émote au choix :</label>
-                          <div className="flex flex-wrap gap-1">
-                            {EMOTE_OPTIONS.map((em) => (
-                              <button
-                                key={em}
-                                type="button"
-                                onClick={() => setNewProfileEmote(em)}
-                                className={`w-6 h-6 rounded flex items-center justify-center text-xs transition ${
-                                  newProfileEmote === em
-                                    ? "bg-blue-600 scale-110 shadow"
-                                    : "bg-slate-950 hover:bg-slate-800"
-                                }`}
-                              >
-                                {em}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Bouton Enregistrer le Profil */}
-                        <button
-                          type="button"
-                          onClick={handleSaveProfile}
-                          className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-sans font-semibold text-xs flex items-center justify-center gap-1.5 transition shadow"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          Enregistrer ce profil
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Liste des profils personnalisés sauvegardés */}
-                {selectedCategory === "CONNECTIVITY" && customProfiles.length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1 px-1">
-                      <Sparkles className="w-3 h-3 text-amber-400" />
-                      <span>Profils personnalisés ({customProfiles.length}) :</span>
-                    </div>
-                    {customProfiles.map((p) => {
-                      const vStyle = vlanStyles[p.vlanId] ?? DEFAULT_VLAN_STYLES[p.vlanId];
-                      const customItem: PaletteItem = {
-                        id: `custom-${p.id}`,
-                        category: "CONNECTIVITY",
-                        name: p.name,
-                        subType: "GENERIC_PORT",
-                        targetType: "WALL_OUTLET",
-                        outletRole: "GENERIC",
-                        widthMm: 250,
-                        heightMm: 250,
-                        description: `Profil personnalisé : ${p.portCount}P, ${p.poeMode}, VLAN ${p.vlanId}`,
-                        personaTag: "MAINTENANCE",
-                        customEmote: p.customEmote,
-                        customPortCount: p.portCount,
-                        customPoeMode: p.poeMode,
-                        customVlanId: p.vlanId,
-                        isCustomProfile: true,
-                        portCount: p.portCount,
-                        vlanId: p.vlanId,
-                        poeMode: p.poeMode,
-                        iconName: "Plug",
-                      };
-                      return (
-                        <div
-                          key={p.id}
-                          draggable={true}
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData("application/json", JSON.stringify(customItem));
-                            e.dataTransfer.effectAllowed = "copy";
-                            setupDragPreview(e, customItem);
-                          }}
-                          className="p-2.5 bg-slate-900 border border-blue-500/40 hover:border-blue-400 rounded-lg transition space-y-1.5 group shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-2">
-                              <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition flex-shrink-0" />
-                              <span className="text-base">{p.customEmote}</span>
-                              <div>
-                                <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300">
-                                  {p.name}
-                                </div>
-                                <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1.5">
-                                  <span>{p.portCount}P RJ45</span>
-                                  <span>•</span>
-                                  <span className="text-amber-400 font-bold">
-                                    {p.poeMode !== "NONE" ? p.poeMode.replace("_", "+") : "Non-PoE"}
-                                  </span>
-                                  <span>•</span>
-                                  <span className="flex items-center gap-1">
-                                    <span
-                                      className="w-1.5 h-1.5 rounded-full"
-                                      style={{ backgroundColor: vStyle?.color ?? "#38bdf8" }}
-                                    />
-                                    V{p.vlanId}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleDeleteProfile(p.id)}
-                              title="Supprimer ce profil"
-                              className="text-slate-500 hover:text-red-400 p-1 rounded transition opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-
-                          <button
-                            onClick={() => handleAddCustomProfileItem(p)}
-                            className="w-full py-1 px-2 bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white rounded text-[11px] font-medium flex items-center justify-center gap-1.5 transition border border-blue-500/40"
-                          >
-                            <Plus className="w-3 h-3" />
-                            Ajouter au plan
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Liste des équipements standards du catalogue */}
+                {/* Liste des équipements du catalogue */}
                 <div className="space-y-2">
-                  {selectedCategory === "CONNECTIVITY" && customProfiles.length > 0 && (
-                    <div className="text-[10px] font-mono text-slate-400 px-1 pt-1">
-                      Modèles de base :
-                    </div>
-                  )}
                   {filteredItems.map((item) => {
                     const dimMeters = `${(item.widthMm / 1000).toFixed(2)} × ${(
                       item.heightMm / 1000

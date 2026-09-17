@@ -6,7 +6,6 @@ import {
   NodeDisplay,
   RackDisplay,
   OutletRole,
-  PoeMode,
   DeskSeatOccupant,
   StackedPortItem,
   getDeskSeatCount,
@@ -62,6 +61,7 @@ import {
   Cloud,
   PlusCircle,
   Boxes,
+  ExternalLink,
 } from "lucide-react";
 import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
@@ -104,7 +104,9 @@ export interface CircuitInspectorProps {
   onSelectNode?: ((node: NodeDisplay) => void) | undefined;
   onChangeRole?: ((outletId: string, role: OutletRole) => void) | undefined;
   onAddOutletToDesk?: ((deskId: string, role: OutletRole) => void) | undefined;
-  onAddColonnetteToDesk?: ((deskId: string, portsCount?: number | undefined) => void) | undefined;
+  onAddSocketBlockToDesk?: ((deskId: string, portsCount?: number | undefined) => void) | undefined;
+  onExtractPortFromBlock?:
+    ((blockId: string, portIndex: number, worldPos?: { x: number; y: number }) => void) | undefined;
   onUpdateNodeProperties?: ((nodeId: string, updates: Partial<NodeDisplay>) => void) | undefined;
   onDeleteNode?: ((nodeId: string) => void) | undefined;
   onUpdateZone?: ((zoneId: string, updates: Partial<FloorZone>) => void) | undefined;
@@ -136,7 +138,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   onSelectNode,
   onChangeRole: _onChangeRole,
   onAddOutletToDesk,
-  onAddColonnetteToDesk,
+  onAddSocketBlockToDesk,
+  onExtractPortFromBlock,
   onUpdateNodeProperties,
   onDeleteNode,
   onUpdateZone,
@@ -373,46 +376,46 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     });
   };
 
-  // Convertir une prise simple en colonnette multi-ports (slot 2 à 8 ports)
-  const handleConvertSingleToColonnette = () => {
+  // Convertir une prise simple en bloc de prises RJ45 (2 à 8 ports)
+  const handleConvertSingleToSocketBlock = () => {
     if (!selectedNode) return;
     const defaultPorts: StackedPortItem[] = [
       {
         portIndex: 0,
-        portLabel: "RJ45-1",
+        portLabel: "P1",
         outletRole: selectedNode.outletRole || "DATA",
         assignedPerson: selectedNode.assignedPerson,
         assignedUserId: selectedNode.assignedUserId,
         attachedSeatIndex: selectedNode.attachedSeatIndex,
-        ipAddress: selectedNode.ipAddress || "10.42.20.101",
-        macAddress: selectedNode.macAddress || "00:1A:2B:3C:4D:01",
-        pingStatus: selectedNode.pingStatus || "ONLINE",
-        pingLatencyMs: selectedNode.pingLatencyMs || 3,
-        vlanId: selectedNode.outletRole === "VOIP" ? 30 : 20,
+        isPatched: selectedNode.isPatched,
+        connectedRackId: selectedNode.connectedRackId,
+        connectedSwitchId: selectedNode.connectedSwitchId,
+        connectedSwitchPort: selectedNode.connectedSwitchPort,
+        vlanId: selectedNode.vlanId,
       },
       {
         portIndex: 1,
-        portLabel: "RJ45-2",
-        outletRole: "VOIP",
-        ipAddress: "10.42.30.101",
-        macAddress: "00:08:5D:8A:22:9C",
-        pingStatus: "ONLINE",
-        pingLatencyMs: 2,
-        vlanId: 30,
+        portLabel: "P2",
+        outletRole: "DATA",
+        vlanId: undefined, // Cuivre passif
       },
     ];
     onUpdateNodeProperties?.(selectedNode.id, {
-      name: selectedNode.name.replace(/Prise/i, "Colonnette"),
+      subType: "SOCKET_BLOCK",
+      name: selectedNode.name.replace(/Prise/i, "Bloc RJ45"),
+      portCount: 2,
       stackedPorts: defaultPorts,
     });
     setActiveStackedPortIdx(0);
   };
 
-  // Dégrouper la colonnette en prise simple
-  const handleUngroupColonnette = () => {
+  // Dissoudre le bloc en prise simple
+  const handleUngroupSocketBlock = () => {
     if (!selectedNode) return;
     onUpdateNodeProperties?.(selectedNode.id, {
-      name: selectedNode.name.replace(/Colonnette/i, "Prise"),
+      subType: "WALL_OUTLET",
+      name: selectedNode.name.replace(/Bloc de prises RJ45|Bloc RJ45|Colonnette/i, "Prise"),
+      portCount: 1,
       stackedPorts: undefined,
     });
   };
@@ -1167,7 +1170,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       if (!curPort) return null;
       const curPortRole = curPort.outletRole;
 
-      // Résolution dynamique de la baie, du switch et du port pour ce port de colonnette
+      // Résolution dynamique de la baie, du switch et du port pour ce port du bloc de prises
       const curPortRackId = curPort.connectedRackId || availableRacks[0]?.id || "rack-01";
       const curPortRack = availableRacks.find((r) => r.id === curPortRackId) ?? availableRacks[0];
       const curPortRackSwitches = getSwitchesForRack(curPortRack?.id);
@@ -1219,7 +1222,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
                     <Network className="w-3.5 h-3.5 text-sky-400" />
-                    Ports RJ45 de la colonnette ({ports.length})
+                    Ports RJ45 du bloc ({ports.length})
                   </span>
                   <span className="text-[10px] text-slate-400 font-mono">Sélection rapide</span>
                 </div>
@@ -1266,9 +1269,24 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                               VLAN {pVlan}
                             </span>
                           </div>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {p.outletRole}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {p.outletRole}
+                            </span>
+                            {onExtractPortFromBlock && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onExtractPortFromBlock(selectedNode.id, idx);
+                                }}
+                                className="p-0.5 hover:bg-amber-500/20 text-slate-400 hover:text-amber-300 rounded transition"
+                                title="Extraire ce port individuel sur le plateau en tant que prise autonome"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
                           <span className="truncate max-w-[140px] text-slate-300">
@@ -1312,7 +1330,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   </div>
                   <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
                     <span className="text-slate-400">VLAN : </span>
-                    <span className="text-sky-300 font-bold">VLAN {curPort.vlanId ?? 20}</span>
+                    <span className="text-sky-300 font-bold">
+                      {curPort.vlanId !== undefined
+                        ? `VLAN ${curPort.vlanId}`
+                        : "Cuivre passif (Non raccordé)"}
+                    </span>
                   </div>
                   <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
                     <span className="text-slate-400">Rôle : </span>
@@ -1425,7 +1447,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     </span>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded border bg-sky-500/20 text-sky-400 border-sky-500/30">
-                        COLONNETTE {ports.length}P
+                        BLOC {ports.length}x RJ45
                       </span>
                       <span
                         className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
@@ -1482,12 +1504,33 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       </button>
                     </div>
 
-                    {isLinked && linkedDesk && (
-                      <div className="text-[11px] text-slate-300 bg-blue-950/40 border border-blue-900/50 p-2 rounded space-y-1">
+                    {((selectedNode.attachedDeskIds && selectedNode.attachedDeskIds.length > 0) ||
+                      isLinked) && (
+                      <div className="text-[11px] text-slate-300 bg-blue-950/40 border border-blue-900/50 p-2 rounded space-y-1.5">
                         <div className="flex justify-between font-mono text-[10px]">
-                          <span className="text-slate-400">Bureau :</span>
-                          <span className="font-semibold text-slate-100">{linkedDesk.name}</span>
+                          <span className="text-slate-400">Bureaux desservis :</span>
+                          <span className="font-semibold text-sky-300">
+                            {selectedNode.attachedDeskIds && selectedNode.attachedDeskIds.length > 1
+                              ? `${selectedNode.attachedDeskIds.length} bureaux connectés`
+                              : (linkedDesk?.name ?? "1 bureau")}
+                          </span>
                         </div>
+                        {selectedNode.attachedDeskIds &&
+                          selectedNode.attachedDeskIds.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-1 border-t border-blue-900/40">
+                              {selectedNode.attachedDeskIds.map((dId) => {
+                                const d = desks.find((desk) => desk.id === dId);
+                                return (
+                                  <span
+                                    key={dId}
+                                    className="px-1.5 py-0.5 rounded bg-blue-900/40 border border-blue-800 text-blue-200 text-[9px] font-mono"
+                                  >
+                                    🖥️ {d?.name ?? dId}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         <div className="flex justify-between font-mono text-[10px]">
                           <span className="text-slate-400">Écart relatif :</span>
                           <span className="text-sky-300 font-semibold">
@@ -1503,7 +1546,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     )}
                   </div>
 
-                  {/* Position du libellé de la colonnette */}
+                  {/* Position du libellé du bloc de prises */}
                   <div className="pt-2 border-t border-slate-800">
                     <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
                       <span className="flex items-center gap-1">
@@ -1570,10 +1613,22 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           <Trash2 className="w-2.5 h-2.5" />
                         </button>
                       )}
+                      {onExtractPortFromBlock && (
+                        <button
+                          onClick={() =>
+                            onExtractPortFromBlock(selectedNode.id, safeStackedPortIdx)
+                          }
+                          className="px-1.5 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded text-[9px] font-mono flex items-center gap-1 transition"
+                          title="Extraire le port sélectionné sur le plateau"
+                        >
+                          <ExternalLink className="w-2.5 h-2.5" />
+                          Extraire
+                        </button>
+                      )}
                       <button
-                        onClick={handleUngroupColonnette}
+                        onClick={handleUngroupSocketBlock}
                         className="px-1.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded text-[9px] font-mono transition"
-                        title="Dégrouper la colonnette en prise simple"
+                        title="Dissoudre le bloc en prise simple"
                       >
                         Dégrouper
                       </button>
@@ -1616,6 +1671,51 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       );
                     })}
                   </div>
+                </div>
+
+                {/* SECTION 2b : BUREAU / MOBILIER RATTACHÉ À CE PORT P{safeStackedPortIdx + 1} */}
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Monitor className="w-3.5 h-3.5 text-blue-400" />
+                      Bureau desservi par P{safeStackedPortIdx + 1}
+                    </span>
+                    <span className="text-[10px] text-blue-400 font-mono font-bold">
+                      {desks.find(
+                        (d) => d.id === (curPort.attachedToDeskId || selectedNode.attachedToDeskId)
+                      )?.name ?? "Commun"}
+                    </span>
+                  </div>
+                  <select
+                    value={curPort.attachedToDeskId ?? ""}
+                    onChange={(e) => {
+                      const targetDeskId = e.target.value || undefined;
+                      const updatedStacked = ports.map((p, idx) =>
+                        idx === safeStackedPortIdx ? { ...p, attachedToDeskId: targetDeskId } : p
+                      );
+                      const allDeskIds = Array.from(
+                        new Set(
+                          updatedStacked.map((p) => p.attachedToDeskId).filter(Boolean) as string[]
+                        )
+                      );
+                      handleUpdateStackedPort(safeStackedPortIdx, {
+                        attachedToDeskId: targetDeskId,
+                      });
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        stackedPorts: updatedStacked,
+                        attachedDeskIds: allDeskIds,
+                        attachedToDeskId: allDeskIds[0] ?? undefined,
+                      });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 text-[10px] font-mono focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">-- Aucun bureau spécifique (Poste commun / Îlot) --</option>
+                    {desks.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} {d.department ? `(${d.department})` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* SECTION 3 : RACCORDEMENT RÉSEAU HIÉRARCHIQUE DU PORT SÉLECTIONNÉ (Baie -> Switch -> Port) */}
@@ -2416,56 +2516,108 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 </span>
               </div>
 
-              {/* Attribution directe du VLAN au lieu du service abstrait */}
+              {/* Statut Réseau & Câblage (Propriétés héritées du commutateur) */}
               <div className="mt-2.5 pt-2 border-t border-slate-800/80 space-y-2">
-                <div>
-                  <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
-                    <span>Attribution du VLAN :</span>
-                    <span className="text-cyan-400 font-mono font-bold">
-                      VLAN {selectedNode.vlanId ?? (selectedNode.outletRole === "VOIP" ? 30 : 20)}
+                <div className="p-2.5 rounded bg-slate-950/80 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Network className="w-3.5 h-3.5 text-sky-400" />
+                      Statut Réseau (Cuivre Passif)
+                    </span>
+                    <span
+                      className={`text-[9px] font-mono px-2 py-0.5 rounded border font-semibold flex items-center gap-1 ${
+                        selectedNode.isPatched
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          : "bg-slate-900 text-slate-400 border-slate-800"
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          selectedNode.isPatched ? "bg-emerald-400 animate-pulse" : "bg-slate-500"
+                        }`}
+                      />
+                      {selectedNode.isPatched ? "Raccordé au Switch" : "Passif (Non raccordé)"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-1 text-[10px] font-mono">
-                    {Object.values(vlanStyles ?? DEFAULT_VLAN_STYLES)
-                      .sort((a, b) => a.vlanId - b.vlanId)
-                      .map((v) => {
-                        const isVlanSelected =
-                          selectedNode.vlanId !== undefined
-                            ? selectedNode.vlanId === v.vlanId
-                            : selectedNode.outletRole === "VOIP"
-                              ? v.vlanId === 30
-                              : v.vlanId === 20;
 
-                        return (
-                          <button
-                            key={v.vlanId}
-                            onClick={() => {
-                              onUpdateNodeProperties?.(selectedNode.id, {
-                                vlanId: v.vlanId,
-                                outletRole:
-                                  v.vlanId === 30
-                                    ? "VOIP"
-                                    : v.vlanId === 40
-                                      ? "PRINTER"
-                                      : v.vlanId === 50
-                                        ? "WIFI"
-                                        : "DATA",
-                              });
-                            }}
-                            className={`py-1 px-1.5 rounded border transition flex items-center justify-center gap-1.5 ${
-                              isVlanSelected
-                                ? "bg-slate-800 text-white border-cyan-500 font-bold ring-1 ring-cyan-500/50 shadow-sm"
-                                : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-850"
-                            }`}
-                          >
-                            <span
-                              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: v.color }}
-                            />
-                            <span>V{v.vlanId}</span>
-                          </button>
-                        );
-                      })}
+                  {selectedNode.isPatched ? (
+                    <div className="space-y-1.5 text-[10px] font-mono">
+                      <div className="flex justify-between bg-slate-900 p-1.5 rounded border border-slate-850">
+                        <span className="text-slate-400">VLAN hérité :</span>
+                        <span className="text-sky-300 font-bold">
+                          {selectedNode.vlanId !== undefined
+                            ? `VLAN ${selectedNode.vlanId}`
+                            : "Par défaut"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between bg-slate-900 p-1.5 rounded border border-slate-850">
+                        <span className="text-slate-400">Alimentation PoE :</span>
+                        <span className="text-amber-300 font-bold">
+                          {selectedNode.poeMode ?? "Non-PoE"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between bg-slate-900 p-1.5 rounded border border-slate-850">
+                        <span className="text-slate-400">Raccordement :</span>
+                        <span className="text-purple-300 font-bold">
+                          {selectedNode.connectedRackId} &gt; {selectedNode.connectedSwitchId} [
+                          {selectedNode.connectedSwitchPort || "P1"}]
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 leading-tight">
+                      Une prise RJ45 est un média cuivre passif. Les caractéristiques réseau (VLAN,
+                      PoE, Rôle) proviennent du port de commutateur sur lequel elle est brassée.
+                    </p>
+                  )}
+
+                  {/* Câbler ou débrancher */}
+                  <div className="pt-1">
+                    {selectedNode.isPatched ? (
+                      <button
+                        onClick={() => {
+                          onUpdateNodeProperties?.(selectedNode.id, {
+                            isPatched: false,
+                            vlanId: undefined,
+                            poeMode: "NONE",
+                            connectedRackId: undefined,
+                            connectedSwitchId: undefined,
+                            connectedSwitchPort: undefined,
+                          });
+                        }}
+                        className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                      >
+                        <Unlink className="w-3.5 h-3.5 text-red-400" />
+                        <span>Débrancher du switch (Passer en passif)</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          const targetRId =
+                            selectedNode.connectedRackId || availableRacks[0]?.id || "rack-01";
+                          const rSwitches = getSwitchesForRack(targetRId);
+                          const targetSwId = selectedNode.connectedSwitchId || rSwitches[0]?.id;
+                          const sw = rSwitches.find((s) => s.id === targetSwId) ?? rSwitches[0];
+                          const autoPort = findFirstAvailablePort(
+                            targetRId,
+                            targetSwId,
+                            sw?.portsCount ?? 24
+                          );
+                          onUpdateNodeProperties?.(selectedNode.id, {
+                            isPatched: true,
+                            connectedRackId: targetRId,
+                            connectedSwitchId: targetSwId,
+                            connectedSwitchPort: autoPort,
+                            vlanId: 20,
+                            poeMode: "POE",
+                          });
+                        }}
+                        className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-amber-300" />
+                        <span>⚡ Câbler vers le Switch</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2493,35 +2645,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         </button>
                       )
                     )}
-                  </div>
-                </div>
-
-                {/* Alimentation PoE */}
-                <div>
-                  <div className="text-[10px] text-slate-400 mb-1 font-medium">
-                    Alimentation PoE :
-                  </div>
-                  <div className="grid grid-cols-4 gap-1 text-[9px] font-mono">
-                    {[
-                      { id: "NONE" as PoeMode, label: "Non-PoE" },
-                      { id: "POE" as PoeMode, label: "PoE" },
-                      { id: "POE_PLUS" as PoeMode, label: "PoE+" },
-                      { id: "POE_PLUS_PLUS" as PoeMode, label: "PoE++" },
-                    ].map((poe) => (
-                      <button
-                        key={poe.id}
-                        onClick={() =>
-                          onUpdateNodeProperties?.(selectedNode.id, { poeMode: poe.id })
-                        }
-                        className={`py-1 rounded border transition text-center ${
-                          (selectedNode.poeMode ?? "NONE") === poe.id
-                            ? "bg-amber-600/30 text-amber-300 border-amber-500 font-bold shadow-sm"
-                            : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white"
-                        }`}
-                      >
-                        {poe.label}
-                      </button>
-                    ))}
                   </div>
                 </div>
 
@@ -2568,80 +2691,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               </div>
             </div>
 
-            {/* 1b. Carte : Adressage Réseau & Télémétrie IPAM */}
-            <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                  <Network className="w-3.5 h-3.5 text-cyan-400" />
-                  Adressage Réseau (IPAM)
-                </span>
-                {selectedNode.pingStatus ? (
-                  <span
-                    className={`text-[9px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                      selectedNode.pingStatus === "ONLINE"
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                        : selectedNode.pingStatus === "DEGRADED"
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                          : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        selectedNode.pingStatus === "ONLINE"
-                          ? "bg-emerald-400 animate-pulse"
-                          : "bg-rose-400"
-                      }`}
-                    />
-                    {selectedNode.pingStatus}
-                    {selectedNode.pingLatencyMs !== undefined
-                      ? ` (${selectedNode.pingLatencyMs}ms)`
-                      : ""}
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-mono text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                    Non supervisé
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                    <Globe className="w-3 h-3 text-slate-500" />
-                    IP Fixe / DHCP :
-                  </span>
-                  <input
-                    type="text"
-                    value={selectedNode.ipAddress ?? ""}
-                    placeholder="Ex: 10.42.20.108"
-                    onChange={(e) =>
-                      onUpdateNodeProperties?.(selectedNode.id, {
-                        ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
-                      })
-                    }
-                    className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                    <Activity className="w-3 h-3 text-slate-500" />
-                    Adresse MAC :
-                  </span>
-                  <input
-                    type="text"
-                    value={selectedNode.macAddress ?? ""}
-                    placeholder="Ex: 00:1A:2B:3C:4D:5E"
-                    onChange={(e) =>
-                      onUpdateNodeProperties?.(selectedNode.id, {
-                        macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
-                      })
-                    }
-                    className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
-                  />
-                </div>
-              </div>
-            </div>
-
             {/* 1c. Carte : Groupement Multi-Ports RJ45 & Magnétisme */}
             <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 mb-3 flex-shrink-0 space-y-2">
               <div className="flex items-center justify-between">
@@ -2653,12 +2702,12 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
               <div className="space-y-1.5">
                 <button
-                  onClick={handleConvertSingleToColonnette}
+                  onClick={handleConvertSingleToSocketBlock}
                   className="w-full py-1.5 px-2 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition"
-                  title="Convertir cette prise en slot colonnette groupé (2 à 8 ports RJ45)"
+                  title="Convertir cette prise en bloc de prises RJ45 (2 à 8 ports)"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Convertir en colonnette (slot 2 à 8 RJ45)
+                  Convertir en bloc de prises RJ45 (2 à 8 ports)
                 </button>
                 <button
                   onClick={handleDockWithNearestOutlet}
@@ -4728,7 +4777,12 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   }
 
   // Cas 3 : Bureau / Mobilier (RH, Dimensions réelles & fausses mesures)
-  const attachedOutlets = allNodes.filter((n) => n.attachedToDeskId === selectedNode.id);
+  const attachedOutlets = allNodes.filter(
+    (n) =>
+      n.attachedToDeskId === selectedNode.id ||
+      n.attachedDeskIds?.includes(selectedNode.id) ||
+      n.stackedPorts?.some((p) => p.attachedToDeskId === selectedNode.id)
+  );
   const currentWidth = selectedNode.widthMm ?? 1600;
   const currentHeight = selectedNode.heightMm ?? 800;
 
@@ -5698,14 +5752,13 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                {onAddColonnetteToDesk && (
+                {onAddSocketBlockToDesk && (
                   <button
-                    onClick={() => onAddColonnetteToDesk(selectedNode.id, 4)}
+                    onClick={() => onAddSocketBlockToDesk(selectedNode.id, 4)}
                     className="w-full py-1.5 px-2 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition"
-                    title="Ajouter une colonnette 4 ports RJ45 au milieu du bureau"
+                    title="Ajouter un bloc de prises 4x RJ45 au milieu du bureau"
                   >
-                    <Layers className="w-3.5 h-3.5 text-sky-400" />+ Colonnette 4x RJ45 (Centre
-                    bureau)
+                    <Layers className="w-3.5 h-3.5 text-sky-400" />+ Bloc 4x RJ45 (Centre bureau)
                   </button>
                 )}
 

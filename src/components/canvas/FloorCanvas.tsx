@@ -62,6 +62,8 @@ interface FloorCanvasProps {
     | undefined;
   isRulerActive?: boolean | undefined;
   onCloseRuler?: (() => void) | undefined;
+  onExtractPortFromBlock?:
+    ((blockId: string, portIndex: number, worldPos: { x: number; y: number }) => void) | undefined;
 }
 
 export const FloorCanvas: FC<FloorCanvasProps> = ({
@@ -91,6 +93,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   onNodePositionChange,
   onNodeDragMove,
   onRackDragMove,
+  onExtractPortFromBlock,
   onPivotChange,
   backgroundPlan,
   onBackgroundPlanPositionChange,
@@ -632,6 +635,7 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             onNodeMoveEnd={handleNodeMoveEnd}
             onNodeDragMove={onNodeDragMove}
             onRackDragMove={onRackDragMove}
+            onExtractPortFromBlock={onExtractPortFromBlock}
             isMarqueeJustEnded={isMarqueeJustEnded}
           />
         </Layer>
