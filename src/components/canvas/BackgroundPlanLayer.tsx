@@ -2,15 +2,13 @@
 
 import { useEffect, useState, memo, type FC } from "react";
 import { Group, Image as KonvaImage } from "react-konva";
-import { KonvaEventObject } from "konva/lib/Node";
 import { StoredBackgroundPlan } from "@/engine/storage/planStorage";
 
 interface SinglePlanItemProps {
   plan: StoredBackgroundPlan;
-  onPositionChange?: ((id: string, pos: { x: number; y: number }) => void) | undefined;
 }
 
-const SinglePlanItem: FC<SinglePlanItemProps> = memo(({ plan, onPositionChange }) => {
+const SinglePlanItem: FC<SinglePlanItemProps> = memo(({ plan }) => {
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
@@ -62,27 +60,14 @@ const SinglePlanItem: FC<SinglePlanItemProps> = memo(({ plan, onPositionChange }
   const safeScaleX = Math.max(0.0001, scaleX);
   const safeScaleY = Math.max(0.0001, scaleY);
 
-  const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
-    if (plan.isLocked) return;
-    const newX = Math.round(e.target.x());
-    const newY = Math.round(e.target.y());
-    onPositionChange?.(plan.id, { x: newX, y: newY });
-  };
-
   return (
-    <Group
-      x={plan.xMm}
-      y={plan.yMm}
-      draggable={!plan.isLocked}
-      listening={!plan.isLocked}
-      onDragEnd={handleDragEnd}
-    >
+    <Group x={plan.xMm} y={plan.yMm} draggable={false} listening={false}>
       <KonvaImage
         image={imageElement}
         opacity={clampedOpacity}
         scaleX={safeScaleX}
         scaleY={safeScaleY}
-        listening={!plan.isLocked}
+        listening={false}
       />
     </Group>
   );
@@ -111,7 +96,7 @@ export interface BackgroundPlanLayerProps {
 export const BackgroundPlanLayer: FC<BackgroundPlanLayerProps> = memo(
   ({
     plans,
-    onPlanPositionChange,
+    onPlanPositionChange: _onPlanPositionChange,
     imageUrl,
     opacity = 0.6,
     isLocked = true,
@@ -121,14 +106,14 @@ export const BackgroundPlanLayer: FC<BackgroundPlanLayerProps> = memo(
     widthMm,
     heightMm,
     visible = true,
-    onPositionChange,
+    onPositionChange: _onPositionChange,
   }) => {
     // Si une liste de plans est passée, on les rend tous
     if (plans && plans.length > 0) {
       return (
         <Group listening={false}>
           {plans.map((p) => (
-            <SinglePlanItem key={p.id} plan={p} onPositionChange={onPlanPositionChange} />
+            <SinglePlanItem key={p.id} plan={p} />
           ))}
         </Group>
       );
@@ -154,10 +139,7 @@ export const BackgroundPlanLayer: FC<BackgroundPlanLayerProps> = memo(
 
     return (
       <Group listening={false}>
-        <SinglePlanItem
-          plan={singlePlan}
-          onPositionChange={(_id, pos) => onPositionChange?.(pos)}
-        />
+        <SinglePlanItem plan={singlePlan} />
       </Group>
     );
   }

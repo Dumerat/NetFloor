@@ -719,11 +719,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   height={badgeH}
                   fill="#0f172a"
                   stroke="#38bdf8"
-                  strokeWidth={10}
+                  strokeWidth={6}
                   cornerRadius={23}
-                  shadowColor="#0284c7"
-                  shadowBlur={12}
-                  shadowOpacity={0.4}
                 />
                 <Circle x={26} y={badgeH / 2} radius={7} fill="#38bdf8" />
                 <Text

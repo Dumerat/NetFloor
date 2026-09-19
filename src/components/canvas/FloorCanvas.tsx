@@ -595,16 +595,16 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
           />
         </Layer>
 
-        {/* Calque 1.2 : Fond de Plan Architectural Multi-plans (Image PNG/JPG ou PDF matriciel) */}
+        {/* Calque 1.2 : Fond de Plan Architectural Multi-plans (Image PNG/JPG ou PDF matriciel) - Verrouillé à 60 FPS */}
         {backgroundPlan &&
           (backgroundPlan.imageUrl ||
             (backgroundPlan.plans && backgroundPlan.plans.length > 0)) && (
-            <Layer>
+            <Layer listening={false}>
               <BackgroundPlanLayer
                 imageUrl={backgroundPlan.imageUrl}
                 plans={backgroundPlan.plans}
                 opacity={backgroundPlan.opacity ?? 0.7}
-                isLocked={backgroundPlan.isLocked ?? false}
+                isLocked={true}
                 xMm={backgroundPlan.xMm ?? 0}
                 yMm={backgroundPlan.yMm ?? 0}
                 scale={backgroundPlan.scale ?? 1.0}

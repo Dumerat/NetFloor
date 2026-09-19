@@ -65,7 +65,6 @@ import {
   Image as ImageIcon,
   Building2,
   Lock,
-  Unlock,
 } from "lucide-react";
 import { screenToWorld } from "@/engine/spatial/matrix";
 import {
@@ -1113,20 +1112,14 @@ export default function NetFloorApp() {
     });
   }, []);
 
-  // Déplacement direct d'un nœud cadencé à 60 FPS par requestAnimationFrame
+  // Déplacement direct d'un nœud : Konva gère le déplacement fluide à 60 FPS sur GPU
+  // Aucun re-rendu React n'est déclenché en cours de vol afin d'éliminer toute chute de framerate.
+  // La position finale et les liaisons sont enregistrées sur handleNodeMoveEnd à la fin du glissement.
   const handleThrottledNodeDragMove = useCallback(
-    (id: string, newPos: { x: number; y: number }) => {
-      pendingNodeDragRef.current = { id, pos: newPos };
-      if (!rafNodeDragRef.current) {
-        rafNodeDragRef.current = requestAnimationFrame(() => {
-          if (pendingNodeDragRef.current) {
-            handleNodeUpdate(pendingNodeDragRef.current.id, pendingNodeDragRef.current.pos);
-          }
-          rafNodeDragRef.current = null;
-        });
-      }
+    (_id: string, _newPos: { x: number; y: number }) => {
+      // No-op pendant le drag pour 60 FPS constants
     },
-    [handleNodeUpdate]
+    []
   );
 
   // Déplacement d'une baie informatique
@@ -1378,20 +1371,13 @@ export default function NetFloorApp() {
     [handleNodeUpdate, handleRackUpdate]
   );
 
-  // Déplacement d'une baie throttlé par RAF
+  // Déplacement d'une baie : Konva gère le déplacement fluide à 60 FPS sur GPU
+  // Aucun re-rendu React en cours de déplacement pour éviter les chutes de FPS.
   const handleThrottledRackDragMove = useCallback(
-    (id: string, newPos: { x: number; y: number }) => {
-      pendingRackDragRef.current = { id, pos: newPos };
-      if (!rafRackDragRef.current) {
-        rafRackDragRef.current = requestAnimationFrame(() => {
-          if (pendingRackDragRef.current) {
-            handleRackUpdate(pendingRackDragRef.current.id, pendingRackDragRef.current.pos);
-          }
-          rafRackDragRef.current = null;
-        });
-      }
+    (_id: string, _newPos: { x: number; y: number }) => {
+      // No-op pendant le drag pour 60 FPS constants
     },
-    [handleRackUpdate]
+    []
   );
 
   // Déplacement fluide du pivot de câble cadencé par RAF à 60 FPS
@@ -2461,37 +2447,15 @@ export default function NetFloorApp() {
             <span>Gestion des Plans</span>
           </button>
 
-          {/* Bouton de verrouillage / déverrouillage du fond de plan actif */}
+          {/* Indicateur Fond de plan verrouillé (garantie 60 FPS) */}
           {(backgroundPlan.imageUrl || allBackgroundPlans.length > 0) && (
-            <button
-              type="button"
-              onClick={() => {
-                const nextLocked = !backgroundPlan.isLocked;
-                handleUpdateBackgroundPlan({ isLocked: nextLocked });
-              }}
-              title={
-                backgroundPlan.isLocked
-                  ? "Fond de plan verrouillé (cliquez pour déverrouiller et déplacer le plan)"
-                  : "Fond de plan mobile (cliquez pour verrouiller sa position)"
-              }
-              className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-sans shadow-sm cursor-pointer ${
-                backgroundPlan.isLocked
-                  ? "bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border-slate-700/60"
-                  : "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
-              }`}
+            <div
+              title="Fonds de plan strictement verrouillés sur le plateau pour garantir 60 FPS et éviter tout déplacement accidentel. L'agencement spatial se gère dans 'Gestion des Plans'."
+              className="px-2.5 py-1.5 rounded-lg border bg-slate-900/90 text-slate-400 border-slate-800 flex items-center gap-1.5 text-xs font-sans shadow-sm select-none"
             >
-              {backgroundPlan.isLocked ? (
-                <>
-                  <Lock className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Plan Verrouillé</span>
-                </>
-              ) : (
-                <>
-                  <Unlock className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden md:inline font-semibold">Plan Mobile</span>
-                </>
-              )}
-            </button>
+              <Lock className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline font-medium text-slate-300">Plans Verrouillés</span>
+            </div>
           )}
 
           {/* Bouton Outil Règle Permanente & Étalonnage Fusionnés */}

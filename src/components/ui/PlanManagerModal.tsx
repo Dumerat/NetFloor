@@ -7,7 +7,6 @@ import {
   Plus,
   Trash2,
   Lock,
-  Unlock,
   Eye,
   EyeOff,
   Maximize2,
@@ -15,6 +14,12 @@ import {
   Ruler,
   Check,
   Building2,
+  ArrowRight,
+  ArrowDown,
+  LayoutGrid,
+  RotateCcw,
+  MoveHorizontal,
+  MoveVertical,
 } from "lucide-react";
 import {
   StoredBackgroundPlan,
@@ -109,20 +114,35 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
 
         const newPlanName = file.name.replace(/\.[^/.]+$/, "") || `Plan ${plans.length + 1}`;
         const newPlanId = generatePlanId();
+        const targetSiteId = activeSiteId || DEFAULT_SITE_ID;
+
+        // Auto-décalage intelligent : si d'autres plans existent déjà sur ce site, positionner à droite
+        const sitePlans = plans.filter((p) => (p.siteId ?? DEFAULT_SITE_ID) === targetSiteId);
+        let nextX = 0;
+        let nextY = 0;
+        if (sitePlans.length > 0) {
+          const rightmostPlan = sitePlans.reduce((acc, p) => {
+            const accRight = acc.xMm + (acc.widthMm ?? defaultWidthMm);
+            const pRight = p.xMm + (p.widthMm ?? defaultWidthMm);
+            return pRight > accRight ? p : acc;
+          }, sitePlans[0]!);
+          nextX = rightmostPlan.xMm + (rightmostPlan.widthMm ?? defaultWidthMm) + 3000;
+          nextY = rightmostPlan.yMm;
+        }
 
         onAddPlan({
           id: newPlanId,
           name: newPlanName,
           imageData,
           opacity: 0.6,
-          isLocked: false,
-          xMm: 0,
-          yMm: 0,
+          isLocked: true,
+          xMm: nextX,
+          yMm: nextY,
           scale: 1.0,
           widthMm: defaultWidthMm,
           heightMm: defaultHeightMm,
           visible: true,
-          siteId: activeSiteId || DEFAULT_SITE_ID,
+          siteId: targetSiteId,
           siteOrFloorGroup: "RDC",
         });
 
@@ -175,6 +195,68 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
       xMm: 0,
       yMm: 0,
     });
+  };
+
+  // Disposer le plan sélectionné immédiatement à droite du plan précédent / voisin (+3m de dégagement)
+  const handlePlaceAdjacentRight = () => {
+    if (!currentPlan) return;
+    const sameSitePlans = plans.filter(
+      (p) =>
+        p.id !== currentPlan.id &&
+        (p.siteId ?? DEFAULT_SITE_ID) === (currentPlan.siteId ?? DEFAULT_SITE_ID)
+    );
+    if (sameSitePlans.length === 0) return;
+    const refPlan = sameSitePlans.reduce((acc, p) => {
+      const accRight = acc.xMm + (acc.widthMm ?? floorWidthMm);
+      const pRight = p.xMm + (p.widthMm ?? floorWidthMm);
+      return pRight > accRight ? p : acc;
+    }, sameSitePlans[0]!);
+
+    const newX = refPlan.xMm + (refPlan.widthMm ?? floorWidthMm) + 3000;
+    const newY = refPlan.yMm;
+    onUpdatePlan(currentPlan.id, { xMm: newX, yMm: newY });
+  };
+
+  // Disposer le plan sélectionné immédiatement en dessous du plan précédent / voisin (+3m de dégagement)
+  const handlePlaceAdjacentBelow = () => {
+    if (!currentPlan) return;
+    const sameSitePlans = plans.filter(
+      (p) =>
+        p.id !== currentPlan.id &&
+        (p.siteId ?? DEFAULT_SITE_ID) === (currentPlan.siteId ?? DEFAULT_SITE_ID)
+    );
+    if (sameSitePlans.length === 0) return;
+    const refPlan = sameSitePlans.reduce((acc, p) => {
+      const accBottom = acc.yMm + (acc.heightMm ?? floorHeightMm);
+      const pBottom = p.yMm + (p.heightMm ?? floorHeightMm);
+      return pBottom > accBottom ? p : acc;
+    }, sameSitePlans[0]!);
+
+    const newX = refPlan.xMm;
+    const newY = refPlan.yMm + (refPlan.heightMm ?? floorHeightMm) + 3000;
+    onUpdatePlan(currentPlan.id, { xMm: newX, yMm: newY });
+  };
+
+  // Disposer tous les plans du site courant côte à côte en ligne avec 3m d'espacement
+  const handleAutoAlignSitePlans = () => {
+    const targetSiteId = currentPlan
+      ? (currentPlan.siteId ?? DEFAULT_SITE_ID)
+      : activeSiteId || DEFAULT_SITE_ID;
+    const sitePlans = plans.filter((p) => (p.siteId ?? DEFAULT_SITE_ID) === targetSiteId);
+    let curX = 0;
+    const curY = 0;
+    for (const p of sitePlans) {
+      onUpdatePlan(p.id, { xMm: curX, yMm: curY });
+      curX += (p.widthMm ?? floorWidthMm) + 3000;
+    }
+  };
+
+  // Déplacement pas-à-pas (Nudge)
+  const handleNudge = (deltaXMeters: number, deltaYMeters: number) => {
+    if (!currentPlan) return;
+    const newX = Math.round(currentPlan.xMm + deltaXMeters * 1000);
+    const newY = Math.round(currentPlan.yMm + deltaYMeters * 1000);
+    onUpdatePlan(currentPlan.id, { xMm: newX, yMm: newY });
   };
 
   return (
@@ -311,6 +393,12 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                               {widthM}m × {heightM}m
                             </span>
                           </div>
+                          <div className="text-[9px] text-emerald-400 font-mono mt-0.5 flex items-center gap-1">
+                            <Layers className="w-2.5 h-2.5" />
+                            <span>X: {(plan.xMm / 1000).toFixed(1)}m</span>
+                            <span>•</span>
+                            <span>Y: {(plan.yMm / 1000).toFixed(1)}m</span>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-1">
@@ -331,23 +419,12 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                               <EyeOff className="w-3.5 h-3.5" />
                             )}
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onUpdatePlan(plan.id, { isLocked: !plan.isLocked });
-                            }}
-                            className={`p-1 rounded hover:bg-slate-800 ${
-                              plan.isLocked ? "text-amber-400" : "text-slate-400"
-                            }`}
-                            title={plan.isLocked ? "Déverrouiller" : "Verrouiller"}
+                          <div
+                            className="p-1 text-emerald-400/80 cursor-default"
+                            title="Plan verrouillé sur le canvas (garantie 60 FPS sans lag)"
                           >
-                            {plan.isLocked ? (
-                              <Lock className="w-3.5 h-3.5" />
-                            ) : (
-                              <Unlock className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+                            <Lock className="w-3.5 h-3.5" />
+                          </div>
                         </div>
                       </div>
                     );
@@ -508,16 +585,21 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                 </div>
 
                 {/* 3. Positionnement & Décalage Spatial (Multi-étages côte à côte) */}
-                <div className="space-y-3 pb-4 border-b border-slate-800">
-                  <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
-                    <Layers className="w-4 h-4 text-emerald-400" />
-                    <span>Positionnement Spatial (Multi-Sites / Multi-Étages)</span>
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Déplacez l&apos;origine du plan pour disposer deux étages côte à côte sur le
-                    même écran et relier leurs baies par fibre optique.
-                  </p>
+                <div className="space-y-4 pb-4 border-b border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                        <Layers className="w-4 h-4 text-emerald-400" />
+                        <span>Positionnement Spatial & Agencement Multi-Plans</span>
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Disposez facilement plusieurs étages côte-à-côte ou superposés sur le même
+                        plateau pour relier leurs baies sans conflit de position.
+                      </p>
+                    </div>
+                  </div>
 
+                  {/* Coordonnées métriques absolues */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs text-slate-400 block mb-1">
@@ -559,17 +641,158 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Boutons d'Alignement Rapide */}
+                  <div className="space-y-2 pt-1">
+                    <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
+                      Préréglages d&apos;Alignement Rapide
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePlaceAdjacentRight}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 flex items-center justify-center gap-1.5 transition hover:border-sky-500"
+                        title="Positionner ce plan immédiatement à droite du plan précédent avec 3m d'espacement"
+                      >
+                        <ArrowRight className="w-3.5 h-3.5 text-sky-400" />
+                        <span>À droite (+3m)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handlePlaceAdjacentBelow}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 flex items-center justify-center gap-1.5 transition hover:border-sky-500"
+                        title="Positionner ce plan immédiatement en dessous du plan précédent avec 3m d'espacement"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>En dessous (+3m)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleAutoAlignSitePlans}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 flex items-center justify-center gap-1.5 transition hover:border-sky-500"
+                        title="Agencer automatiquement tous les plans du site actif en ligne horizontale avec 3m d'espacement"
+                      >
+                        <LayoutGrid className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Aligner en ligne</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onUpdatePlan(currentPlan.id, { xMm: 0, yMm: 0 })}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 flex items-center justify-center gap-1.5 transition hover:border-sky-500"
+                        title="Réinitialiser la position du plan à l'origine (0, 0)"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Origine (0, 0)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Boutons Pas-à-Pas (Nudge) */}
+                  <div className="space-y-2 pt-1 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                    <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">
+                      Déplacement Pas-à-Pas (Ajustement fin)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Axe Horizontal */}
+                      <div className="flex items-center justify-between bg-slate-900 px-2 py-1.5 rounded-lg border border-slate-800">
+                        <span className="text-xs text-slate-300 flex items-center gap-1">
+                          <MoveHorizontal className="w-3 h-3 text-sky-400" />
+                          <span>Axe X :</span>
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleNudge(-5, 0)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono hover:text-white"
+                            title="Déplacer de 5m vers la gauche"
+                          >
+                            -5m
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleNudge(-1, 0)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono hover:text-white"
+                            title="Déplacer de 1m vers la gauche"
+                          >
+                            -1m
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleNudge(1, 0)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono hover:text-white"
+                            title="Déplacer de 1m vers la droite"
+                          >
+                            +1m
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleNudge(5, 0)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono hover:text-white"
+                            title="Déplacer de 5m vers la droite"
+                          >
+                            +5m
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Axe Vertical */}
+                      <div className="flex items-center justify-between bg-slate-900 px-2 py-1.5 rounded-lg border border-slate-800">
+                        <span className="text-xs text-slate-300 flex items-center gap-1">
+                          <MoveVertical className="w-3 h-3 text-emerald-400" />
+                          <span>Axe Y :</span>
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleNudge(0, -5)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono hover:text-white"
+                            title="Déplacer de 5m vers le haut"
+                          >
+                            -5m
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleNudge(0, -1)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono hover:text-white"
+                            title="Déplacer de 1m vers le haut"
+                          >
+                            -1m
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleNudge(0, 1)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono hover:text-white"
+                            title="Déplacer de 1m vers le bas"
+                          >
+                            +1m
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleNudge(0, 5)}
+                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono hover:text-white"
+                            title="Déplacer de 5m vers le bas"
+                          >
+                            +5m
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* 4. Réglages Visuels (Opacité & Verrouillage) */}
+                {/* 4. Réglages Visuels (Opacité & Verrouillage Canvas) */}
                 <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-slate-200">
-                    Affichage & Ergonomie Konva
+                  <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Affichage & Intégrité Canvas (60 FPS)</span>
                   </h3>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs text-slate-300">
-                      <span>Transparence / Opacité</span>
+                      <span>Transparence / Opacité du plan</span>
                       <span className="font-mono font-bold">
                         {Math.round(currentPlan.opacity * 100)}%
                       </span>
@@ -590,31 +813,24 @@ export const PlanManagerModal: React.FC<PlanManagerModalProps> = ({
                   </div>
 
                   <div className="pt-2 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={currentPlan.isLocked}
-                          onChange={(e) =>
-                            onUpdatePlan(currentPlan.id, { isLocked: e.target.checked })
-                          }
-                          className="rounded border-slate-700 text-sky-500 focus:ring-sky-500"
-                        />
-                        <span>Verrouiller le plan (60 FPS garanti, listening=false)</span>
-                      </label>
-
-                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={currentPlan.visible}
-                          onChange={(e) =>
-                            onUpdatePlan(currentPlan.id, { visible: e.target.checked })
-                          }
-                          className="rounded border-slate-700 text-sky-500 focus:ring-sky-500"
-                        />
-                        <span>Visible</span>
-                      </label>
+                    <div className="flex items-center gap-2">
+                      <div className="px-2.5 py-1 rounded bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs flex items-center gap-1.5">
+                        <Lock className="w-3 h-3 text-emerald-400" />
+                        <span>Verrouillé en permanence sur le canvas (garantie 60 FPS)</span>
+                      </div>
                     </div>
+
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={currentPlan.visible}
+                        onChange={(e) =>
+                          onUpdatePlan(currentPlan.id, { visible: e.target.checked })
+                        }
+                        className="rounded border-slate-700 text-sky-500 focus:ring-sky-500"
+                      />
+                      <span>Visible</span>
+                    </label>
                   </div>
                 </div>
               </>
