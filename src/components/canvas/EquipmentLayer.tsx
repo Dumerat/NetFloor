@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState, memo, type FC } from "react";
+import { useRef, useState, useMemo, memo, type FC } from "react";
 import { Group, Rect, Text, Line, Circle } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
+import { getNodeAABB, getRackAABB } from "./FloorCanvas";
 
 export type RackDeviceType =
   "SWITCH" | "PATCH_PANEL" | "ROUTER" | "SERVER" | "PDU" | "FIREWALL" | "FIBER_TRAY";
@@ -261,6 +262,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   const groupDragStateRef = useRef<{
     leadNodeId: string;
     startLeadPos: { x: number; y: number };
+    startEnvelopePos?: { x: number; y: number } | undefined;
     otherNodes: { id: string; startPos: { x: number; y: number } }[];
     attachedOutlets: {
       id: string;
@@ -270,7 +272,11 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   } | null>(null);
 
   const initGroupDragIfMulti = (nodeId: string, e: KonvaEventObject<DragEvent>) => {
-    if (selectedNodeIds && selectedNodeIds.length > 1 && selectedNodeIds.includes(nodeId)) {
+    if (
+      selectedNodeIds &&
+      selectedNodeIds.length > 1 &&
+      (nodeId === "__selection_envelope__" || selectedNodeIds.includes(nodeId))
+    ) {
       const selectedSet = new Set(selectedNodeIds);
       const otherNodes: { id: string; startPos: { x: number; y: number } }[] = [];
       nodes.forEach((n) => {
@@ -330,9 +336,16 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
         }
       });
 
+      const stage = e.currentTarget.getStage();
+      const envelopeNode = stage?.findOne("#selection-envelope");
+      const startEnvelopePos = envelopeNode
+        ? { x: envelopeNode.x(), y: envelopeNode.y() }
+        : undefined;
+
       groupDragStateRef.current = {
         leadNodeId: nodeId,
-        startLeadPos: { x: e.target.x(), y: e.target.y() },
+        startLeadPos: { x: e.currentTarget.x(), y: e.currentTarget.y() },
+        startEnvelopePos,
         otherNodes,
         attachedOutlets,
       };
@@ -345,9 +358,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   const updateGroupDragMove = (nodeId: string, e: KonvaEventObject<DragEvent>) => {
     const groupState = groupDragStateRef.current;
     if (groupState && groupState.leadNodeId === nodeId) {
-      const deltaX = e.target.x() - groupState.startLeadPos.x;
-      const deltaY = e.target.y() - groupState.startLeadPos.y;
-      const stage = e.target.getStage();
+      const deltaX = e.currentTarget.x() - groupState.startLeadPos.x;
+      const deltaY = e.currentTarget.y() - groupState.startLeadPos.y;
+      const stage = e.currentTarget.getStage();
       if (stage) {
         groupState.otherNodes.forEach((item) => {
           const konvaNode = stage.findOne("#" + item.id);
@@ -368,6 +381,15 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
             ]);
           }
         });
+        if (nodeId !== "__selection_envelope__" && groupState.startEnvelopePos) {
+          const envelopeNode = stage.findOne("#selection-envelope");
+          if (envelopeNode) {
+            envelopeNode.position({
+              x: groupState.startEnvelopePos.x + deltaX,
+              y: groupState.startEnvelopePos.y + deltaY,
+            });
+          }
+        }
         stage.batchDraw();
       }
       return true;
@@ -378,8 +400,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   const finishGroupDragIfMulti = (nodeId: string, e: KonvaEventObject<DragEvent>) => {
     const groupState = groupDragStateRef.current;
     if (groupState && groupState.leadNodeId === nodeId) {
-      const deltaX = Math.round(e.target.x() - groupState.startLeadPos.x);
-      const deltaY = Math.round(e.target.y() - groupState.startLeadPos.y);
+      const deltaX = Math.round(e.currentTarget.x() - groupState.startLeadPos.x);
+      const deltaY = Math.round(e.currentTarget.y() - groupState.startLeadPos.y);
       groupDragStateRef.current = null;
       if (onGroupNodeMoveEnd && selectedNodeIds) {
         onGroupNodeMoveEnd(selectedNodeIds, { deltaX, deltaY });
@@ -387,6 +409,68 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
       }
     }
     return false;
+  };
+
+  // Calcul de la boîte englobante de la multi-sélection
+  const selectionBoundingBox = useMemo(() => {
+    if (!selectedNodeIds || selectedNodeIds.length <= 1) return null;
+    const selectedSet = new Set(selectedNodeIds);
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let count = 0;
+
+    nodes.forEach((n) => {
+      if (selectedSet.has(n.id)) {
+        const aabb = getNodeAABB(n);
+        if (aabb.minX < minX) minX = aabb.minX;
+        if (aabb.maxX > maxX) maxX = aabb.maxX;
+        if (aabb.minY < minY) minY = aabb.minY;
+        if (aabb.maxY > maxY) maxY = aabb.maxY;
+        count++;
+      }
+    });
+
+    racks.forEach((r) => {
+      if (selectedSet.has(r.id)) {
+        const aabb = getRackAABB(r);
+        if (aabb.minX < minX) minX = aabb.minX;
+        if (aabb.maxX > maxX) maxX = aabb.maxX;
+        if (aabb.minY < minY) minY = aabb.minY;
+        if (aabb.maxY > maxY) maxY = aabb.maxY;
+        count++;
+      }
+    });
+
+    if (count <= 1 || minX === Infinity) return null;
+
+    const pad = 120;
+    return {
+      x: minX - pad,
+      y: minY - pad,
+      width: maxX - minX + pad * 2,
+      height: maxY - minY + pad * 2,
+      count,
+    };
+  }, [selectedNodeIds, nodes, racks]);
+
+  const handleEnvelopeDragStart = (e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
+    e.cancelBubble = true;
+    initGroupDragIfMulti("__selection_envelope__", e);
+  };
+
+  const handleEnvelopeDragMove = (e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
+    e.cancelBubble = true;
+    updateGroupDragMove("__selection_envelope__", e);
+  };
+
+  const handleEnvelopeDragEnd = (e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
+    e.cancelBubble = true;
+    finishGroupDragIfMulti("__selection_envelope__", e);
   };
 
   // Référence pour le suivi synchrone GPU immédiat du bureau et de ses prises solidaires (0 latence)
@@ -402,8 +486,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   } | null>(null);
 
   const handleDeskDragStart = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
     e.cancelBubble = true;
-    initGroupDragIfMulti(desk.id, e);
+    if (initGroupDragIfMulti(desk.id, e)) return;
 
     const attached = nodes.filter(
       (n) =>
@@ -417,7 +502,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
     deskDragStateRef.current = {
       deskId: desk.id,
-      startDeskPos: { x: e.target.x(), y: e.target.y() },
+      startDeskPos: { x: e.currentTarget.x(), y: e.currentTarget.y() },
       attachedOutlets: attached.map((outlet) => {
         let localAnchorX = deskW / 2;
         let localAnchorY = deskH / 2;
@@ -449,17 +534,18 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   };
 
   const handleDeskDragMove = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
     e.cancelBubble = true;
-    updateGroupDragMove(desk.id, e);
+    if (updateGroupDragMove(desk.id, e)) return;
 
     const state = deskDragStateRef.current;
-    const currentDeskX = e.target.x();
-    const currentDeskY = e.target.y();
+    const currentDeskX = e.currentTarget.x();
+    const currentDeskY = e.currentTarget.y();
 
     if (state && state.deskId === desk.id) {
       const deltaX = currentDeskX - state.startDeskPos.x;
       const deltaY = currentDeskY - state.startDeskPos.y;
-      const stage = e.target.getStage();
+      const stage = e.currentTarget.getStage();
 
       const rotRad = ((desk.rotationDeg ?? 0) * Math.PI) / 180;
       const cosR = Math.cos(rotRad);
@@ -498,16 +584,31 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   };
 
   const handleDeskDragEnd = (desk: NodeDisplay, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
     e.cancelBubble = true;
     deskDragStateRef.current = null;
     if (finishGroupDragIfMulti(desk.id, e)) return;
     handleDragEnd(desk.id, e);
   };
 
-  const handleRackDragMove = (id: string, e: KonvaEventObject<DragEvent>) => {
+  const handleRackDragStart = (id: string, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
     e.cancelBubble = true;
-    updateGroupDragMove(id, e);
-    onRackDragMove?.(id, { x: e.target.x(), y: e.target.y() });
+    initGroupDragIfMulti(id, e);
+  };
+
+  const handleRackDragMove = (id: string, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
+    e.cancelBubble = true;
+    if (updateGroupDragMove(id, e)) return;
+    onRackDragMove?.(id, { x: e.currentTarget.x(), y: e.currentTarget.y() });
+  };
+
+  const handleRackDragEnd = (id: string, e: KonvaEventObject<DragEvent>) => {
+    if (e.target !== e.currentTarget) return;
+    e.cancelBubble = true;
+    if (finishGroupDragIfMulti(id, e)) return;
+    handleDragEnd(id, e);
   };
 
   const handleNodeDragStart = (id: string, e: KonvaEventObject<DragEvent>) => {
@@ -519,7 +620,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   const handleNodeDragMove = (id: string, e: KonvaEventObject<DragEvent>) => {
     if (e.target !== e.currentTarget) return;
     e.cancelBubble = true;
-    updateGroupDragMove(id, e);
+    if (updateGroupDragMove(id, e)) return;
     onNodeDragMove?.(id, { x: e.currentTarget.x(), y: e.currentTarget.y() });
   };
 
@@ -532,6 +633,114 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
   return (
     <Group>
+      {/* -1. Enveloppe interactive de multi-sélection (permet de déplacer tout le groupe sans viser un meuble) */}
+      {selectionBoundingBox && (
+        <Group
+          id="selection-envelope"
+          x={selectionBoundingBox.x}
+          y={selectionBoundingBox.y}
+          draggable
+          onDragStart={(e) => {
+            if (e.evt?.shiftKey) {
+              e.target.stopDrag();
+              return;
+            }
+            handleEnvelopeDragStart(e);
+          }}
+          onDragMove={handleEnvelopeDragMove}
+          onDragEnd={handleEnvelopeDragEnd}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          {/* Surface de préhension globale réactive (permet de glisser depuis n'importe quel espace vide) */}
+          <Rect
+            width={selectionBoundingBox.width}
+            height={selectionBoundingBox.height}
+            fill="rgba(56, 189, 248, 0.04)"
+            stroke="#38bdf8"
+            strokeWidth={16}
+            dash={[40, 20]}
+            cornerRadius={16}
+          />
+
+          {/* Équerres d'angles (Coins graphiques de sélection précis) */}
+          <Line points={[0, 50, 0, 0, 50, 0]} stroke="#38bdf8" strokeWidth={24} listening={false} />
+          <Line
+            points={[
+              selectionBoundingBox.width - 50,
+              0,
+              selectionBoundingBox.width,
+              0,
+              selectionBoundingBox.width,
+              50,
+            ]}
+            stroke="#38bdf8"
+            strokeWidth={24}
+            listening={false}
+          />
+          <Line
+            points={[
+              selectionBoundingBox.width,
+              selectionBoundingBox.height - 50,
+              selectionBoundingBox.width,
+              selectionBoundingBox.height,
+              selectionBoundingBox.width - 50,
+              selectionBoundingBox.height,
+            ]}
+            stroke="#38bdf8"
+            strokeWidth={24}
+            listening={false}
+          />
+          <Line
+            points={[
+              50,
+              selectionBoundingBox.height,
+              0,
+              selectionBoundingBox.height,
+              0,
+              selectionBoundingBox.height - 50,
+            ]}
+            stroke="#38bdf8"
+            strokeWidth={24}
+            listening={false}
+          />
+
+          {/* Badge d'en-tête interactif avec poignée */}
+          {(() => {
+            const badgeW = Math.min(520, Math.max(320, selectionBoundingBox.width - 40));
+            const badgeH = 46;
+            const badgeX = (selectionBoundingBox.width - badgeW) / 2;
+            const badgeY = -54;
+
+            return (
+              <Group x={badgeX} y={badgeY} listening={false}>
+                <Rect
+                  width={badgeW}
+                  height={badgeH}
+                  fill="#0f172a"
+                  stroke="#38bdf8"
+                  strokeWidth={10}
+                  cornerRadius={23}
+                  shadowColor="#0284c7"
+                  shadowBlur={12}
+                  shadowOpacity={0.4}
+                />
+                <Circle x={26} y={badgeH / 2} radius={7} fill="#38bdf8" />
+                <Text
+                  x={44}
+                  y={13}
+                  text={`Groupe (${selectionBoundingBox.count}) • Glisser pour déplacer`}
+                  fontSize={20}
+                  fontStyle="bold"
+                  fontFamily="sans-serif"
+                  fill="#e0f2fe"
+                />
+              </Group>
+            );
+          })()}
+        </Group>
+      )}
+
       {/* 0. Lignes d'ancrage en pointillés reliant les prises solidaires à leur bureau (masquées en vue RH) */}
       {activeViewMode !== "HR" &&
         nodes
@@ -650,9 +859,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               draggable
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
-              onDragStart={(e) => handleNodeDragStart(rack.id, e)}
+              onDragStart={(e) => handleRackDragStart(rack.id, e)}
               onDragMove={(e) => handleRackDragMove(rack.id, e)}
-              onDragEnd={(e) => handleDragEnd(rack.id, e)}
+              onDragEnd={(e) => handleRackDragEnd(rack.id, e)}
               onClick={(e) => {
                 e.cancelBubble = true;
                 if (isMarqueeJustEnded?.()) return;

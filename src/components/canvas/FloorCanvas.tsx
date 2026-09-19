@@ -66,6 +66,96 @@ interface FloorCanvasProps {
     ((blockId: string, portIndex: number, worldPos: { x: number; y: number }) => void) | undefined;
 }
 
+export function getNodeAABB(n: NodeDisplay): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
+  if (n.type === "DESK") {
+    const w = n.widthMm ?? 1600;
+    const h = n.heightMm ?? 800;
+    const rotDeg = n.rotationDeg ?? 0;
+    if (rotDeg === 0) {
+      return { minX: n.xMm, maxX: n.xMm + w, minY: n.yMm, maxY: n.yMm + h };
+    }
+    const rad = (rotDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const corners = [
+      { x: 0, y: 0 },
+      { x: w, y: 0 },
+      { x: w, y: h },
+      { x: 0, y: h },
+    ];
+    let cMinX = Infinity,
+      cMaxX = -Infinity,
+      cMinY = Infinity,
+      cMaxY = -Infinity;
+    for (const c of corners) {
+      const wx = n.xMm + c.x * cos - c.y * sin;
+      const wy = n.yMm + c.x * sin + c.y * cos;
+      if (wx < cMinX) cMinX = wx;
+      if (wx > cMaxX) cMaxX = wx;
+      if (wy < cMinY) cMinY = wy;
+      if (wy > cMaxY) cMaxY = wy;
+    }
+    return { minX: cMinX, maxX: cMaxX, minY: cMinY, maxY: cMaxY };
+  }
+
+  // Prises murales, boîtes de sol, blocs de prises RJ45, AP WiFi, Imprimantes :
+  // Tous ces éléments sont centrés en (n.xMm, n.yMm) dans EquipmentLayer
+  let halfW = 150;
+  let halfH = 150;
+  if (n.subType === "SOCKET_BLOCK") {
+    const portsCount = n.portCount || n.stackedPorts?.length || 4;
+    const isTwoColumns = portsCount > 4;
+    const rows = isTwoColumns ? Math.ceil(portsCount / 2) : portsCount;
+    const blockWidth = isTwoColumns ? 360 : 200;
+    const blockHeight = 80 + rows * 82 + 20;
+    halfW = blockWidth / 2;
+    halfH = blockHeight / 2;
+  } else if (n.subType === "FLOOR_BOX") {
+    halfW = 150;
+    halfH = 150;
+  } else if (n.subType === "PRINTER_STATION" || n.outletRole === "PRINTER") {
+    halfW = 120;
+    halfH = 120;
+  } else if (n.subType === "WIFI_AP") {
+    halfW = 120;
+    halfH = 120;
+  } else {
+    // Prise simple RJ45
+    halfW = 80;
+    halfH = 45;
+  }
+
+  return {
+    minX: n.xMm - halfW,
+    maxX: n.xMm + halfW,
+    minY: n.yMm - halfH,
+    maxY: n.yMm + halfH,
+  };
+}
+
+export function getRackAABB(r: RackDisplay): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
+  const rWidth = r.widthMm ?? 800;
+  const totalU = r.uHeight || 42;
+  const minDepthForU = 320 + totalU * 36;
+  const rDepth = Math.max(r.depthMm ?? 1000, minDepthForU);
+  return {
+    minX: r.xMm,
+    maxX: r.xMm + rWidth,
+    minY: r.yMm,
+    maxY: r.yMm + rDepth,
+  };
+}
+
 export const FloorCanvas: FC<FloorCanvasProps> = ({
   floorWidthMm,
   floorHeightMm,
@@ -260,15 +350,13 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     if (e.evt.shiftKey) {
       stage.draggable(false);
       isSelectingRef.current = true;
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-      const worldX = (pointer.x - viewport.panX) / viewport.scale;
-      const worldY = (pointer.y - viewport.panY) / viewport.scale;
+      const pos = stage.getRelativePointerPosition();
+      if (!pos) return;
       setSelectionBox({
-        startX: worldX,
-        startY: worldY,
-        currentX: worldX,
-        currentY: worldY,
+        startX: pos.x,
+        startY: pos.y,
+        currentX: pos.x,
+        currentY: pos.y,
       });
     }
   };
@@ -277,11 +365,9 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     if (!isSelectingRef.current) return;
     const stage = e.target.getStage();
     if (!stage) return;
-    const pointer = stage.getPointerPosition();
-    if (!pointer) return;
-    const worldX = (pointer.x - viewport.panX) / viewport.scale;
-    const worldY = (pointer.y - viewport.panY) / viewport.scale;
-    setSelectionBox((prev) => (prev ? { ...prev, currentX: worldX, currentY: worldY } : null));
+    const pos = stage.getRelativePointerPosition();
+    if (!pos) return;
+    setSelectionBox((prev) => (prev ? { ...prev, currentX: pos.x, currentY: pos.y } : null));
   };
 
   const handleStageMouseUp = (e: KonvaEventObject<MouseEvent>) => {
@@ -305,69 +391,6 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
     // Si la boîte de sélection fait au moins 15mm de côté
     if (Math.abs(maxX - minX) > 15 || Math.abs(maxY - minY) > 15) {
       lastMarqueeEndTimeRef.current = Date.now();
-
-      const getNodeAABB = (n: NodeDisplay) => {
-        if (n.type === "DESK") {
-          const w = n.widthMm ?? 1600;
-          const h = n.heightMm ?? 800;
-          const rotDeg = n.rotationDeg ?? 0;
-          if (rotDeg === 0) {
-            return { minX: n.xMm, maxX: n.xMm + w, minY: n.yMm, maxY: n.yMm + h };
-          }
-          const rad = (rotDeg * Math.PI) / 180;
-          const cos = Math.cos(rad);
-          const sin = Math.sin(rad);
-          const corners = [
-            { x: 0, y: 0 },
-            { x: w, y: 0 },
-            { x: w, y: h },
-            { x: 0, y: h },
-          ];
-          let cMinX = Infinity,
-            cMaxX = -Infinity,
-            cMinY = Infinity,
-            cMaxY = -Infinity;
-          for (const c of corners) {
-            const wx = n.xMm + c.x * cos - c.y * sin;
-            const wy = n.yMm + c.x * sin + c.y * cos;
-            if (wx < cMinX) cMinX = wx;
-            if (wx > cMaxX) cMaxX = wx;
-            if (wy < cMinY) cMinY = wy;
-            if (wy > cMaxY) cMaxY = wy;
-          }
-          return { minX: cMinX, maxX: cMaxX, minY: cMinY, maxY: cMaxY };
-        }
-
-        if (n.widthMm && n.heightMm && n.widthMm > 0 && n.heightMm > 0) {
-          return {
-            minX: n.xMm,
-            maxX: n.xMm + n.widthMm,
-            minY: n.yMm,
-            maxY: n.yMm + n.heightMm,
-          };
-        }
-
-        const radius = 250;
-        return {
-          minX: n.xMm - radius,
-          maxX: n.xMm + radius,
-          minY: n.yMm - radius,
-          maxY: n.yMm + radius,
-        };
-      };
-
-      const getRackAABB = (r: RackDisplay) => {
-        const rWidth = r.widthMm ?? 800;
-        const totalU = r.uHeight || 42;
-        const minDepthForU = 320 + totalU * 36;
-        const rDepth = Math.max(r.depthMm ?? 1000, minDepthForU);
-        return {
-          minX: r.xMm,
-          maxX: r.xMm + rWidth,
-          minY: r.yMm,
-          maxY: r.yMm + rDepth,
-        };
-      };
 
       const enclosedNodeIds = nodes
         .filter((n) => {
