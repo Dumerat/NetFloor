@@ -30,6 +30,7 @@ export interface RackDeviceItem {
     | "ARUBA_CENTRAL"
     | "NEBULA_CLOUD"
     | "MERAKI"
+    | "UNIFI_CLOUD"
     | "FORTICLOUD"
     | "SNMP_LOCAL"
     | "MANUAL"
