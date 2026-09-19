@@ -143,13 +143,16 @@ export async function POST(req: Request) {
           const vlanName = p.vlan?.name || p.description || `VLAN ${vlanVid} NetBox`;
           const cidr = p.prefix || "10.0.0.0/24";
           const baseIp = cidr.split("/")[0] || "10.0.0.1";
-          const gateway = baseIp.replace(/\.\d+$/, ".254");
+          const baseSub = baseIp.replace(/\.\d+$/, "");
+          const gateway = `${baseSub}.254`;
+          const dhcpRange = `${baseSub}.10 - ${baseSub}.200`;
 
           return {
             vlanId: vlanVid,
             vlanName,
             cidr,
             gateway,
+            dhcpRange,
             totalIps: 254,
             usedIps: p.custom_fields?.used_ips || 12,
             dns1: "1.1.1.1",

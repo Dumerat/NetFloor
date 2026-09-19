@@ -99,6 +99,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   const [integrationStatuses, setIntegrationStatuses] = useState<
     Record<string, { loading: boolean; success?: boolean; msg: string | null; details?: any }>
   >({});
+  const [isSyncingNetbox, setIsSyncingNetbox] = useState(false);
 
   // Filtre et recherche IPAM
   const [ipSearch, setIpSearch] = useState("");
@@ -365,6 +366,60 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
           msg: err instanceof Error ? err.message : "Erreur de liaison",
         },
       }));
+    }
+  };
+
+  // Synchronisation des préfixes & VLANs depuis NetBox
+  const handleSyncNetboxIpam = async () => {
+    const netboxConfig = settings.integrations.netbox;
+    if (!netboxConfig.url || !netboxConfig.apiToken) {
+      showToast(
+        "⚠️ Veuillez d'abord renseigner l'URL et le Token NetBox dans l'onglet Intégrations"
+      );
+      return;
+    }
+
+    setIsSyncingNetbox(true);
+    try {
+      const res = await fetch("/api/integrations/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "netbox_prefixes", config: netboxConfig }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.subnets)) {
+        if (data.subnets.length === 0) {
+          showToast("ℹ️ Aucun préfixe IPAM trouvé sur NetBox.");
+          return;
+        }
+
+        setSettings((prev) => {
+          const currentMap = new Map(prev.subnets.map((s) => [s.vlanId, s]));
+          data.subnets.forEach((sub: SubnetDefinition) => {
+            currentMap.set(sub.vlanId, {
+              ...currentMap.get(sub.vlanId),
+              ...sub,
+            });
+          });
+          const updatedSubnets = Array.from(currentMap.values()).sort(
+            (a, b) => a.vlanId - b.vlanId
+          );
+          const updated: SystemSettings = {
+            ...prev,
+            subnets: updatedSubnets,
+          };
+          saveStoredSettings(updated);
+          return updated;
+        });
+
+        showToast(`🌐 ${data.subnets.length} préfixes & VLANs importés depuis NetBox !`);
+      } else {
+        showToast(`❌ Erreur NetBox : ${data.error || "Échec de récupération des préfixes"}`);
+      }
+    } catch {
+      showToast("❌ Erreur réseau lors de la liaison NetBox IPAM");
+    } finally {
+      setIsSyncingNetbox(false);
     }
   };
 
@@ -1481,13 +1536,24 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                   <Network className="w-4 h-4 text-cyan-400" />
                   Sous-Réseaux & VLANs Configurés ({settings.subnets.length})
                 </span>
-                <button
-                  onClick={() => setIsAddSubnetOpen(true)}
-                  className="px-3 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded-lg text-xs font-medium border border-cyan-500/30 flex items-center gap-1.5 transition"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Ajouter un sous-réseau VLAN
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSyncNetboxIpam}
+                    disabled={isSyncingNetbox}
+                    className="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 rounded-lg text-xs font-medium border border-indigo-500/30 flex items-center gap-1.5 transition disabled:opacity-50"
+                    title="Interroge l'API NetBox pour importer automatiquement les préfixes CIDR et VLANs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNetbox ? "animate-spin" : ""}`} />
+                    {isSyncingNetbox ? "Import NetBox..." : "Importer depuis NetBox IPAM"}
+                  </button>
+                  <button
+                    onClick={() => setIsAddSubnetOpen(true)}
+                    className="px-3 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded-lg text-xs font-medium border border-cyan-500/30 flex items-center gap-1.5 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Ajouter un sous-réseau VLAN
+                  </button>
+                </div>
               </div>
 
               {/* Formulaire Modal Inline : Ajouter un Sous-Réseau */}
@@ -2018,16 +2084,27 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="pt-2 flex items-center justify-between border-t border-slate-900">
-                  <span className="text-[10px] text-slate-500 font-mono">
+                  <span className="text-[10px] text-slate-500 font-mono truncate max-w-[200px]">
                     {integrationStatuses.netbox?.msg ?? "Dernière synchro: OK"}
                   </span>
-                  <button
-                    onClick={() => handleTestIntegration("netbox", "NetBox DCIM")}
-                    disabled={integrationStatuses.netbox?.loading}
-                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-medium border border-slate-700"
-                  >
-                    {integrationStatuses.netbox?.loading ? "Connexion..." : "Tester API REST"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSyncNetboxIpam}
+                      disabled={isSyncingNetbox}
+                      className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 rounded text-xs font-medium border border-indigo-500/30 flex items-center gap-1 transition disabled:opacity-50"
+                      title="Importer les préfixes NetBox directement dans l'IPAM NetFloor"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isSyncingNetbox ? "animate-spin" : ""}`} />
+                      {isSyncingNetbox ? "Import..." : "Importer Préfixes"}
+                    </button>
+                    <button
+                      onClick={() => handleTestIntegration("netbox", "NetBox DCIM")}
+                      disabled={integrationStatuses.netbox?.loading}
+                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-medium border border-slate-700"
+                    >
+                      {integrationStatuses.netbox?.loading ? "Connexion..." : "Tester API REST"}
+                    </button>
+                  </div>
                 </div>
               </div>
 
