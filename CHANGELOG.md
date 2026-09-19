@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.3.0...netfloor-architect-v0.4.0) (2026-09-19)
+
+
+### ✨ Nouvelles fonctionnalités
+
+* **canvas:** interactive group selection envelope and cursor alignment fix ([e8e63a3](https://github.com/Dumerat/NetFloor/commit/e8e63a328e9d2ff6d4aad1b29e739285a671cfa8))
+
+
+### ⚡ Performances
+
+* **canvas:** lock background plans at 60fps and add smart multi-plan layout ([ff18312](https://github.com/Dumerat/NetFloor/commit/ff1831205f09e175b87a87c466fe7df2ec03285b))
+
+
+### ♻️ Refactoring
+
+* **ui:** remove floor dimensions preview from top toolbar site button ([49ed7e7](https://github.com/Dumerat/NetFloor/commit/49ed7e7ca8b0c10efe71a44d6b6050e4ebf104c0))
+* **ui:** remove obsolete locked plans badge from top toolbar ([1bd749d](https://github.com/Dumerat/NetFloor/commit/1bd749daf4a3a41bcb5a4a0c4950cf32a23eb9e0))
+
 ## [0.3.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.2.2...netfloor-architect-v0.3.0) (2026-09-17)
 
 
