@@ -64,7 +64,6 @@ import {
   Ruler,
   Image as ImageIcon,
   Building2,
-  Lock,
 } from "lucide-react";
 import { screenToWorld } from "@/engine/spatial/matrix";
 import {
@@ -2446,17 +2445,6 @@ export default function NetFloorApp() {
             <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
             <span>Gestion des Plans</span>
           </button>
-
-          {/* Indicateur Fond de plan verrouillé (garantie 60 FPS) */}
-          {(backgroundPlan.imageUrl || allBackgroundPlans.length > 0) && (
-            <div
-              title="Fonds de plan strictement verrouillés sur le plateau pour garantir 60 FPS et éviter tout déplacement accidentel. L'agencement spatial se gère dans 'Gestion des Plans'."
-              className="px-2.5 py-1.5 rounded-lg border bg-slate-900/90 text-slate-400 border-slate-800 flex items-center gap-1.5 text-xs font-sans shadow-sm select-none"
-            >
-              <Lock className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden md:inline font-medium text-slate-300">Plans Verrouillés</span>
-            </div>
-          )}
 
           {/* Bouton Outil Règle Permanente & Étalonnage Fusionnés */}
           <button
