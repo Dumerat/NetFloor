@@ -2372,19 +2372,16 @@ export default function NetFloorApp() {
         {/* Camera & Ingestion Controls */}
         <div className="flex items-center gap-2.5 text-xs font-mono">
           {/* Sélecteur rapide de Site Actif */}
-          {/* Bouton du Site Actif & Taille de la Zone */}
+          {/* Bouton du Site Actif */}
           <button
             type="button"
             onClick={() => setIsDimensionsModalOpen(true)}
-            title="Taille de la zone et dimensions du site (cliquez pour modifier)"
+            title="Site géographique actif et dimensions du plateau (cliquez pour modifier)"
             className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-800 hover:border-amber-500/50 rounded-lg transition flex items-center gap-2 text-xs font-sans cursor-pointer shadow-sm group"
           >
             <Building2 className="w-3.5 h-3.5 text-amber-400 group-hover:scale-105 transition shrink-0" />
-            <span className="font-semibold text-slate-100 max-w-[140px] truncate">
+            <span className="font-semibold text-slate-100 max-w-[160px] truncate">
               {sites.find((s) => s.id === activeSiteId)?.name ?? "Site Principal"}
-            </span>
-            <span className="text-slate-400 font-mono text-[11px] bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-750">
-              {floorData.widthMm / 1000}m × {floorData.heightMm / 1000}m
             </span>
           </button>
 
