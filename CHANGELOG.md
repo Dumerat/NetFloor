@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.3.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.2.2...netfloor-architect-v0.3.0) (2026-09-17)
+
+
+### ✨ Nouvelles fonctionnalités
+
+* **docker:** enable 100% containerized zero-dependency execution ([2355a15](https://github.com/Dumerat/NetFloor/commit/2355a15d3a22981a012230dd0c2dd5ee46d03903))
+* multi-desk socket blocks, drag-merge outlets, and passive copper inspector ([e89b2b7](https://github.com/Dumerat/NetFloor/commit/e89b2b7fcd3eed3b7642f6b1ce1872e7c021f222))
+
+
+### 🐛 Corrections de bugs
+
+* auto-migrate db metadata columns, remove mock cloud switches, and add favicon ([48560be](https://github.com/Dumerat/NetFloor/commit/48560be9b4a6b98ea37c6082f5ab7d146f4d798c))
+* default --build in docker runners and unassign default vlan from palette generic port ([9826fdf](https://github.com/Dumerat/NetFloor/commit/9826fdf4f73145248e206556f52366fa731647fe))
+
+
+### ♻️ Refactoring
+
+* project cleanup, move docs to docs/, fix /api 404, and set Docker as default launcher ([5fcf322](https://github.com/Dumerat/NetFloor/commit/5fcf32242f5866ffff8bdb9c3aca9a7368e1140c))
+
+
+### 📖 Documentation
+
+* add comprehensive README.md and Windows PowerShell launcher run.ps1 ([6f24a95](https://github.com/Dumerat/NetFloor/commit/6f24a959a47f947baf55c8827933ce3e220bec13))
+* fix formatting artifacts and backslash escapes in README.md ([e49c291](https://github.com/Dumerat/NetFloor/commit/e49c2918e87b2e9bc4adf9e063a147a3dfb62fea))
+
+
+### 💄 Style / Formatage
+
+* apply prettier formatting across all src files ([63276f0](https://github.com/Dumerat/NetFloor/commit/63276f0c9df60980a5b284285cde381b754b2f85))
+
 ## [0.2.2](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.2.1...netfloor-architect-v0.2.2) (2026-09-14)
 
 
