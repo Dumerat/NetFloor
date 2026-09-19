@@ -35,8 +35,6 @@ import {
   INITIAL_SETTINGS,
   DeviceTelemetry,
   SubnetDefinition,
-  LAB_ACTIVE_DIRECTORY_CONFIG,
-  LAB_SNMP_CONFIG,
   loadStoredSettings,
   saveStoredSettings,
   resetStoredSettings,
@@ -171,28 +169,6 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     }
   };
 
-  // Injecter la configuration du Lab Docker pour Active Directory
-  const handleApplyLabAdPreset = () => {
-    setSettings((prev) => ({
-      ...prev,
-      sso: {
-        ...prev.sso,
-        provider: "ACTIVE_DIRECTORY_LDAP",
-        activeDirectory: { ...LAB_ACTIVE_DIRECTORY_CONFIG },
-      },
-    }));
-    showToast("⚡ Paramètres du Lab Docker injectés pour Active Directory (127.0.0.1:389)");
-  };
-
-  // Injecter la configuration du Lab Docker pour SNMP
-  const handleApplyLabSnmpPreset = () => {
-    setSettings((prev) => ({
-      ...prev,
-      snmp: { ...LAB_SNMP_CONFIG },
-    }));
-    showToast("⚡ Paramètres du Lab Docker injectés pour SNMP (127.0.0.1:161 public)");
-  };
-
   // Test de liaison Active Directory via l'API dédiée
   const handleTestActiveDirectory = async () => {
     setIsTestingAd(true);
@@ -294,7 +270,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
         );
         showToast(
           data.isLiveSnmp
-            ? "📡 Découverte SNMP terminée (Connecté au Lab Docker 127.0.0.1)"
+            ? "📡 Découverte SNMP terminée (Sondes actives en direct)"
             : "📡 Découverte SNMP terminée avec succès"
         );
       } else {
@@ -574,8 +550,9 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                 Mode Supervision Active (Lecture seule)
               </span>
               <span className="text-emerald-400/80 font-mono text-[11px]">
-                AD: {settings.sso.activeDirectory.serverHost} • SNMP: {discoveredDevices.length}{" "}
-                équipements surveillés • {settings.subnets.length} VLANs IPAM
+                AD: {settings.sso.activeDirectory.serverHost || "Non configuré"} • SNMP:{" "}
+                {discoveredDevices.length} équipements surveillés • {settings.subnets.length} VLANs
+                IPAM
               </span>
             </div>
             <button
@@ -748,14 +725,6 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         </h3>
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          onClick={handleApplyLabAdPreset}
-                          className="px-3 py-1.5 bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/40 transition shadow-sm"
-                          title="Remplir automatiquement avec les paramètres du Lab Docker (OpenLDAP 127.0.0.1:389)"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />⚡ Remplir avec le Lab
-                          Local
-                        </button>
                         <button
                           onClick={handleSyncAdDirectory}
                           disabled={isTestingAd}
@@ -1332,14 +1301,6 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={handleApplyLabSnmpPreset}
-                      className="px-3 py-1.5 bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/40 transition shadow-sm"
-                      title="Remplir automatiquement avec les paramètres du Lab Docker SNMP (127.0.0.1:161 public)"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />⚡ Remplir avec le Lab
-                      Local
-                    </button>
-                    <button
                       onClick={handleSyncAllDevicesToFloor}
                       className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
                       title="Associer automatiquement tous les équipements découverts sur le plan"
@@ -1427,7 +1388,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                             : "bg-amber-500/20 text-amber-400 border-amber-500/30"
                         }`}
                       >
-                        {snmpIsLive ? "🐳 Lab Docker Réel (127.0.0.1:161)" : "Simulé (Secours)"}
+                        {snmpIsLive ? "🟢 Direct Réseau (RFC 1213)" : "Simulé (Secours)"}
                       </span>
                     )}
                   </div>

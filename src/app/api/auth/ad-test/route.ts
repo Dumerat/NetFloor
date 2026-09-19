@@ -6,14 +6,15 @@ export async function POST(req: Request) {
   const startTime = Date.now();
   const body = await req.json().catch(() => ({}));
   const config: Partial<ActiveDirectoryConfig> = body.config || {};
-  const serverHost = config.serverHost || "127.0.0.1";
+  const serverHost = config.serverHost?.trim();
   const port = Number(config.port) || 389;
   const encryption = config.encryption || "NONE";
-  const baseDn = config.baseDn || "dc=company,dc=com";
-  const bindDn = config.bindDn || "cn=admin,dc=company,dc=com";
-  const bindPassword = config.bindPassword || "adminpassword";
+  const baseDn = config.baseDn?.trim();
+  const bindDn = config.bindDn?.trim();
+  const bindPassword = config.bindPassword || "";
   const userSearchFilter =
-    config.userSearchFilter || "(&(objectClass=inetOrgPerson)(|(uid={0})(cn={0})))";
+    config.userSearchFilter?.trim() ||
+    "(&(objectCategory=person)(objectClass=user)(sAMAccountName={0}))";
 
   const steps: {
     step: number;
@@ -23,14 +24,75 @@ export async function POST(req: Request) {
     latencyMs: number;
   }[] = [];
 
+  // Validation préalable des champs requis
+  if (!serverHost) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Hôte ou adresse IP du contrôleur de domaine requis (ex: dc01.corp.local ou 10.0.0.10).",
+        steps: [
+          {
+            step: 1,
+            title: "Validation de la configuration",
+            detail:
+              "Veuillez renseigner le serveur Active Directory (Contrôleur de domaine FQDN ou IP).",
+            status: "ERROR",
+            latencyMs: 0,
+          },
+        ],
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!baseDn) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Base DN de recherche requise (Search Base, ex: DC=corp,DC=local).",
+        steps: [
+          {
+            step: 1,
+            title: "Validation de la configuration",
+            detail: "Veuillez renseigner la base DN de recherche (ex: DC=entreprise,DC=local).",
+            status: "ERROR",
+            latencyMs: 0,
+          },
+        ],
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!bindDn) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Compte de service de liaison (Bind DN) requis pour l'authentification LDAP.",
+        steps: [
+          {
+            step: 1,
+            title: "Validation de la configuration",
+            detail:
+              "Veuillez renseigner le compte Bind DN (ex: CN=svc-netfloor,OU=Services,DC=corp,DC=local ou svc-netfloor@corp.local).",
+            status: "ERROR",
+            latencyMs: 0,
+          },
+        ],
+      },
+      { status: 400 }
+    );
+  }
+
   const protocol = encryption === "LDAPS" ? "ldaps" : "ldap";
   const ldapUrl = `${protocol}://${serverHost}:${port}`;
 
   try {
     const clientOptions: any = {
       url: ldapUrl,
-      timeout: 4000,
-      connectTimeout: 4000,
+      timeout: 5000,
+      connectTimeout: 5000,
     };
     if (encryption === "LDAPS" || encryption === "STARTTLS") {
       clientOptions.tlsOptions = { rejectUnauthorized: false };
@@ -59,10 +121,10 @@ export async function POST(req: Request) {
           : "Négociation de Session LDAP",
       detail:
         encryption === "LDAPS"
-          ? "Canal chiffré LDAPS (TLS 1.3) validé"
+          ? "Canal chiffré LDAPS (TLS) validé"
           : encryption === "STARTTLS"
             ? "Session STARTTLS négociée"
-            : "Session LDAP standard en clair (Port 389)",
+            : "Session LDAP standard (Port 389)",
       status: "OK",
       latencyMs: Math.round(bindDuration * 0.2),
     });
@@ -79,7 +141,8 @@ export async function POST(req: Request) {
     const tSearchStart = Date.now();
     const searchFilter = userSearchFilter.includes("{0}")
       ? userSearchFilter.replace(/\{0\}/g, "*")
-      : "(|(objectClass=inetOrgPerson)(objectClass=user)(objectClass=person))";
+      : userSearchFilter ||
+        "(|(objectCategory=person)(objectClass=user)(objectClass=inetOrgPerson))";
 
     const searchRes = await client.search(baseDn, {
       filter: searchFilter,
@@ -87,10 +150,12 @@ export async function POST(req: Request) {
       attributes: [
         "dn",
         "cn",
+        "displayName",
         "sn",
         "givenName",
         "uid",
         "sAMAccountName",
+        "userPrincipalName",
         "mail",
         "title",
         "departmentNumber",
@@ -99,15 +164,18 @@ export async function POST(req: Request) {
         "employeeNumber",
         "description",
         "physicalDeliveryOfficeName",
+        "roomNumber",
         "memberOf",
+        "userAccountControl",
+        "lastLogonTimestamp",
       ],
     });
     const searchDuration = Math.max(3, Date.now() - tSearchStart);
 
     steps.push({
       step: 4,
-      title: "Interrogation de l'annuaire (Root DSE & SearchBase)",
-      detail: `Base: ${baseDn} — ${searchRes.searchEntries.length} comptes réels trouvés (Filtre: ${searchFilter})`,
+      title: "Interrogation de l'annuaire (SearchBase & Utilisateurs)",
+      detail: `Base: ${baseDn} — ${searchRes.searchEntries.length} compte(s) trouvé(s) (Filtre: ${searchFilter})`,
       status: "OK",
       latencyMs: searchDuration,
     });
@@ -130,12 +198,15 @@ export async function POST(req: Request) {
     steps.push({
       step: 5,
       title: "Résolution des Groupes d'Habilitations (memberOf)",
-      detail: `${groupEntries.length} groupes identifiés (${
-        groupEntries
-          .map((g) => g.cn)
-          .filter(Boolean)
-          .join(", ") || "DSI, Collaborateurs"
-      })`,
+      detail: `${groupEntries.length} groupe(s) identifié(s)${
+        groupEntries.length > 0
+          ? ` (${groupEntries
+              .map((g) => g.cn)
+              .filter(Boolean)
+              .slice(0, 5)
+              .join(", ")}${groupEntries.length > 5 ? "..." : ""})`
+          : ""
+      }`,
       status: "OK",
       latencyMs: groupDuration,
     });
@@ -143,20 +214,43 @@ export async function POST(req: Request) {
     await client.unbind();
 
     // Mapping des utilisateurs réels extraits de LDAP
+    const adminDn = config.adminGroupDn?.toLowerCase().trim() || "";
+    const rhDn = config.rhGroupDn?.toLowerCase().trim() || "";
+
     const syncedUsers = searchRes.searchEntries.map((e, idx) => {
-      const cn = String(e.cn || e.displayName || "Utilisateur");
-      const uid = String(e.uid || e.sAMAccountName || `user-${idx + 1}`);
-      const mail = String(e.mail || `${uid}@company.com`);
+      const cn = String(
+        e.displayName ||
+          e.cn ||
+          `${e.givenName || ""} ${e.sn || ""}`.trim() ||
+          `Utilisateur ${idx + 1}`
+      );
+      const uid = String(e.sAMAccountName || e.uid || `user-${idx + 1}`);
+      const mail = String(e.mail || "");
       const title = String(e.title || "Collaborateur");
-      const dept = String(e.departmentNumber || e.department || "Direction");
+      const dept = String(e.department || e.departmentNumber || "Non renseigné");
       const phone = String(e.telephoneNumber || "");
-      const empNum = String(e.employeeNumber || `usr-ad-${String(idx + 1).padStart(3, "0")}`);
+      const empNum = String(e.employeeNumber || uid);
+      const office = String(e.physicalDeliveryOfficeName || e.roomNumber || "-");
+      const memberOfList: string[] = Array.isArray(e.memberOf)
+        ? e.memberOf.map(String)
+        : e.memberOf
+          ? [String(e.memberOf)]
+          : [];
+
       const isDsi =
+        (adminDn && memberOfList.some((g) => g.toLowerCase().includes(adminDn))) ||
         dept.toLowerCase().includes("dsi") ||
-        dept.toLowerCase().includes("tech") ||
-        dept.toLowerCase().includes("maintenance") ||
+        dept.toLowerCase().includes("informatique") ||
+        dept.toLowerCase().includes("infrastructure") ||
         title.toLowerCase().includes("admin") ||
-        title.toLowerCase().includes("support");
+        title.toLowerCase().includes("support") ||
+        title.toLowerCase().includes("réseau") ||
+        title.toLowerCase().includes("technicien");
+
+      const isRh =
+        (rhDn && memberOfList.some((g) => g.toLowerCase().includes(rhDn))) ||
+        dept.toLowerCase().includes("rh") ||
+        dept.toLowerCase().includes("ressources humaines");
 
       return {
         id: empNum,
@@ -166,29 +260,45 @@ export async function POST(req: Request) {
         department: dept,
         email: mail,
         phone,
-        office: `Bureau ${401 + (idx % 8)}`,
-        netFloorRole: isDsi ? "DSI" : "RH",
+        office,
+        netFloorRole: isDsi ? "DSI" : isRh ? "RH" : "Collaborateur",
       };
     });
 
-    const first: any = searchRes.searchEntries[0] || {};
-    const sampleUser = {
-      sAMAccountName: String(first.uid || first.sAMAccountName || "alexandre.martin"),
-      userPrincipalName: `${first.uid || "alexandre.martin"}@${config.domainFqdn || "company.com"}`,
-      displayName: String(first.cn || "Alexandre Martin"),
-      givenName: String(first.givenName || "Alexandre"),
-      sn: String(first.sn || "Martin"),
-      mail: String(first.mail || "alexandre.martin@company.com"),
-      department: String(first.departmentNumber || first.department || "Tech Lab"),
-      title: String(first.title || "Tech Lead Fullstack"),
-      telephoneNumber: String(first.telephoneNumber || "+33 1 42 68 01 01"),
-      physicalDeliveryOfficeName: "Bureau 408",
-      distinguishedName: String(first.dn || `uid=alexandre.martin,ou=people,${baseDn}`),
-      memberOf: groupEntries.map((g) => String(g.dn || g.cn)),
-      accountStatus: "NORMAL_ACCOUNT (Actif en temps réel)",
-      lastLogonTimestamp: new Date().toISOString(),
-      netFloorRole: "DSI / Câbleur Réseau (Accès Complet)",
-    };
+    const first: any = searchRes.searchEntries[0];
+    const sampleUser = first
+      ? {
+          sAMAccountName: String(first.sAMAccountName || first.uid || "N/A"),
+          userPrincipalName: String(
+            first.userPrincipalName ||
+              `${first.sAMAccountName || first.uid || "user"}@${config.domainFqdn || "domaine.local"}`
+          ),
+          displayName: String(
+            first.displayName ||
+              first.cn ||
+              `${first.givenName || ""} ${first.sn || ""}`.trim() ||
+              "Utilisateur"
+          ),
+          givenName: String(first.givenName || ""),
+          sn: String(first.sn || ""),
+          mail: String(first.mail || "Non renseigné"),
+          department: String(first.department || first.departmentNumber || "Non renseigné"),
+          title: String(first.title || "Collaborateur"),
+          telephoneNumber: String(first.telephoneNumber || "Non renseigné"),
+          physicalDeliveryOfficeName: String(
+            first.physicalDeliveryOfficeName || first.roomNumber || "Non assigné"
+          ),
+          distinguishedName: String(first.dn || ""),
+          memberOf: Array.isArray(first.memberOf)
+            ? first.memberOf.map(String)
+            : first.memberOf
+              ? [String(first.memberOf)]
+              : groupEntries.map((g) => String(g.dn || g.cn)),
+          accountStatus: "NORMAL_ACCOUNT (Actif)",
+          lastLogonTimestamp: String(first.lastLogonTimestamp || new Date().toISOString()),
+          netFloorRole: syncedUsers[0]?.netFloorRole || "Collaborateur",
+        }
+      : null;
 
     const totalLatencyMs = Date.now() - startTime;
 
@@ -204,24 +314,23 @@ export async function POST(req: Request) {
       sampleUser,
       syncedUsers,
       summary: {
-        domainController: `${serverHost}:${port} (${encryption === "NONE" ? "LDAP Standard" : encryption}) [Lab Connecté En Ligne]`,
-        forestFunctionalLevel: "LDAPv3 / OpenLDAP RFC2307bis (Lab Docker)",
+        domainController: `${serverHost}:${port} (${encryption === "NONE" ? "LDAP Standard" : encryption}) [Connecté]`,
+        forestFunctionalLevel: "Active Directory Domain Services (AD DS / LDAPv3)",
         directorySchemaVersion: 88,
         usersFound: syncedUsers.length,
         groupsFound: groupEntries.length,
         activeDirectoryConnected: true,
-        isLiveLab: true,
       },
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Erreur de connexion LDAP";
 
-    // Diagnostic de l'étape en échec
+    // Diagnostic précis de l'étape en échec
     if (steps.length === 0) {
       steps.push({
         step: 1,
-        title: "Échec de Résolution ou Connexion TCP Socket",
-        detail: `Impossible d'établir la socket TCP vers ${serverHost}:${port} (${errorMsg}). Vérifiez que le conteneur lab-ldap est démarré avec 'start-lab.ps1'.`,
+        title: "Échec de Résolution DNS ou Connexion TCP Socket",
+        detail: `Impossible d'établir la socket TCP vers ${serverHost}:${port} (${errorMsg}). Vérifiez la connectivité réseau, le routage IP, le pare-feu et le port LDAP configuré.`,
         status: "ERROR",
         latencyMs: Date.now() - startTime,
       });
@@ -229,7 +338,7 @@ export async function POST(req: Request) {
       steps.push({
         step: steps.length + 1,
         title: "Échec de l'opération LDAP",
-        detail: `${errorMsg}. Vérifiez le compte Bind DN (${bindDn}) et le mot de passe.`,
+        detail: `${errorMsg}. Vérifiez les identifiants du compte Bind DN (${bindDn}) et les autorisations de lecture sur ${baseDn}.`,
         status: "ERROR",
         latencyMs: Date.now() - startTime,
       });
@@ -237,7 +346,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: false,
-      error: `Échec de connexion au serveur d'annuaire (${serverHost}:${port}) : ${errorMsg}`,
+      error: `Échec de liaison avec l'annuaire Active Directory (${serverHost}:${port}) : ${errorMsg}`,
       steps,
     });
   }
