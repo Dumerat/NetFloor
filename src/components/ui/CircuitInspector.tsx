@@ -505,15 +505,24 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       assignedUserId: updatedSeats[0]?.userId,
       department: updatedSeats[0]?.department,
     });
-    // Propager le nom du collaborateur sur les prises affectées à cette place
-    const seatOutlets = allNodes.filter(
-      (n) =>
-        n.type === "WALL_OUTLET" &&
-        n.attachedToDeskId === selectedNode.id &&
-        n.attachedSeatIndex === seatIdx
-    );
-    seatOutlets.forEach((o) => {
-      onUpdateNodeProperties?.(o.id, { assignedPerson: user.fullName });
+    // Propager le nom du collaborateur sur les prises et ports de bloc affectés à cette place
+    allNodes.forEach((n) => {
+      if (n.type !== "WALL_OUTLET") return;
+      const isLinkedToDesk =
+        n.attachedToDeskId === selectedNode.id || n.attachedDeskIds?.includes(selectedNode.id);
+      if (!isLinkedToDesk) return;
+
+      if (n.stackedPorts && n.stackedPorts.length > 0) {
+        const hasSeatPort = n.stackedPorts.some((sp) => sp.attachedSeatIndex === seatIdx);
+        if (hasSeatPort) {
+          const updatedPorts = n.stackedPorts.map((sp) =>
+            sp.attachedSeatIndex === seatIdx ? { ...sp, assignedPerson: user.fullName } : sp
+          );
+          onUpdateNodeProperties?.(n.id, { stackedPorts: updatedPorts });
+        }
+      } else if (n.attachedSeatIndex === seatIdx) {
+        onUpdateNodeProperties?.(n.id, { assignedPerson: user.fullName });
+      }
     });
     setPickingSeatIndex(null);
   };
@@ -540,15 +549,24 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       assignedUserId: updatedSeats.find((s) => s.userId)?.userId,
       department: updatedSeats.find((s) => s.department)?.department,
     });
-    // Libérer l'assignation sur les prises de cette place
-    const seatOutlets = allNodes.filter(
-      (n) =>
-        n.type === "WALL_OUTLET" &&
-        n.attachedToDeskId === selectedNode.id &&
-        n.attachedSeatIndex === seatIdx
-    );
-    seatOutlets.forEach((o) => {
-      onUpdateNodeProperties?.(o.id, { assignedPerson: undefined });
+    // Libérer l'assignation sur les prises et ports de bloc de cette place
+    allNodes.forEach((n) => {
+      if (n.type !== "WALL_OUTLET") return;
+      const isLinkedToDesk =
+        n.attachedToDeskId === selectedNode.id || n.attachedDeskIds?.includes(selectedNode.id);
+      if (!isLinkedToDesk) return;
+
+      if (n.stackedPorts && n.stackedPorts.length > 0) {
+        const hasSeatPort = n.stackedPorts.some((sp) => sp.attachedSeatIndex === seatIdx);
+        if (hasSeatPort) {
+          const updatedPorts = n.stackedPorts.map((sp) =>
+            sp.attachedSeatIndex === seatIdx ? { ...sp, assignedPerson: undefined } : sp
+          );
+          onUpdateNodeProperties?.(n.id, { stackedPorts: updatedPorts });
+        }
+      } else if (n.attachedSeatIndex === seatIdx) {
+        onUpdateNodeProperties?.(n.id, { assignedPerson: undefined });
+      }
     });
   };
 
@@ -5174,9 +5192,31 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           : null;
                       const isOccupied = Boolean(seat.fullName);
                       const isPickingThisSeat = pickingSeatIndex === idx;
-                      const seatOutlets = attachedOutlets.filter(
-                        (o) => o.attachedSeatIndex === idx
-                      );
+                      const seatOutlets = attachedOutlets.flatMap((o) => {
+                        if (o.stackedPorts && o.stackedPorts.length > 0) {
+                          return o.stackedPorts
+                            .filter((sp) => sp.attachedSeatIndex === idx)
+                            .map((sp) => ({
+                              id: `${o.id}-${sp.portIndex}`,
+                              name: `${o.name} [${sp.portLabel}]`,
+                              outletRole: sp.outletRole || o.outletRole,
+                              vlanId: sp.vlanId ?? o.vlanId,
+                              parentOutlet: o,
+                            }));
+                        }
+                        if (o.attachedSeatIndex === idx) {
+                          return [
+                            {
+                              id: o.id,
+                              name: o.name,
+                              outletRole: o.outletRole,
+                              vlanId: o.vlanId,
+                              parentOutlet: o,
+                            },
+                          ];
+                        }
+                        return [];
+                      });
 
                       return (
                         <div
@@ -5275,7 +5315,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                               {seatOutlets.map((outlet) => (
                                 <button
                                   key={outlet.id}
-                                  onClick={() => onSelectNode?.(outlet)}
+                                  onClick={() => onSelectNode?.(outlet.parentOutlet)}
                                   className="px-1.5 py-0.5 rounded bg-blue-950/60 hover:bg-blue-900 border border-blue-800/60 text-[9px] font-mono text-blue-300 flex items-center gap-1 transition"
                                   title="Inspecter cette prise"
                                 >

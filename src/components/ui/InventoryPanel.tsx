@@ -161,6 +161,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       interface UserDeskAssignment {
         desk: NodeDisplay;
         seatLabel: string;
+        seatIndex?: number | undefined;
       }
       const assignedDesks: UserDeskAssignment[] = [];
 
@@ -169,6 +170,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
           assignedDesks.push({
             desk,
             seatLabel: "Poste principal",
+            seatIndex: 0,
           });
         }
         if (desk.seats && desk.seats.length > 0) {
@@ -177,6 +179,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
               assignedDesks.push({
                 desk,
                 seatLabel: `Place #${seatIdx + 1} (${seatItem.seatLabel ?? "Poste"})`,
+                seatIndex: seatIdx,
               });
             }
           });
@@ -222,34 +225,60 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       }
 
       // Prises solidaires des bureaux occupés par l'utilisateur
-      assignedDesks.forEach(({ desk }) => {
+      assignedDesks.forEach(({ desk, seatIndex }) => {
+        const isMultiSeatDesk = Boolean(desk.seats && desk.seats.length > 1);
+
         const linkedOutlets = outletNodes.filter(
           (o) =>
             o.attachedToDeskId === desk.id ||
             o.attachedDeskIds?.includes(desk.id) ||
             o.stackedPorts?.some((p) => p.attachedToDeskId === desk.id)
         );
+
         linkedOutlets.forEach((lo) => {
-          const alreadyInList = assignedOutlets.some((ao) => ao.outlet.id === lo.id);
-          if (!alreadyInList) {
-            if (lo.stackedPorts && lo.stackedPorts.length > 0) {
-              lo.stackedPorts.forEach((sp) => {
+          if (lo.stackedPorts && lo.stackedPorts.length > 0) {
+            lo.stackedPorts.forEach((sp) => {
+              // Sur bureau partagé, n'attribuer que les ports rattachés à la place de l'utilisateur
+              const matchesSeat =
+                !isMultiSeatDesk ||
+                sp.attachedSeatIndex === seatIndex ||
+                (sp.assignedPerson &&
+                  sp.assignedPerson.toLowerCase() === user.fullName.toLowerCase());
+
+              if (matchesSeat) {
+                const alreadyInList = assignedOutlets.some(
+                  (ao) => ao.outlet.id === lo.id && ao.portInfo.includes(sp.portLabel)
+                );
+                if (!alreadyInList) {
+                  assignedOutlets.push({
+                    outlet: lo,
+                    portInfo: `${sp.portLabel} (via ${lo.name})`,
+                    vlanId: sp.vlanId,
+                    isVoip: sp.outletRole === "VOIP" || sp.vlanId === 30,
+                    ipAddress: sp.ipAddress || lo.ipAddress,
+                  });
+                }
+              }
+            });
+          } else {
+            // Prise simple
+            const matchesSeat =
+              !isMultiSeatDesk ||
+              lo.attachedSeatIndex === seatIndex ||
+              (lo.assignedPerson &&
+                lo.assignedPerson.toLowerCase() === user.fullName.toLowerCase());
+
+            if (matchesSeat) {
+              const alreadyInList = assignedOutlets.some((ao) => ao.outlet.id === lo.id);
+              if (!alreadyInList) {
                 assignedOutlets.push({
                   outlet: lo,
-                  portInfo: `${sp.portLabel} (via ${lo.name})`,
-                  vlanId: sp.vlanId,
-                  isVoip: sp.outletRole === "VOIP" || sp.vlanId === 30,
-                  ipAddress: sp.ipAddress || lo.ipAddress,
+                  portInfo: `${lo.outletRole || "DATA"} (via ${lo.name})`,
+                  vlanId: lo.vlanId,
+                  isVoip: lo.outletRole === "VOIP" || lo.vlanId === 30,
+                  ipAddress: lo.ipAddress,
                 });
-              });
-            } else {
-              assignedOutlets.push({
-                outlet: lo,
-                portInfo: `${lo.outletRole || "DATA"} (via ${lo.name})`,
-                vlanId: lo.vlanId,
-                isVoip: lo.outletRole === "VOIP" || lo.vlanId === 30,
-                ipAddress: lo.ipAddress,
-              });
+              }
             }
           }
         });
