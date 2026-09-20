@@ -9,6 +9,7 @@ import {
   NodeSubType,
   getDefaultSeatLabels,
   DeskSeatOccupant,
+  StackedPortItem,
 } from "@/components/canvas/EquipmentLayer";
 import { FloorZone } from "@/types/zones";
 import { GridConfig } from "./types";
@@ -36,6 +37,10 @@ export interface BatchSpawnParams {
   originY?: number | undefined;
   /** Identifiant du site de rattachement */
   siteId?: string | undefined;
+  /** Nombre de prises/ports RJ45 par poste : 1 ou 2 (défaut: 2) */
+  outletsPerSeat?: 1 | 2 | undefined;
+  /** Mode de connectique : "pack" (Bloc RJ45 compact anti-spam) ou "individual" (prises séparées) */
+  outletMode?: "pack" | "individual" | undefined;
 }
 
 export interface BatchSpawnResult {
@@ -43,6 +48,7 @@ export interface BatchSpawnResult {
   outlets: NodeDisplay[];
   totalSeats: number;
   totalOutlets: number;
+  outletMode?: "pack" | "individual" | undefined;
 }
 
 const DEFAULT_GRID_CONFIG: GridConfig = {
@@ -103,6 +109,9 @@ export function generateBatchDesks(
   let currentNum = startDeskNumber;
   const timestamp = Date.now();
 
+  const outletsPerSeat = params.outletsPerSeat ?? 2;
+  const outletMode = params.outletMode ?? "individual";
+
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < columns; c++) {
       const rawX = startX + c * (deskWidthMm + spacingXMm);
@@ -141,87 +150,155 @@ export function generateBatchDesks(
 
       desks.push(deskNode);
 
-      // Génération de 2 prises réseau RJ45 par place (1 DATA + 1 VOIP)
-      // Solidaires du meuble parent avec coordonnées relatives
-      seats.forEach((_seat, seatIdx) => {
-        let baseRelX = 800;
-        let baseRelY = 200;
+      // Connectique réseau : Mode Pack centralisé (Bloc RJ45) ou Prises individuelles
+      if (outletMode === "pack") {
+        // Mode Pack : 1 seul boîtier central compact par mobilier (évite le spam visuel)
+        const totalPorts = seatsPerDesk * outletsPerSeat;
+        const initialPorts: StackedPortItem[] = [];
 
-        if (isQuad) {
-          if (seatIdx === 0) {
-            baseRelX = 800;
-            baseRelY = 200;
-          } else if (seatIdx === 1) {
-            baseRelX = 2400;
-            baseRelY = 200;
-          } else if (seatIdx === 2) {
-            baseRelX = 800;
-            baseRelY = 1400;
-          } else {
-            baseRelX = 2400;
-            baseRelY = 1400;
-          }
-        } else {
-          // Bench double
-          if (seatIdx === 0) {
-            baseRelX = 800;
-            baseRelY = 200;
-          } else {
-            baseRelX = 800;
-            baseRelY = 1400;
+        for (let seatIdx = 0; seatIdx < seatsPerDesk; seatIdx++) {
+          for (let pIdx = 0; pIdx < outletsPerSeat; pIdx++) {
+            const portIdx = seatIdx * outletsPerSeat + pIdx;
+            const portLabel =
+              outletsPerSeat === 1
+                ? `P${seatIdx + 1} (Pl.${seatIdx + 1})`
+                : `P${portIdx + 1} (Pl.${seatIdx + 1}-${pIdx === 0 ? "A" : "B"})`;
+
+            initialPorts.push({
+              portIndex: portIdx,
+              portLabel,
+              outletRole: "DATA", // Cuivre passif : le profil est déterminé lors du raccordement au switch
+              vlanId: undefined,
+              attachedSeatIndex: seatIdx,
+              attachedToDeskId: deskId,
+              isPatched: false,
+              connectedRackId: defaultRackId,
+            });
           }
         }
 
-        const dataOutletId = `outlet-${deskId}-s${seatIdx}-data`;
-        const voipOutletId = `outlet-${deskId}-s${seatIdx}-voip`;
-
-        // Prise DATA
-        const dataOutlet: NodeDisplay = {
-          id: dataOutletId,
+        const socketBlock: NodeDisplay = {
+          id: `outlet-${deskId}-pack`,
           type: "WALL_OUTLET",
-          name: `Prise ${currentNum}-${seatIdx + 1}-D`,
-          xMm: snapped.x + baseRelX - 60,
-          yMm: snapped.y + baseRelY,
-          portId: `port-${timestamp}-${r}-${c}-${seatIdx}-d`,
+          subType: "SOCKET_BLOCK",
+          name: `Bloc RJ45 ${currentNum}`,
+          xMm: snapped.x + Math.round(deskWidthMm / 2),
+          yMm: snapped.y + Math.round(deskHeightMm / 2),
           attachedToDeskId: deskId,
-          attachedSeatIndex: seatIdx,
+          portCount: totalPorts,
+          stackedPorts: initialPorts,
           outletRole: "DATA",
-          vlanId: 20,
-          connectedRackId: defaultRackId,
-          isPatched: false,
-          pingStatus: "OFFLINE",
           siteId: params.siteId,
+          connectedRackId: defaultRackId,
         };
 
-        // Prise VOIP
-        const voipOutlet: NodeDisplay = {
-          id: voipOutletId,
-          type: "WALL_OUTLET",
-          name: `Prise ${currentNum}-${seatIdx + 1}-V`,
-          xMm: snapped.x + baseRelX + 60,
-          yMm: snapped.y + baseRelY,
-          portId: `port-${timestamp}-${r}-${c}-${seatIdx}-v`,
-          attachedToDeskId: deskId,
-          attachedSeatIndex: seatIdx,
-          outletRole: "VOIP",
-          vlanId: 30,
-          connectedRackId: defaultRackId,
-          isPatched: false,
-          pingStatus: "OFFLINE",
-          siteId: params.siteId,
-        };
+        outlets.push(socketBlock);
+      } else {
+        // Mode Prises Individuelles séparées
+        seats.forEach((_seat, seatIdx) => {
+          let baseRelX = 800;
+          let baseRelY = 200;
 
-        outlets.push(dataOutlet, voipOutlet);
-      });
+          if (isQuad) {
+            if (seatIdx === 0) {
+              baseRelX = 800;
+              baseRelY = 200;
+            } else if (seatIdx === 1) {
+              baseRelX = 2400;
+              baseRelY = 200;
+            } else if (seatIdx === 2) {
+              baseRelX = 800;
+              baseRelY = 1400;
+            } else {
+              baseRelX = 2400;
+              baseRelY = 1400;
+            }
+          } else {
+            // Bench double
+            if (seatIdx === 0) {
+              baseRelX = 800;
+              baseRelY = 200;
+            } else {
+              baseRelX = 800;
+              baseRelY = 1400;
+            }
+          }
+
+          if (outletsPerSeat === 1) {
+            // 1 prise par place
+            const outletId = `outlet-${deskId}-s${seatIdx}`;
+            const singleOutlet: NodeDisplay = {
+              id: outletId,
+              type: "WALL_OUTLET",
+              name: `Prise ${currentNum}-${seatIdx + 1}`,
+              xMm: snapped.x + baseRelX,
+              yMm: snapped.y + baseRelY,
+              portId: `port-${timestamp}-${r}-${c}-${seatIdx}`,
+              attachedToDeskId: deskId,
+              attachedSeatIndex: seatIdx,
+              outletRole: "DATA", // Cuivre passif
+              vlanId: undefined,
+              connectedRackId: defaultRackId,
+              isPatched: false,
+              pingStatus: "OFFLINE",
+              siteId: params.siteId,
+            };
+            outlets.push(singleOutlet);
+          } else {
+            // 2 prises par place
+            const dataOutletId = `outlet-${deskId}-s${seatIdx}-data`;
+            const voipOutletId = `outlet-${deskId}-s${seatIdx}-voip`;
+
+            const dataOutlet: NodeDisplay = {
+              id: dataOutletId,
+              type: "WALL_OUTLET",
+              name: `Prise ${currentNum}-${seatIdx + 1}-A`,
+              xMm: snapped.x + baseRelX - 60,
+              yMm: snapped.y + baseRelY,
+              portId: `port-${timestamp}-${r}-${c}-${seatIdx}-a`,
+              attachedToDeskId: deskId,
+              attachedSeatIndex: seatIdx,
+              outletRole: "DATA",
+              vlanId: undefined,
+              connectedRackId: defaultRackId,
+              isPatched: false,
+              pingStatus: "OFFLINE",
+              siteId: params.siteId,
+            };
+
+            const voipOutlet: NodeDisplay = {
+              id: voipOutletId,
+              type: "WALL_OUTLET",
+              name: `Prise ${currentNum}-${seatIdx + 1}-B`,
+              xMm: snapped.x + baseRelX + 60,
+              yMm: snapped.y + baseRelY,
+              portId: `port-${timestamp}-${r}-${c}-${seatIdx}-b`,
+              attachedToDeskId: deskId,
+              attachedSeatIndex: seatIdx,
+              outletRole: "DATA",
+              vlanId: undefined,
+              connectedRackId: defaultRackId,
+              isPatched: false,
+              pingStatus: "OFFLINE",
+              siteId: params.siteId,
+            };
+
+            outlets.push(dataOutlet, voipOutlet);
+          }
+        });
+      }
 
       currentNum++;
     }
   }
 
+  const totalPortsCount = outlets.reduce((acc, o) => acc + (o.stackedPorts?.length ?? 1), 0);
+
   return {
     desks,
     outlets,
     totalSeats: desks.length * seatsPerDesk,
-    totalOutlets: outlets.length,
+    totalOutlets: totalPortsCount,
+    outletMode,
   };
 }

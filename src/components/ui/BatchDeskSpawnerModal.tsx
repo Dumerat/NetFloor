@@ -29,6 +29,8 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
   const [selectedZoneId, setSelectedZoneId] = useState<string>(zones[0]?.id ?? "");
   const [selectedRackId, setSelectedRackId] = useState<string>(racks[0]?.id ?? "rack-01");
   const [startNumber, setStartNumber] = useState(501);
+  const [outletsPerSeat, setOutletsPerSeat] = useState<1 | 2>(1);
+  const [outletMode, setOutletMode] = useState<"pack" | "individual">("pack");
 
   // Pré-génération schématique réactive pour l'aperçu SVG
   const previewData = useMemo(() => {
@@ -44,6 +46,8 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
         startDeskNumber: startNumber,
         originX: 0,
         originY: 0,
+        outletsPerSeat,
+        outletMode,
       },
       zones
     );
@@ -56,6 +60,8 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
     selectedZoneId,
     selectedRackId,
     startNumber,
+    outletsPerSeat,
+    outletMode,
     zones,
   ]);
 
@@ -64,7 +70,7 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
   const isQuad = deskType === "quad_4";
   const totalBenches = rows * columns;
   const totalDesks = totalBenches * (isQuad ? 4 : 2);
-  const totalOutlets = totalDesks * 2;
+  const totalOutlets = totalDesks * outletsPerSeat;
 
   const handleValidate = () => {
     onSpawn(previewData);
@@ -253,6 +259,85 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
               </div>
             </div>
 
+            {/* Prises par poste & Format connectique */}
+            <div className="space-y-3 pt-2 border-t border-slate-800/80">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span>Connectique par Poste</span>
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    {outletsPerSeat === 1 ? "1 port / place" : "2 ports / place"}
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOutletsPerSeat(1)}
+                    className={`p-2 rounded-xl border text-left transition flex flex-col justify-between ${
+                      outletsPerSeat === 1
+                        ? "bg-emerald-950/40 border-emerald-500/60 text-white shadow-sm"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <span className="font-bold text-xs">1 prise par poste</span>
+                    <span className="text-[10px] text-slate-400">1 port RJ45 cuivre</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOutletsPerSeat(2)}
+                    className={`p-2 rounded-xl border text-left transition flex flex-col justify-between ${
+                      outletsPerSeat === 2
+                        ? "bg-emerald-950/40 border-emerald-500/60 text-white shadow-sm"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <span className="font-bold text-xs">2 prises par poste</span>
+                    <span className="text-[10px] text-slate-400">2 ports RJ45 cuivre</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span>Format d&apos;Intégration Réseau</span>
+                  <span className="text-[10px] font-mono text-sky-400">
+                    {outletMode === "pack" ? "Pack compact (sans spam)" : "Prises séparées"}
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOutletMode("pack")}
+                    className={`p-2 rounded-xl border text-left transition flex flex-col justify-between ${
+                      outletMode === "pack"
+                        ? "bg-sky-950/40 border-sky-500/60 text-white shadow-sm"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <span className="font-bold text-xs flex items-center gap-1">
+                      <span>📦</span> Pack Centralisé
+                    </span>
+                    <span className="text-[10px] text-slate-400">1 Bloc RJ45 multi-ports</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOutletMode("individual")}
+                    className={`p-2 rounded-xl border text-left transition flex flex-col justify-between ${
+                      outletMode === "individual"
+                        ? "bg-sky-950/40 border-sky-500/60 text-white shadow-sm"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <span className="font-bold text-xs flex items-center gap-1">
+                      <span>🔌</span> Prises Séparées
+                    </span>
+                    <span className="text-[10px] text-slate-400">Prises individuelles</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div>
               <label className="block text-[11px] font-medium text-slate-300 mb-1">
                 Numérotation de Départ des Bureaux
@@ -325,28 +410,52 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
                               strokeWidth={1}
                             />
                           )}
-                          {/* Prises RJ45 (Data vert/bleu, VoIP violet) */}
-                          <circle cx={x + 8} cy={y + 6} r={2} fill="#38bdf8" />
-                          <circle cx={x + 13} cy={y + 6} r={2} fill="#c084fc" />
-                          <circle cx={x + 8} cy={y + deskSvgH - 6} r={2} fill="#38bdf8" />
-                          <circle cx={x + 13} cy={y + deskSvgH - 6} r={2} fill="#c084fc" />
-                          {isQuad && (
-                            <>
-                              <circle cx={x + deskSvgW - 13} cy={y + 6} r={2} fill="#38bdf8" />
-                              <circle cx={x + deskSvgW - 8} cy={y + 6} r={2} fill="#c084fc" />
-                              <circle
-                                cx={x + deskSvgW - 13}
-                                cy={y + deskSvgH - 6}
-                                r={2}
-                                fill="#38bdf8"
+
+                          {/* Rendu connectique : Pack Centralisé vs Prises Séparées */}
+                          {outletMode === "pack" ? (
+                            <g>
+                              {/* Boîtier pack compact central */}
+                              <rect
+                                x={x + deskSvgW / 2 - (isQuad ? 10 : 7)}
+                                y={y + deskSvgH / 2 - 4}
+                                width={isQuad ? 20 : 14}
+                                height={8}
+                                rx={2}
+                                fill="#0f172a"
+                                stroke="#10b981"
+                                strokeWidth={0.8}
                               />
-                              <circle
-                                cx={x + deskSvgW - 8}
-                                cy={y + deskSvgH - 6}
-                                r={2}
-                                fill="#c084fc"
-                              />
-                            </>
+                              {/* Ports RJ45 représentés dans le boîtier */}
+                              {isQuad ? (
+                                <>
+                                  <circle cx={x + deskSvgW / 2 - 6} cy={y + deskSvgH / 2} r={1.2} fill="#38bdf8" />
+                                  <circle cx={x + deskSvgW / 2 - 2} cy={y + deskSvgH / 2} r={1.2} fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"} />
+                                  <circle cx={x + deskSvgW / 2 + 2} cy={y + deskSvgH / 2} r={1.2} fill="#38bdf8" />
+                                  <circle cx={x + deskSvgW / 2 + 6} cy={y + deskSvgH / 2} r={1.2} fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"} />
+                                </>
+                              ) : (
+                                <>
+                                  <circle cx={x + deskSvgW / 2 - 3} cy={y + deskSvgH / 2} r={1.2} fill="#38bdf8" />
+                                  <circle cx={x + deskSvgW / 2 + 3} cy={y + deskSvgH / 2} r={1.2} fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"} />
+                                </>
+                              )}
+                            </g>
+                          ) : (
+                            <g>
+                              {/* Prises séparées individuelles */}
+                              <circle cx={x + 8} cy={y + 6} r={2} fill="#38bdf8" />
+                              {outletsPerSeat === 2 && <circle cx={x + 13} cy={y + 6} r={2} fill="#c084fc" />}
+                              <circle cx={x + 8} cy={y + deskSvgH - 6} r={2} fill="#38bdf8" />
+                              {outletsPerSeat === 2 && <circle cx={x + 13} cy={y + deskSvgH - 6} r={2} fill="#c084fc" />}
+                              {isQuad && (
+                                <>
+                                  <circle cx={x + deskSvgW - (outletsPerSeat === 2 ? 13 : 8)} cy={y + 6} r={2} fill="#38bdf8" />
+                                  {outletsPerSeat === 2 && <circle cx={x + deskSvgW - 8} cy={y + 6} r={2} fill="#c084fc" />}
+                                  <circle cx={x + deskSvgW - (outletsPerSeat === 2 ? 13 : 8)} cy={y + deskSvgH - 6} r={2} fill="#38bdf8" />
+                                  {outletsPerSeat === 2 && <circle cx={x + deskSvgW - 8} cy={y + deskSvgH - 6} r={2} fill="#c084fc" />}
+                                </>
+                              )}
+                            </g>
                           )}
                         </g>
                       );
@@ -372,12 +481,13 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
                 </div>
                 <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
                   <span className="block text-[10px] text-slate-500">Connectique :</span>
-                  <span className="text-sky-400 font-bold text-xs">{totalOutlets}</span> RJ45
+                  <span className="text-sky-400 font-bold text-xs">{totalOutlets}</span> ports
                 </div>
               </div>
-              <p className="text-[10px] text-slate-500 italic">
-                Chaque collaborateur recevra 1 port Data (VLAN 20) et 1 port VoIP (VLAN 30)
-                solidaires.
+              <p className="text-[10px] text-slate-400 italic">
+                {outletMode === "pack"
+                  ? `${totalBenches} boîtier(s) Bloc RJ45 centralisé(s) sans encombrement. Le rôle et le VLAN sont déterminés par le switch.`
+                  : `${totalOutlets} prise(s) individuelle(s). Le rôle et le VLAN sont déterminés par le switch.`}
               </p>
             </div>
           </div>

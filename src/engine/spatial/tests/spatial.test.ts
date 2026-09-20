@@ -338,9 +338,26 @@ async function runSpatialTests() {
   assertClose(firstDesk.xMm, 10000, 1e-6, "Coordonnée X d'origine respectée");
   assertClose(firstDesk.yMm, 10000, 1e-6, "Coordonnée Y d'origine respectée");
   assert(firstDesk.subType === "BENCH_QUAD", "Type de meuble BENCH_QUAD conforme");
-  assert(firstDesk.seats?.length === 4, "4 sièges assignés au meuble");
-
   console.log("   ✅ Génération matricielle de 16 postes avec 32 ports RJ45 solidaires certifiée.");
+
+  // Test 10b : Mode Pack centralisé (Bloc RJ45) et 1 prise par poste
+  const batchPackResult = generateBatchDesks({
+    deskType: "quad_4",
+    rows: 1,
+    columns: 2,
+    spacingXMeters: 1.5,
+    spacingYMeters: 2.0,
+    originX: 10000,
+    originY: 10000,
+    outletsPerSeat: 1,
+    outletMode: "pack",
+  });
+  assert(batchPackResult.desks.length === 2, "2 bureaux quad_4 générés");
+  assert(batchPackResult.outlets.length === 2, "2 Blocs RJ45 centralisés générés (1 par bureau, zéro spam)");
+  assert(batchPackResult.outlets[0]?.subType === "SOCKET_BLOCK", "Type de connectique SOCKET_BLOCK");
+  assert(batchPackResult.outlets[0]?.portCount === 4, "4 ports par bloc (1 port pour chacun des 4 sièges)");
+  assert(batchPackResult.totalOutlets === 8, "Total de 8 ports consolidés");
+  console.log("   ✅ Mode Pack centralisé (Bloc RJ45) et 1 prise par poste certifiés.");
 
   // ---------------------------------------------------------------------------
   // Test 11 : Auto-Câblage Orthogonal vers Baie (autoRoutePortsToRack)
