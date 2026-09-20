@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Users,
   Monitor,
@@ -21,7 +21,7 @@ import {
   Laptop,
 } from "lucide-react";
 import { NodeDisplay, RackDisplay } from "@/components/canvas/EquipmentLayer";
-import { ENTERPRISE_DIRECTORY, DirectoryUser } from "@/data/directory";
+import { loadEnterpriseDirectory, DirectoryUser } from "@/data/directory";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 import { FloorZone } from "@/types/zones";
 
@@ -36,6 +36,7 @@ interface InventoryPanelProps {
   onSelectNode?: (node: NodeDisplay) => void;
   onFocusNode?: (nodeId: string) => void;
   onClose?: () => void;
+  onUpdateNode?: (nodeId: string, updates: Partial<NodeDisplay>) => void;
 }
 
 export const InventoryPanel: React.FC<InventoryPanelProps> = ({
@@ -46,10 +47,31 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   onSelectNode,
   onFocusNode,
   onClose,
+  onUpdateNode,
 }) => {
   const [activeTab, setActiveTab] = useState<InventoryTab>("USERS");
   const [searchTerm, setSearchTerm] = useState("");
   const [deviceSubFilter, setDeviceSubFilter] = useState<DeviceSubFilter>("ALL");
+
+  // Synchronisation réactive de l'annuaire d'entreprise (AD + Hors Domaine / Custom)
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>(() => {
+    if (typeof window !== "undefined") {
+      return loadEnterpriseDirectory();
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    const refreshDirectory = () => {
+      setDirectoryUsers(loadEnterpriseDirectory());
+    };
+    window.addEventListener("netfloor_directory_updated", refreshDirectory);
+    window.addEventListener("storage", refreshDirectory);
+    return () => {
+      window.removeEventListener("netfloor_directory_updated", refreshDirectory);
+      window.removeEventListener("storage", refreshDirectory);
+    };
+  }, []);
 
   // -------------------------------------------------------------
   // 1. DATA COMPUTATION & CROSS-REFERENCING
@@ -65,10 +87,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
     return nodes.filter((n) => n.type === "WALL_OUTLET");
   }, [nodes]);
 
-  // Consolidation de l'annuaire (SAML/AD) et des collaborateurs assignés sur le plateau
+  // Consolidation de l'annuaire (SAML/AD/CUSTOM) et des collaborateurs assignés sur le plateau
   const allUsers: DirectoryUser[] = useMemo(() => {
     const userMap = new Map<string, DirectoryUser>();
-    for (const u of ENTERPRISE_DIRECTORY) {
+    for (const u of directoryUsers) {
       userMap.set(u.fullName.toLowerCase(), u);
     }
     // Détecter les occupants assignés sur les bureaux et postes
@@ -130,7 +152,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       }
     }
     return Array.from(userMap.values());
-  }, [deskNodes, outletNodes]);
+  }, [directoryUsers, deskNodes, outletNodes]);
 
   // Correspondance Utilisateur -> Bureaux multiples, Prises multiples & Téléphone IP
   const usersWithAssignments = useMemo(() => {
@@ -446,8 +468,31 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       const matchPhone =
         ipPhone.phoneNumber.toLowerCase().includes(query) ||
         ipPhone.extension.toLowerCase().includes(query);
+      const matchSource = user.source ? user.source.toLowerCase().includes(query) : false;
+      const matchEmail = user.email ? user.email.toLowerCase().includes(query) : false;
+      const matchOffice = user.office ? user.office.toLowerCase().includes(query) : false;
+      const matchSam = user.sAMAccountName ? user.sAMAccountName.toLowerCase().includes(query) : false;
+      const matchCustom =
+        query === "custom" ||
+        query === "manuel" ||
+        query === "hors domaine" ||
+        query === "hors-domaine"
+          ? user.source === "CUSTOM" || user.source === "MANUAL"
+          : false;
 
-      return matchName || matchJob || matchDept || matchDesk || matchOutlet || matchPhone;
+      return (
+        matchName ||
+        matchJob ||
+        matchDept ||
+        matchDesk ||
+        matchOutlet ||
+        matchPhone ||
+        matchSource ||
+        matchEmail ||
+        matchOffice ||
+        matchSam ||
+        matchCustom
+      );
     });
   }, [usersWithAssignments, query]);
 
@@ -750,6 +795,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             jobTitle: user.jobTitle,
                             department: user.department,
                             email: user.email,
+                            source: user.source,
                           },
                         };
                         e.dataTransfer.setData("application/json", JSON.stringify(userPayload));
@@ -789,8 +835,28 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             {user.fullName.charAt(0)}
                           </div>
                           <div>
-                            <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300 transition flex items-center gap-1.5">
-                              {user.fullName}
+                            <div className="text-xs font-semibold text-slate-100 group-hover:text-blue-300 transition flex items-center gap-1.5 flex-wrap">
+                              <span>{user.fullName}</span>
+                              {user.source === "AD" && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono font-medium">
+                                  AD
+                                </span>
+                              )}
+                              {user.source === "CUSTOM" && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono font-medium">
+                                  Hors Domaine
+                                </span>
+                              )}
+                              {user.source === "SAML" && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono font-medium">
+                                  SAML
+                                </span>
+                              )}
+                              {user.netFloorRole && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700 font-sans">
+                                  {user.netFloorRole}
+                                </span>
+                              )}
                               {assignedDesks.length > 0 ? (
                                 <span
                                   className="w-2 h-2 rounded-full bg-emerald-400"
@@ -799,13 +865,16 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                               ) : (
                                 <span
                                   className="w-2 h-2 rounded-full bg-slate-500"
-                                  title="Télétravail / Non assigné"
+                                  title="Non assigné • À placer sur le plan"
                                 />
                               )}
                             </div>
                             <div className="text-[10px] text-slate-400">
                               {user.jobTitle} •{" "}
                               <span className="text-slate-300">{user.department}</span>
+                              {user.office && user.office !== "-" && (
+                                <span className="text-slate-500"> • Bureau {user.office}</span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -825,18 +894,49 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                       </div>
 
                       {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
-                      {/* Détails consolidés des postes (Bureau 1, Bureau 2...) et prises rattachées */}
                       <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex flex-col gap-1.5">
                         {/* Section Bureaux */}
                         {assignedDesks.length === 0 ? (
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
-                              <Monitor className="w-3 h-3 text-slate-500" />
-                              <span>Bureau&nbsp;:</span>
-                            </span>
-                            <span className="min-w-0 truncate text-slate-500 italic">
-                              Non assigné
-                            </span>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="shrink-0 whitespace-nowrap text-slate-400 flex items-center gap-1">
+                                <Monitor className="w-3 h-3 text-slate-500" />
+                                <span>Bureau&nbsp;:</span>
+                              </span>
+                              <span className="min-w-0 truncate text-amber-400/90 italic font-mono text-[9px]">
+                                ⚪ Non assigné (Glisser ou choisir ▾)
+                              </span>
+                            </div>
+                            {onUpdateNode && deskNodes.length > 0 && (
+                              <div
+                                className="flex items-center gap-1 mt-0.5"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    const selectedDeskId = e.target.value;
+                                    if (!selectedDeskId) return;
+                                    const targetDesk = deskNodes.find((d) => d.id === selectedDeskId);
+                                    if (targetDesk) {
+                                      onUpdateNode(targetDesk.id, {
+                                        assignedPerson: user.fullName,
+                                        assignedUserId: user.id,
+                                        department: user.department || targetDesk.department,
+                                      });
+                                    }
+                                  }}
+                                  className="w-full bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-[9px] text-slate-300 focus:outline-none focus:border-blue-500 cursor-pointer"
+                                >
+                                  <option value="">＋ Assigner à un bureau du plan...</option>
+                                  {deskNodes.map((d) => (
+                                    <option key={d.id} value={d.id}>
+                                      {d.name} {d.assignedPerson ? `(occupé: ${d.assignedPerson})` : "(libre)"}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           assignedDesks.map(({ desk, seatLabel }, dIdx) => (
@@ -852,16 +952,34 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                     : "Bureau\u00A0:"}
                                 </span>
                               </span>
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleItemClick(desk);
-                                }}
-                                className="min-w-0 truncate font-medium text-blue-400 hover:underline cursor-pointer"
-                                title="Cliquer pour centrer sur le plan"
-                              >
-                                {desk.name} {seatLabel ? `• ${seatLabel}` : ""}
-                              </span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleItemClick(desk);
+                                  }}
+                                  className="min-w-0 truncate font-medium text-blue-400 hover:underline cursor-pointer"
+                                  title="Cliquer pour centrer sur le plan"
+                                >
+                                  {desk.name} {seatLabel ? `• ${seatLabel}` : ""}
+                                </span>
+                                {onUpdateNode && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onUpdateNode(desk.id, {
+                                        assignedPerson: undefined,
+                                        assignedUserId: undefined,
+                                      });
+                                    }}
+                                    className="text-[9px] text-slate-500 hover:text-rose-400 px-1 py-0.2 hover:bg-slate-800 rounded transition"
+                                    title="Désassigner ce collaborateur du bureau"
+                                  >
+                                    ✕ Libérer
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           ))
                         )}

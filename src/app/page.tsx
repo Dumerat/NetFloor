@@ -2734,6 +2734,7 @@ export default function NetFloorApp() {
               onFocusNode={(nodeId) => {
                 handleFocusNode(nodeId);
               }}
+              onUpdateNode={handleUpdateNodeProperties}
             />
           }
           vlanStyles={vlanStyles}
