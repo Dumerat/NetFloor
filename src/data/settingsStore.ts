@@ -1,3 +1,5 @@
+import { DirectoryUser } from "./directory";
+
 export interface ActiveDirectoryConfig {
   serverHost: string; // ex: "dc01.corp.local" ou "10.42.0.5"
   port: number; // 389 (LDAP) ou 636 (LDAPS)
@@ -15,7 +17,13 @@ export interface ActiveDirectoryConfig {
 }
 
 export interface SsoSettings {
-  provider: "ACTIVE_DIRECTORY_LDAP" | "ENTRA_ID" | "OKTA" | "GOOGLE_WORKSPACE" | "SAML_GENERIC";
+  provider:
+    | "ACTIVE_DIRECTORY_LDAP"
+    | "ENTRA_ID"
+    | "OKTA"
+    | "GOOGLE_WORKSPACE"
+    | "SAML_GENERIC"
+    | "CUSTOM";
   activeDirectory: ActiveDirectoryConfig;
   tenantId: string;
   clientId: string;
@@ -100,6 +108,7 @@ export interface SystemSettings {
   snmp: SnmpSettings;
   subnets: SubnetDefinition[];
   integrations: IntegrationsSettings;
+  directoryUsers?: DirectoryUser[];
 }
 
 export const LAB_ACTIVE_DIRECTORY_CONFIG: ActiveDirectoryConfig = {
@@ -198,6 +207,7 @@ export const INITIAL_SETTINGS: SystemSettings = {
       notifyOnHighTemp: false,
     },
   },
+  directoryUsers: [],
 };
 
 export const DEMO_SETTINGS: SystemSettings = {
@@ -324,6 +334,7 @@ export function loadStoredSettings(): SystemSettings {
         ...INITIAL_SETTINGS.integrations,
         ...(parsed.integrations || {}),
       },
+      directoryUsers: Array.isArray(parsed.directoryUsers) ? parsed.directoryUsers : [],
     };
   } catch {
     return INITIAL_SETTINGS;
