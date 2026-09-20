@@ -308,7 +308,6 @@ export async function runDiscoveryPipeline(
       if (!h.mac) continue;
       const { vendor, defaultType } = lookupOui(h.mac);
       const resolvedType = h.deviceType || defaultType || "UNKNOWN";
-      const isAp = resolvedType === "ACCESS_POINT";
       const [inserted] = await db
         .insert(discoveredDevices)
         .values({
@@ -321,7 +320,7 @@ export async function runDiscoveryPipeline(
           metadata: {
             openPorts: h.openPorts,
             latencyMs: h.responseTimeMs,
-            portsCount: isAp ? 1 : 1,
+            portsCount: 1,
             uSize: 0,
           },
         })

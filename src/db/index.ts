@@ -119,7 +119,7 @@ async function applyDrizzleMigrations(
   const files = fs
     .readdirSync(drizzleDir)
     .filter((f) => f.endsWith(".sql"))
-    .sort();
+    .sort((a, b) => a.localeCompare(b));
 
   for (const file of files) {
     const filePath = path.join(drizzleDir, file);

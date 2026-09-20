@@ -17,10 +17,10 @@ export function expandCidr(cidr: string): string[] {
   }
 
   const [ipPart, maskPart] = trimmed.split("/");
-  const prefix = parseInt(maskPart ?? "32", 10);
+  const prefix = Number.parseInt(maskPart ?? "32", 10);
   const parts = ipPart?.split(".").map(Number);
 
-  if (!parts || parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
+  if (!parts || parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
     return [trimmed.split("/")[0] ?? "127.0.0.1"];
   }
 

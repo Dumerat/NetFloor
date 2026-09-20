@@ -79,7 +79,11 @@ export async function crawlSwitchLldpCdp(
     const rawSysOid = sysVbs[2]?.value ? sysVbs[2].value.toString().trim() : "";
 
     if (!rawSysDescr && !rawSysName) {
-      session.close();
+      try {
+        session.close();
+      } catch {
+        // Ignorer l'erreur de fermeture
+      }
       return null;
     }
 
@@ -192,7 +196,7 @@ export async function crawlSwitchLldpCdp(
       const ifDescrs = await snmpSubtreePromise(session, "1.3.6.1.2.1.2.2.1.2");
       for (const vb of ifDescrs) {
         const oidParts = vb.oid.split(".");
-        const ifIndex = parseInt(oidParts[oidParts.length - 1], 10);
+        const ifIndex = Number.parseInt(oidParts[oidParts.length - 1], 10);
         const name = vb.value ? vb.value.toString().trim() : `Port ${ifIndex}`;
         portsMap.set(ifIndex, {
           ifIndex,
@@ -209,7 +213,7 @@ export async function crawlSwitchLldpCdp(
         const ifNames = await snmpSubtreePromise(session, "1.3.6.1.2.1.31.1.1.1.1");
         for (const vb of ifNames) {
           const oidParts = vb.oid.split(".");
-          const ifIndex = parseInt(oidParts[oidParts.length - 1], 10);
+          const ifIndex = Number.parseInt(oidParts[oidParts.length - 1], 10);
           const p = portsMap.get(ifIndex);
           if (p && vb.value) {
             p.portName = vb.value.toString().trim();
@@ -224,7 +228,7 @@ export async function crawlSwitchLldpCdp(
         const ifOper = await snmpSubtreePromise(session, "1.3.6.1.2.1.2.2.1.8");
         for (const vb of ifOper) {
           const oidParts = vb.oid.split(".");
-          const ifIndex = parseInt(oidParts[oidParts.length - 1], 10);
+          const ifIndex = Number.parseInt(oidParts[oidParts.length - 1], 10);
           const p = portsMap.get(ifIndex);
           if (p) {
             p.isUp = Number(vb.value) === 1;
@@ -234,7 +238,11 @@ export async function crawlSwitchLldpCdp(
         // Ignorer
       }
     } catch {
-      // Si la table IF échoue, créer des ports synthétiques adaptés
+      // Ignorer l'erreur de parcours IF
+    }
+
+    // Si aucune interface n'a été découverte ou si la table IF était vide, créer des ports synthétiques
+    if (portsMap.size === 0) {
       for (let i = 1; i <= defaultPortsCount; i++) {
         portsMap.set(i, {
           ifIndex: i,
@@ -261,7 +269,7 @@ export async function crawlSwitchLldpCdp(
       for (const sysVb of lldpSysNames) {
         const oidSuffix = sysVb.oid.replace("1.0.8802.1.1.2.1.4.1.1.9.", "");
         const parts = oidSuffix.split(".");
-        const localPortIdx = parseInt(parts[1] || "1", 10);
+        const localPortIdx = Number.parseInt(parts[1] || "1", 10);
         const remSysName = sysVb.value ? sysVb.value.toString().trim() : "";
 
         // Trouver le Port ID distant correspondant
@@ -305,7 +313,7 @@ export async function crawlSwitchLldpCdp(
 
         for (const devVb of cdpDevices) {
           const suffix = devVb.oid.replace("1.3.6.1.4.1.9.9.23.1.2.1.1.6.", "");
-          const localIfIdx = parseInt(suffix.split(".")[0] || "1", 10);
+          const localIfIdx = Number.parseInt(suffix.split(".")[0] || "1", 10);
           const devName = devVb.value ? devVb.value.toString().trim() : "";
 
           const portMatch = cdpPorts.find((p) => p.oid.endsWith(suffix));
@@ -331,7 +339,11 @@ export async function crawlSwitchLldpCdp(
       }
     }
 
-    session.close();
+    try {
+      session.close();
+    } catch {
+      // Ignorer l'erreur de fermeture
+    }
 
     // MAC de management déduite ou construite
     const hostParts = host.split(".").map(Number);
@@ -355,7 +367,11 @@ export async function crawlSwitchLldpCdp(
       fdbEntries: [],
     };
   } catch {
-    session.close();
+    try {
+      session.close();
+    } catch {
+      // Ignorer l'erreur de fermeture
+    }
     return null;
   }
 }

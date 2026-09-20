@@ -46,9 +46,9 @@ export async function extractSwitchFdb(host: string, options: ScanOptions): Prom
       const basePorts = await snmpSubtreePromise(session, "1.3.6.1.2.1.17.1.4.1.2");
       for (const vb of basePorts) {
         const parts = vb.oid.split(".");
-        const bPort = parseInt(parts[parts.length - 1], 10);
+        const bPort = Number.parseInt(parts[parts.length - 1], 10);
         const ifIdx = Number(vb.value);
-        if (!isNaN(bPort) && !isNaN(ifIdx)) {
+        if (!Number.isNaN(bPort) && !Number.isNaN(ifIdx)) {
           bridgeToIfMap.set(bPort, ifIdx);
         }
       }
@@ -114,10 +114,18 @@ export async function extractSwitchFdb(host: string, options: ScanOptions): Prom
       // Ignorer
     }
 
-    session.close();
+    try {
+      session.close();
+    } catch {
+      // Ignorer l'erreur de fermeture
+    }
     return fdbEntries;
   } catch {
-    session.close();
+    try {
+      session.close();
+    } catch {
+      // Ignorer l'erreur de fermeture
+    }
     return [];
   }
 }
