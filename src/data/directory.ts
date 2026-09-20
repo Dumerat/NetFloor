@@ -63,8 +63,7 @@ export function addCustomDirectoryUser(
   user: Omit<DirectoryUser, "id"> & { id?: string }
 ): DirectoryUser {
   const current = loadEnterpriseDirectory();
-  const id =
-    user.id || `custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const id = user.id || `custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   const newUser: DirectoryUser = {
     ...user,
     id,

@@ -18,12 +18,7 @@ export interface ActiveDirectoryConfig {
 
 export interface SsoSettings {
   provider:
-    | "ACTIVE_DIRECTORY_LDAP"
-    | "ENTRA_ID"
-    | "OKTA"
-    | "GOOGLE_WORKSPACE"
-    | "SAML_GENERIC"
-    | "CUSTOM";
+    "ACTIVE_DIRECTORY_LDAP" | "ENTRA_ID" | "OKTA" | "GOOGLE_WORKSPACE" | "SAML_GENERIC" | "CUSTOM";
   activeDirectory: ActiveDirectoryConfig;
   tenantId: string;
   clientId: string;

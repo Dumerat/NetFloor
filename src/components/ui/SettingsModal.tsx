@@ -28,8 +28,18 @@ import {
   Plus,
   RotateCcw,
   Sparkles,
+  Users,
+  UserPlus,
+  Trash2,
 } from "lucide-react";
 import { NodeDisplay } from "@/components/canvas/EquipmentLayer";
+import {
+  DirectoryUser,
+  loadEnterpriseDirectory,
+  addCustomDirectoryUser,
+  removeCustomDirectoryUser,
+  syncAdUsersToDirectory,
+} from "@/data/directory";
 import {
   SystemSettings,
   INITIAL_SETTINGS,
@@ -70,10 +80,31 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
   const [discoveredDevices, setDiscoveredDevices] = useState<DeviceTelemetry[]>([]);
 
-  // Chargement des paramètres depuis le localStorage au montage
+  // États pour les Utilisateurs Personnalisés / Hors Domaine (CUSTOM)
+  const [customUsers, setCustomUsers] = useState<DirectoryUser[]>([]);
+  const [customSearch, setCustomSearch] = useState("");
+  const [isAddingCustomUser, setIsAddingCustomUser] = useState(false);
+  const [newCustomUser, setNewCustomUser] = useState({
+    fullName: "",
+    sAMAccountName: "",
+    email: "",
+    department: "Prestation Externe",
+    jobTitle: "Consultant",
+    phone: "",
+    office: "",
+    netFloorRole: "Collaborateur",
+  });
+
+  // Chargement des paramètres et de l'annuaire depuis le localStorage au montage
   useEffect(() => {
     if (isOpen) {
       setSettings(loadStoredSettings());
+      const dir = loadEnterpriseDirectory();
+      setCustomUsers(dir.filter((u) => u.source === "CUSTOM"));
+      const existingAd = dir.filter((u) => u.source === "AD");
+      if (existingAd.length > 0) {
+        setSyncedAdUsers(existingAd);
+      }
     }
   }, [isOpen]);
 
@@ -184,8 +215,24 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
       if (data.success) {
         if (Array.isArray(data.syncedUsers)) {
           setSyncedAdUsers(data.syncedUsers);
+          const updatedDir = syncAdUsersToDirectory(data.syncedUsers);
+          setSettings((prev) => {
+            const updated = {
+              ...prev,
+              sso: {
+                ...prev.sso,
+                lastSyncIso: new Date().toISOString(),
+                status: "CONNECTED" as const,
+              },
+              directoryUsers: updatedDir,
+            };
+            saveStoredSettings(updated);
+            return updated;
+          });
         }
-        showToast("✅ Liaison Active Directory validée avec succès");
+        showToast(
+          `✅ Liaison AD validée (${data.syncedUsers?.length || 0} comptes injectés dans l'Inventaire)`
+        );
       } else {
         showToast(`❌ Échec de liaison AD : ${data.error || "Erreur de connexion"}`);
       }
@@ -208,16 +255,90 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.syncedUsers)) {
         setSyncedAdUsers(data.syncedUsers);
+        const updatedDir = syncAdUsersToDirectory(data.syncedUsers);
         const nowIso = new Date().toISOString();
-        setSettings((prev) => ({
-          ...prev,
-          sso: { ...prev.sso, lastSyncIso: nowIso },
-        }));
-        showToast(`🔄 Annuaire AD synchronisé (${data.syncedUsers.length} comptes actifs)`);
+        setSettings((prev) => {
+          const updated = {
+            ...prev,
+            sso: { ...prev.sso, lastSyncIso: nowIso, status: "CONNECTED" as const },
+            directoryUsers: updatedDir,
+          };
+          saveStoredSettings(updated);
+          return updated;
+        });
+        showToast(
+          `🔄 Annuaire AD synchronisé (${data.syncedUsers.length} comptes enregistrés dans l'Inventaire)`
+        );
       }
     } finally {
       setIsTestingAd(false);
     }
+  };
+
+  // Ajouter un collaborateur personnalisé (Hors Domaine)
+  const handleAddCustomUser = () => {
+    if (!newCustomUser.fullName.trim()) {
+      showToast("⚠️ Le nom complet du collaborateur est obligatoire");
+      return;
+    }
+    const added = addCustomDirectoryUser({
+      fullName: newCustomUser.fullName.trim(),
+      sAMAccountName:
+        newCustomUser.sAMAccountName.trim() ||
+        newCustomUser.fullName.toLowerCase().replace(/\s+/g, "."),
+      email: newCustomUser.email.trim(),
+      department: newCustomUser.department.trim() || "Hors Domaine",
+      jobTitle: newCustomUser.jobTitle.trim() || "Collaborateur",
+      phone: newCustomUser.phone.trim(),
+      office: newCustomUser.office.trim() || "-",
+      netFloorRole: newCustomUser.netFloorRole,
+    });
+    setCustomUsers((prev) => [added, ...prev.filter((u) => u.id !== added.id)]);
+    setSettings((prev) => {
+      const updated = {
+        ...prev,
+        directoryUsers: loadEnterpriseDirectory(),
+      };
+      saveStoredSettings(updated);
+      return updated;
+    });
+    setNewCustomUser({
+      fullName: "",
+      sAMAccountName: "",
+      email: "",
+      department: "Prestation Externe",
+      jobTitle: "Consultant",
+      phone: "",
+      office: "",
+      netFloorRole: "Collaborateur",
+    });
+    setIsAddingCustomUser(false);
+    showToast(`👤 ${added.fullName} ajouté et disponible dans l'Inventaire !`);
+  };
+
+  // Supprimer un collaborateur personnalisé
+  const handleDeleteCustomUser = (userId: string, name: string) => {
+    removeCustomDirectoryUser(userId);
+    setCustomUsers((prev) => prev.filter((u) => u.id !== userId));
+    setSettings((prev) => {
+      const updated = {
+        ...prev,
+        directoryUsers: loadEnterpriseDirectory(),
+      };
+      saveStoredSettings(updated);
+      return updated;
+    });
+    showToast(`🗑️ ${name} retiré de l'annuaire`);
+  };
+
+  // Forcer l'injection des comptes AD dans l'annuaire
+  const handleInjectAdUsersToDirectory = () => {
+    if (!syncedAdUsers || syncedAdUsers.length === 0) {
+      showToast("⚠️ Aucun compte AD disponible. Lancez d'abord le test ou la synchronisation.");
+      return;
+    }
+    syncAdUsersToDirectory(syncedAdUsers);
+    showToast(`✅ ${syncedAdUsers.length} comptes AD injectés avec succès dans l'Inventaire !`);
   };
 
   // Test de connexion SSO cloud (Entra ID / Okta)
@@ -643,13 +764,19 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-5 gap-2 pt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2">
                   {[
                     {
                       id: "ACTIVE_DIRECTORY_LDAP",
                       label: "Active Directory (AD DS / LDAP)",
                       desc: "Windows Server sur site",
                       icon: Database,
+                    },
+                    {
+                      id: "CUSTOM",
+                      label: "Manuel / Hors Domaine",
+                      desc: "Création libre & prestataires",
+                      icon: Users,
                     },
                     {
                       id: "ENTRA_ID",
@@ -1152,7 +1279,17 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                           Comptes Collaborateurs Synchronisés depuis l'Active Directory (
                           {syncedAdUsers.length})
                         </span>
-                        <span className="text-[10px] font-mono text-emerald-400">À jour</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleInjectAdUsersToDirectory}
+                            className="px-2.5 py-1 bg-cyan-600/25 hover:bg-cyan-600/40 text-cyan-300 rounded text-[10px] font-semibold border border-cyan-500/30 flex items-center gap-1 transition"
+                            title="Enregistrer tous ces comptes dans l'inventaire des collaborateurs"
+                          >
+                            <Download className="w-3 h-3" />
+                            Enregistrer dans l'Inventaire
+                          </button>
+                          <span className="text-[10px] font-mono text-emerald-400">À jour</span>
+                        </div>
                       </div>
                       <div className="max-h-48 overflow-y-auto">
                         <table className="w-full text-left text-xs font-mono">
@@ -1189,98 +1326,387 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* SECTION B : AUTRES FOURNISSEURS (ENTRA ID, OKTA, GOOGLE) */}
-              {settings.sso.provider !== "ACTIVE_DIRECTORY_LDAP" && (
-                <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-slate-100">
-                      Configuration Fédérée {settings.sso.provider}
-                    </h3>
-                    <button
-                      onClick={handleTestSsoCloud}
-                      disabled={isTestingSso}
-                      className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow transition"
-                    >
-                      <KeyRound className="w-3.5 h-3.5" />
-                      Tester le SSO Cloud
-                    </button>
-                  </div>
+              {/* SECTION B : FOURNISSEUR CUSTOM / HORS DOMAINE */}
+              {settings.sso.provider === "CUSTOM" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-purple-400" />
+                        <div>
+                          <h3 className="text-xs font-bold text-slate-100">
+                            Annuaire Manuel / Hors Domaine (Création Libre)
+                          </h3>
+                          <p className="text-[11px] text-slate-400">
+                            Ajoutez des prestataires, stagiaires ou collaborateurs externes non
+                            rattachés au domaine
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setIsAddingCustomUser((prev) => !prev)}
+                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow transition"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        {isAddingCustomUser ? "Fermer le formulaire" : "Ajouter un collaborateur"}
+                      </button>
+                    </div>
 
-                  {ssoTestResult && (
-                    <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded text-emerald-300 text-xs flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>{ssoTestResult.message}</span>
-                    </div>
-                  )}
+                    {/* Formulaire d'ajout d'utilisateur hors domaine */}
+                    {isAddingCustomUser && (
+                      <div className="p-4 rounded-lg bg-slate-900 border border-purple-500/30 space-y-3 animate-in fade-in duration-150">
+                        <div className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Nouveau Collaborateur Hors Domaine</span>
+                        </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-300">
-                        Domaine d'Entreprise Autorisé
-                      </label>
-                      <input
-                        type="text"
-                        value={settings.sso.corporateDomain}
-                        onChange={(e) =>
-                          setSettings((prev) => ({
-                            ...prev,
-                            sso: { ...prev.sso, corporateDomain: e.target.value },
-                          }))
-                        }
-                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
-                      />
+                        <div className="grid grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-300">
+                              Nom Complet *
+                            </label>
+                            <input
+                              type="text"
+                              value={newCustomUser.fullName}
+                              placeholder="ex: Jean Dupont"
+                              onChange={(e) =>
+                                setNewCustomUser({ ...newCustomUser, fullName: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-300">
+                              Identifiant / Matricule
+                            </label>
+                            <input
+                              type="text"
+                              value={newCustomUser.sAMAccountName}
+                              placeholder="ex: jdupont"
+                              onChange={(e) =>
+                                setNewCustomUser({
+                                  ...newCustomUser,
+                                  sAMAccountName: e.target.value,
+                                })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 font-mono focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-300">
+                              Service / Département
+                            </label>
+                            <input
+                              type="text"
+                              value={newCustomUser.department}
+                              placeholder="ex: Prestation Externe"
+                              onChange={(e) =>
+                                setNewCustomUser({ ...newCustomUser, department: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-300">
+                              Fonction / Intitulé
+                            </label>
+                            <input
+                              type="text"
+                              value={newCustomUser.jobTitle}
+                              placeholder="ex: Consultant Réseau"
+                              onChange={(e) =>
+                                setNewCustomUser({ ...newCustomUser, jobTitle: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-300">
+                              Email Professionnel
+                            </label>
+                            <input
+                              type="email"
+                              value={newCustomUser.email}
+                              placeholder="ex: j.dupont@externe.fr"
+                              onChange={(e) =>
+                                setNewCustomUser({ ...newCustomUser, email: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-300">
+                              Téléphone / Interne
+                            </label>
+                            <input
+                              type="text"
+                              value={newCustomUser.phone}
+                              placeholder="ex: +33 6 12 34 56 78"
+                              onChange={(e) =>
+                                setNewCustomUser({ ...newCustomUser, phone: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-300">
+                              Bureau ou Place assignée
+                            </label>
+                            <input
+                              type="text"
+                              value={newCustomUser.office}
+                              placeholder="ex: Bureau 204 ou Place 2"
+                              onChange={(e) =>
+                                setNewCustomUser({ ...newCustomUser, office: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 focus:border-purple-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-300">
+                              Rôle NetFloor
+                            </label>
+                            <select
+                              value={newCustomUser.netFloorRole}
+                              onChange={(e) =>
+                                setNewCustomUser({ ...newCustomUser, netFloorRole: e.target.value })
+                              }
+                              className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded text-slate-200 focus:border-purple-500 focus:outline-none"
+                            >
+                              <option value="Collaborateur">Collaborateur standard</option>
+                              <option value="DSI">DSI / Réseau & Câblage</option>
+                              <option value="RH">RH / Aménagement Espace</option>
+                              <option value="Maintenance">Maintenance & Travaux</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                          <button
+                            onClick={() => setIsAddingCustomUser(false)}
+                            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={handleAddCustomUser}
+                            className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-semibold shadow"
+                          >
+                            Enregistrer dans l'Inventaire
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Barre de recherche des utilisateurs hors domaine */}
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Rechercher parmi les utilisateurs hors domaine..."
+                          value={customSearch}
+                          onChange={(e) => setCustomSearch(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+                      <span className="text-[11px] text-slate-400 font-mono flex-shrink-0">
+                        {customUsers.length} collaborateur(s) hors domaine
+                      </span>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-300">
-                        Tenant ID / Realm
-                      </label>
-                      <input
-                        type="text"
-                        value={settings.sso.tenantId}
-                        onChange={(e) =>
-                          setSettings((prev) => ({
-                            ...prev,
-                            sso: { ...prev.sso, tenantId: e.target.value },
-                          }))
-                        }
-                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-300">
-                        Client ID (Application ID)
-                      </label>
-                      <input
-                        type="text"
-                        value={settings.sso.clientId}
-                        onChange={(e) =>
-                          setSettings((prev) => ({
-                            ...prev,
-                            sso: { ...prev.sso, clientId: e.target.value },
-                          }))
-                        }
-                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-300">
-                        Client Secret
-                      </label>
-                      <input
-                        type="password"
-                        value={settings.sso.clientSecret}
-                        onChange={(e) =>
-                          setSettings((prev) => ({
-                            ...prev,
-                            sso: { ...prev.sso, clientSecret: e.target.value },
-                          }))
-                        }
-                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
-                      />
+
+                    {/* Table des utilisateurs hors domaine */}
+                    <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950">
+                      <div className="max-h-60 overflow-y-auto">
+                        <table className="w-full text-left text-xs font-mono">
+                          <thead className="text-[10px] text-slate-400 border-b border-slate-800 sticky top-0 bg-slate-900/90 backdrop-blur-sm">
+                            <tr>
+                              <th className="py-2 px-3">Collaborateur</th>
+                              <th className="py-2 px-3">Identifiant</th>
+                              <th className="py-2 px-3">Département & Fonction</th>
+                              <th className="py-2 px-3">Contact</th>
+                              <th className="py-2 px-3">Bureau</th>
+                              <th className="py-2 px-3">Rôle NetFloor</th>
+                              <th className="py-2 px-3 text-right">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850 text-slate-300 text-[11px]">
+                            {customUsers
+                              .filter((u) => {
+                                if (!customSearch.trim()) return true;
+                                const q = customSearch.toLowerCase();
+                                return (
+                                  u.fullName.toLowerCase().includes(q) ||
+                                  (u.sAMAccountName &&
+                                    u.sAMAccountName.toLowerCase().includes(q)) ||
+                                  u.department.toLowerCase().includes(q) ||
+                                  u.jobTitle.toLowerCase().includes(q) ||
+                                  u.email.toLowerCase().includes(q)
+                                );
+                              })
+                              .map((u) => (
+                                <tr key={u.id} className="hover:bg-slate-900/60 transition">
+                                  <td className="py-2 px-3 font-sans">
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
+                                          u.avatarColor || "bg-purple-600"
+                                        }`}
+                                      >
+                                        {u.fullName.charAt(0)}
+                                      </div>
+                                      <span className="font-semibold text-slate-100">
+                                        {u.fullName}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-3 text-purple-300 font-mono">
+                                    {u.sAMAccountName || u.id}
+                                  </td>
+                                  <td className="py-2 px-3 font-sans">
+                                    <div className="text-slate-200">{u.department}</div>
+                                    <div className="text-[10px] text-slate-400">{u.jobTitle}</div>
+                                  </td>
+                                  <td className="py-2 px-3 font-mono text-[10px]">
+                                    <div>{u.email || "-"}</div>
+                                    {u.phone && <div className="text-slate-400">{u.phone}</div>}
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-300">{u.office || "-"}</td>
+                                  <td className="py-2 px-3">
+                                    <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px]">
+                                      {u.netFloorRole || "Collaborateur"}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <button
+                                      onClick={() => handleDeleteCustomUser(u.id, u.fullName)}
+                                      className="p-1 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 rounded transition"
+                                      title="Supprimer ce collaborateur"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            {customUsers.length === 0 && (
+                              <tr>
+                                <td
+                                  colSpan={7}
+                                  className="text-center py-8 text-slate-500 text-xs font-sans"
+                                >
+                                  Aucun collaborateur hors domaine pour l'instant. Cliquez sur
+                                  &quot;Ajouter un collaborateur&quot; pour en créer.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* SECTION C : AUTRES FOURNISSEURS (ENTRA ID, OKTA, GOOGLE) */}
+              {settings.sso.provider !== "ACTIVE_DIRECTORY_LDAP" &&
+                settings.sso.provider !== "CUSTOM" && (
+                  <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-slate-100">
+                        Configuration Fédérée {settings.sso.provider}
+                      </h3>
+                      <button
+                        onClick={handleTestSsoCloud}
+                        disabled={isTestingSso}
+                        className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow transition"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        Tester le SSO Cloud
+                      </button>
+                    </div>
+
+                    {ssoTestResult && (
+                      <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded text-emerald-300 text-xs flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>{ssoTestResult.message}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Domaine d'Entreprise Autorisé
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.sso.corporateDomain}
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: { ...prev.sso, corporateDomain: e.target.value },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Tenant ID / Realm
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.sso.tenantId}
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: { ...prev.sso, tenantId: e.target.value },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Client ID (Application ID)
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.sso.clientId}
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: { ...prev.sso, clientId: e.target.value },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-slate-300">
+                          Client Secret
+                        </label>
+                        <input
+                          type="password"
+                          value={settings.sso.clientSecret}
+                          onChange={(e) =>
+                            setSettings((prev) => ({
+                              ...prev,
+                              sso: { ...prev.sso, clientSecret: e.target.value },
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
             </div>
           )}
 
