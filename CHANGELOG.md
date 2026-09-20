@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.4.1...netfloor-architect-v0.4.2) (2026-09-20)
+
+
+### 🐛 Corrections de bugs
+
+* minor fix, using Number.method instead of method ([4d077e3](https://github.com/Dumerat/NetFloor/commit/4d077e3266efd9e863caa8da164ecf5e870e5b93))
+
 ## [0.4.1](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.4.0...netfloor-architect-v0.4.1) (2026-09-20)
 
 
