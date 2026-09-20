@@ -2877,6 +2877,37 @@ export default function NetFloorApp() {
                   );
 
                   setSelectedNodeId(hitDesk.id);
+                } else {
+                  // Dépôt direct sur l'espace vide du plan : création automatique d'un poste de travail assigné
+                  const deskCount = nodes.filter((n) => n.type === "DESK").length;
+                  const newDeskId = `node-desk-${Date.now()}`;
+                  const deskWidth = 1600;
+                  const deskHeight = 800;
+                  const snapped = snapToGrid(
+                    {
+                      x: Math.round(worldPos.x - deskWidth / 2),
+                      y: Math.round(worldPos.y - deskHeight / 2),
+                    },
+                    useCameraStore.getState().gridConfig
+                  ).point;
+
+                  const newDeskNode: NodeDisplay = {
+                    id: newDeskId,
+                    type: "DESK",
+                    subType: "DESK_SOLO",
+                    name: `Bureau ${403 + deskCount}`,
+                    widthMm: deskWidth,
+                    heightMm: deskHeight,
+                    xMm: snapped.x,
+                    yMm: snapped.y,
+                    assignedPerson: user.fullName,
+                    assignedUserId: user.id,
+                    department: user.department || "Plateau",
+                    siteId: activeSiteId ?? DEFAULT_SITE_ID,
+                  };
+
+                  setNodes((prev) => [...prev, newDeskNode]);
+                  setSelectedNodeId(newDeskNode.id);
                 }
                 return;
               }
