@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { discoveredDevices, discoveredConnections, nodes } from "@/db/schema";
+import { discoveredDevices, discoveredConnections, nodes, floors } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 const reconcileActionSchema = z.object({
   jobId: z.string().uuid("ID de job invalide"),
-  floorId: z.string().uuid("ID d'étage cible requis"),
+  floorId: z.string().uuid("ID d'étage cible invalide").optional(),
   acceptAll: z.boolean().default(false),
   selectedDeviceIds: z.array(z.string().uuid()).optional(),
   targetRacks: z.record(z.string(), z.string().uuid()).optional(), // deviceId -> rackId
@@ -31,6 +31,33 @@ export async function POST(req: Request) {
     const { jobId, floorId, acceptAll, selectedDeviceIds } = validated.data;
     const db = await getDb();
 
+    // Résoudre l'étage cible (existant ou créé par défaut)
+    let targetFloorId = floorId;
+    if (!targetFloorId) {
+      const [existingFloor] = await db.select().from(floors).limit(1);
+      if (existingFloor) {
+        targetFloorId = existingFloor.id;
+      } else {
+        const [createdFloor] = await db
+          .insert(floors)
+          .values({
+            name: "Plateau Principal",
+            building: "Bâtiment Central",
+            widthMm: 40000,
+            heightMm: 25000,
+          })
+          .returning();
+        targetFloorId = createdFloor?.id;
+      }
+    }
+
+    if (!targetFloorId) {
+      return NextResponse.json(
+        { success: false, error: "Aucun étage disponible pour la réconciliation" },
+        { status: 400 }
+      );
+    }
+
     // 1. Récupérer tous les équipements découverts pour ce job
     const devices = await db
       .select()
@@ -51,7 +78,10 @@ export async function POST(req: Request) {
       .where(eq(discoveredConnections.jobId, jobId));
 
     // Récupérer les nœuds existants sur cet étage
-    const existingFloorNodes = await db.select().from(nodes).where(eq(nodes.floorId, floorId));
+    const existingFloorNodes = await db
+      .select()
+      .from(nodes)
+      .where(eq(nodes.floorId, targetFloorId));
 
     let createdCount = 0;
     let updatedCount = 0;
@@ -118,7 +148,7 @@ export async function POST(req: Request) {
         const [createdNode] = await db
           .insert(nodes)
           .values({
-            floorId,
+            floorId: targetFloorId,
             type: nodeType,
             name: nodeName,
             model: dev.model || dev.sysDescr?.slice(0, 50),
@@ -160,13 +190,14 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       jobId,
-      floorId,
+      floorId: targetFloorId,
       summary: {
         totalDiscovered: devices.length,
         createdCount,
         updatedCount,
         skippedCount,
       },
+      devices: targetDevices,
       message: `Réconciliation effectuée : ${createdCount} équipement(s) créé(s), ${updatedCount} mis à jour.`,
     });
   } catch (err: unknown) {

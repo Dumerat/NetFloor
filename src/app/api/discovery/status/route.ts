@@ -5,8 +5,10 @@ import {
   discoveredDevices,
   discoveredConnections,
   discoveryLogs,
+  nodes,
 } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { detectTopologyDrift } from "@/engine/discovery/drift-detector";
 
 export async function GET(req: Request) {
   try {
@@ -58,6 +60,49 @@ export async function GET(req: Request) {
       .from(discoveredConnections)
       .where(eq(discoveredConnections.jobId, jobId));
 
+    // 6. Détection de dérive (diffs) avec les nœuds actuels
+    const dbNodes = await db.select().from(nodes);
+    const existingNodeSummaries = dbNodes.map((n) => {
+      const meta = (n.metadata || {}) as Record<string, unknown>;
+      return {
+        id: n.id,
+        name: n.name,
+        type: n.type,
+        ipAddress: meta.ipAddress as string | undefined,
+        macAddress: meta.macAddress as string | undefined,
+        connectedSwitchId: meta.connectedSwitchId as string | undefined,
+        connectedSwitchPort: meta.connectedSwitchPort as string | undefined,
+        isLocked: Boolean(meta.isLocked),
+      };
+    });
+
+    const diffs = detectTopologyDrift(
+      devices.map((d) => ({
+        ip: d.ipAddress,
+        mac: d.macAddress,
+        hostname: d.hostname || undefined,
+        isAlive: true,
+        responseTimeMs: 2,
+        openPorts: [],
+        source: "ARP_LOCAL" as const,
+        deviceType: d.deviceType as any,
+      })),
+      connections.map((c) => ({
+        id: c.id,
+        sourceDeviceId: c.sourceDeviceId,
+        sourceDeviceName: "Switch",
+        sourcePortName: c.sourcePortName,
+        targetDeviceId: c.targetDeviceId,
+        targetDeviceName: "Device",
+        targetPortName: c.targetPortName || undefined,
+        connectionType: c.connectionType,
+        confidenceScore: c.confidenceScore,
+        vlanId: c.vlanId || undefined,
+      })),
+      existingNodeSummaries,
+      []
+    );
+
     const passNames: Record<number, string> = {
       1: "Passe 1 : Balayage CIDR & Découverte L3 (Hôtes actifs)",
       2: "Passe 2 : Topologie Dorsale LLDP / CDP / LAG",
@@ -76,7 +121,7 @@ export async function GET(req: Request) {
         passName: passNames[job.currentPass] || "Finalisation",
         devicesDiscoveredCount: job.devicesDiscoveredCount,
         connectionsDiscoveredCount: job.connectionsDiscoveredCount,
-        diffsCount: job.diffsCount,
+        diffsCount: diffs.length || job.diffsCount,
         startedAt: job.startedAt,
         completedAt: job.completedAt,
         error: job.error,
@@ -85,10 +130,12 @@ export async function GET(req: Request) {
         devicesCount: devices.length,
         switchesCount: devices.filter((d) => d.isManagedSwitch).length,
         connectionsCount: connections.length,
+        diffsCount: diffs.length,
         logsCount: logs.length,
       },
       devices,
       connections,
+      diffs,
       logs: logs.map((l) => ({
         level: l.level,
         pass: l.pass,

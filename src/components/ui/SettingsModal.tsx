@@ -34,7 +34,14 @@ import {
   AlertTriangle,
   Cable,
   Layers,
+  CheckSquare,
+  Square,
+  Terminal,
+  GitPullRequest,
+  Clock,
+  Filter,
 } from "lucide-react";
+import type { TopologyDiffItem } from "@/engine/discovery/types";
 import { NodeDisplay } from "@/components/canvas/EquipmentLayer";
 import {
   DirectoryUser,
@@ -135,10 +142,152 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     }
   }, [isOpen]);
 
-  // États pour les actions interactives
-  const [isScanningSnmp, setIsScanningSnmp] = useState(false);
-  const [snmpScanResult, setSnmpScanResult] = useState<string | null>(null);
-  const [snmpIsLive, setSnmpIsLive] = useState<boolean | null>(null);
+  // Convertisseur d'équipement découvert vers le modèle télémétrique DeviceTelemetry
+  const mapDiscoveredToDeviceTelemetry = (d: any): DeviceTelemetry => ({
+    id: d.id,
+    name: d.hostname || `${d.manufacturer || "DEV"}-${d.ipAddress}`,
+    ip: d.ipAddress,
+    mac: d.macAddress,
+    deviceType:
+      d.deviceType === "SWITCH"
+        ? "SWITCH"
+        : d.deviceType === "ACCESS_POINT"
+          ? "WIFI_AP"
+          : d.deviceType === "SERVER"
+            ? "SERVER_RACK"
+            : d.deviceType === "PRINTER"
+              ? "PRINTER"
+              : "ENDPOINT",
+    status: "ONLINE",
+    uptimeDays: 1,
+    cpuLoadPercent: 12,
+    memoryUsagePercent: 28,
+    temperatureC: 36,
+    totalPorts: d.metadata?.portsCount || 24,
+    activePorts: 8,
+    model: d.model || d.sysDescr?.slice(0, 30) || "Discovered",
+    vlans: d.vlanId ? [d.vlanId] : [1],
+  });
+
+  // =========================================================================
+  // ÉTATS : MOTEUR HYBRIDE DE DÉCOUVERTE RÉSEAU (4 PASSES) & RÉCONCILIATION
+  // =========================================================================
+  const [scanConfig, setScanConfig] = useState({
+    subnetCidr: "192.168.1.0/24",
+    snmpVersion: "v2c" as "v1" | "v2c" | "v3",
+    snmpCommunity: "public",
+    snmpPort: 161,
+    v3User: "",
+    v3AuthPass: "",
+    v3PrivPass: "",
+    pingTimeoutMs: 400,
+    concurrency: 32,
+    includeCloud: false,
+  });
+
+  const [discoveryJobId, setDiscoveryJobId] = useState<string | null>(null);
+  const [discoveryStatus, setDiscoveryStatus] = useState<
+    "IDLE" | "PENDING" | "RUNNING" | "COMPLETED" | "FAILED"
+  >("IDLE");
+  const [currentPass, setCurrentPass] = useState<number>(1);
+  const [passName, setPassName] = useState<string>("");
+  const [discoveryLogs, setDiscoveryLogs] = useState<
+    Array<{
+      level: "INFO" | "WARN" | "ERROR";
+      pass?: number | undefined;
+      message: string;
+      timestamp: string;
+    }>
+  >([]);
+  const [discoveredDevicesList, setDiscoveredDevicesList] = useState<any[]>([]);
+  const [discoveredConnectionsList, setDiscoveredConnectionsList] = useState<any[]>([]);
+  const [reconciliationDiffs, setReconciliationDiffs] = useState<TopologyDiffItem[]>([]);
+  const [selectedDiffIds, setSelectedDiffIds] = useState<Set<string>>(new Set());
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [activeDiscoverySubTab, setActiveDiscoverySubTab] = useState<
+    "RECONCILE" | "DEVICES" | "TOPOLOGY" | "LOGS"
+  >("RECONCILE");
+  const [logLevelFilter, setLogLevelFilter] = useState<"ALL" | "INFO" | "WARN" | "ERROR">("ALL");
+  const [recentJobs, setRecentJobs] = useState<any[]>([]);
+  const [showAdvancedScanOptions, setShowAdvancedScanOptions] = useState(false);
+
+  // Synchroniser la config avec les settings au chargement
+  useEffect(() => {
+    if (settings.snmp?.targetSubnet) {
+      setScanConfig((prev) => ({
+        ...prev,
+        subnetCidr: settings.snmp.targetSubnet,
+        snmpCommunity: settings.snmp.community || "public",
+        snmpVersion: (settings.snmp.version || "v2c") as "v1" | "v2c" | "v3",
+      }));
+    }
+  }, [settings.snmp]);
+
+  // Chargement des jobs récents quand l'onglet SNMP est activé
+  useEffect(() => {
+    if (isOpen && activeTab === "snmp") {
+      fetch("/api/discovery/status")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.jobs) && data.jobs.length > 0) {
+            setRecentJobs(data.jobs);
+            if (!discoveryJobId) {
+              const latestJob = data.jobs[0];
+              loadJobDetails(latestJob.id);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, activeTab]);
+
+  // Polling automatique en temps réel pendant l'exécution d'un job de découverte
+  useEffect(() => {
+    if (!discoveryJobId || (discoveryStatus !== "RUNNING" && discoveryStatus !== "PENDING")) {
+      return;
+    }
+
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/discovery/status?jobId=${discoveryJobId}`);
+        const data = await res.json();
+        if (!isMounted || !data.success) return;
+
+        if (data.job) {
+          setDiscoveryStatus(data.job.status);
+          setCurrentPass(data.job.currentPass || 1);
+          setPassName(data.job.passName || "");
+        }
+        if (Array.isArray(data.logs)) {
+          setDiscoveryLogs(data.logs);
+        }
+        if (Array.isArray(data.devices)) {
+          setDiscoveredDevicesList(data.devices);
+          setDiscoveredDevices(data.devices.map(mapDiscoveredToDeviceTelemetry));
+        }
+        if (Array.isArray(data.connections)) {
+          setDiscoveredConnectionsList(data.connections);
+        }
+        if (Array.isArray(data.diffs)) {
+          setReconciliationDiffs(data.diffs);
+          setSelectedDiffIds((prev) => {
+            if (prev.size === 0) {
+              return new Set(data.diffs.map((d: any) => d.id));
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.error("Erreur de polling découverte:", err);
+      }
+    }, 1200);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [discoveryJobId, discoveryStatus]);
 
   const [isTestingSso, setIsTestingSso] = useState(false);
   const [ssoTestResult, setSsoTestResult] = useState<{ success: boolean; message: string } | null>(
@@ -540,39 +689,206 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     }
   };
 
-  // Lancement du scan SNMP actif
-  const handleRunSnmpScan = async () => {
-    setIsScanningSnmp(true);
-    setSnmpScanResult(null);
+  // Charger les détails d'un job de découverte
+  const loadJobDetails = async (jobId: string) => {
     try {
-      const res = await fetch("/api/snmp/discover", {
+      const res = await fetch(`/api/discovery/status?jobId=${jobId}`);
+      const data = await res.json();
+      if (!data.success) return;
+
+      setDiscoveryJobId(jobId);
+      if (data.job) {
+        setDiscoveryStatus(data.job.status);
+        setCurrentPass(data.job.currentPass || 1);
+        setPassName(data.job.passName || "");
+        if (data.job.subnetCidr) {
+          setScanConfig((prev) => ({ ...prev, subnetCidr: data.job.subnetCidr }));
+        }
+      }
+      if (Array.isArray(data.logs)) {
+        setDiscoveryLogs(data.logs);
+      }
+      if (Array.isArray(data.devices)) {
+        setDiscoveredDevicesList(data.devices);
+        setDiscoveredDevices(data.devices.map(mapDiscoveredToDeviceTelemetry));
+      }
+      if (Array.isArray(data.connections)) {
+        setDiscoveredConnectionsList(data.connections);
+      }
+      if (Array.isArray(data.diffs)) {
+        setReconciliationDiffs(data.diffs);
+        setSelectedDiffIds(new Set(data.diffs.map((d: any) => d.id)));
+      }
+    } catch (err) {
+      console.error("Erreur de chargement du job:", err);
+    }
+  };
+
+  // Démarrer la découverte réseau multi-passes (4 Passes)
+  const handleStartDiscoveryPipeline = async () => {
+    setDiscoveryStatus("RUNNING");
+    setCurrentPass(1);
+    setPassName("Passe 1 : Balayage CIDR & Découverte L3...");
+    setDiscoveryLogs([]);
+    setDiscoveredDevicesList([]);
+    setDiscoveredConnectionsList([]);
+    setReconciliationDiffs([]);
+    setSelectedDiffIds(new Set());
+    setActiveDiscoverySubTab("RECONCILE");
+
+    try {
+      const res = await fetch("/api/discovery/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subnet: settings.snmp.targetSubnet,
-          community: settings.snmp.community,
-          version: settings.snmp.version,
+          subnetCidr: scanConfig.subnetCidr,
+          snmpVersion: scanConfig.snmpVersion,
+          snmpCommunity: scanConfig.snmpCommunity,
+          snmpPort: Number(scanConfig.snmpPort) || 161,
+          v3User: scanConfig.v3User || undefined,
+          v3AuthPass: scanConfig.v3AuthPass || undefined,
+          v3PrivPass: scanConfig.v3PrivPass || undefined,
+          pingTimeoutMs: Number(scanConfig.pingTimeoutMs) || 400,
+          concurrency: Number(scanConfig.concurrency) || 32,
+          includeCloud: Boolean(scanConfig.includeCloud),
         }),
       });
+
       const data = await res.json();
-      if (data.success && Array.isArray(data.devices)) {
-        setDiscoveredDevices(data.devices);
-        setSnmpIsLive(Boolean(data.isLiveSnmp));
-        setSnmpScanResult(
-          `Scan terminé sur ${data.subnet} : ${data.summary.online} en ligne, ${data.summary.warning} alertes, ${data.summary.offline} hors-ligne.`
-        );
-        showToast(
-          data.isLiveSnmp
-            ? "📡 Découverte SNMP terminée (Sondes actives en direct)"
-            : "📡 Découverte SNMP terminée avec succès"
-        );
+      if (data.success && data.jobId) {
+        setDiscoveryJobId(data.jobId);
+        showToast(`🚀 Découverte réseau lancée sur ${scanConfig.subnetCidr} (Pipeline 4 Passes)`);
       } else {
-        throw new Error(data.error || "Erreur lors du scan");
+        setDiscoveryStatus("FAILED");
+        showToast(`❌ Erreur: ${data.error || "Échec de démarrage du scan"}`);
       }
     } catch {
-      setSnmpScanResult("Erreur lors de la requête SNMP.");
+      setDiscoveryStatus("FAILED");
+      showToast("❌ Erreur de communication avec le serveur de découverte");
+    }
+  };
+
+  // Sélection unitaire ou globale des diffs pour la réconciliation
+  const handleToggleDiffSelection = (diffId: string) => {
+    setSelectedDiffIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(diffId)) next.delete(diffId);
+      else next.add(diffId);
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedDiffIds.size === reconciliationDiffs.length) {
+      setSelectedDiffIds(new Set());
+    } else {
+      setSelectedDiffIds(new Set(reconciliationDiffs.map((d) => d.id)));
+    }
+  };
+
+  // Réconciliation Human-in-the-Loop (Option A) : Tout Accepter ou Appliquer la sélection
+  const handleApplyReconciliation = async (acceptAll: boolean) => {
+    if (!discoveryJobId) {
+      showToast("⚠️ Aucun job de découverte actif à réconcilier");
+      return;
+    }
+    setIsReconciling(true);
+    try {
+      const selectedIds = acceptAll
+        ? undefined
+        : discoveredDevicesList
+            .filter((dev) => {
+              return reconciliationDiffs.some(
+                (diff) =>
+                  selectedDiffIds.has(diff.id) &&
+                  (diff.deviceMac?.toUpperCase() === dev.macAddress?.toUpperCase() ||
+                    diff.deviceIp === dev.ipAddress)
+              );
+            })
+            .map((d) => d.id);
+
+      const res = await fetch("/api/discovery/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: discoveryJobId,
+          acceptAll,
+          selectedDeviceIds: selectedIds,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✅ ${data.message}`);
+
+        // Synchronisation directe sur le plateau 2D interactif
+        const targetDevs = data.devices || discoveredDevicesList;
+        if (Array.isArray(targetDevs)) {
+          targetDevs.forEach((dev: any) => {
+            if (acceptAll || selectedIds?.includes(dev.id)) {
+              onImportDiscoveredDevice?.(mapDiscoveredToDeviceTelemetry(dev));
+            }
+          });
+        }
+
+        if (acceptAll) {
+          setReconciliationDiffs([]);
+          setSelectedDiffIds(new Set());
+        } else {
+          setReconciliationDiffs((prev) => prev.filter((d) => !selectedDiffIds.has(d.id)));
+          setSelectedDiffIds(new Set());
+        }
+      } else {
+        showToast(`❌ Erreur réconciliation : ${data.error}`);
+      }
+    } catch {
+      showToast("❌ Échec lors de la réconciliation réseau");
     } finally {
-      setIsScanningSnmp(false);
+      setIsReconciling(false);
+    }
+  };
+
+  // Réconciliation unitaire d'un diff
+  const handleApplySingleDiff = async (diff: TopologyDiffItem) => {
+    if (!discoveryJobId) return;
+    setIsReconciling(true);
+    try {
+      const matchingDevice = discoveredDevicesList.find(
+        (d) =>
+          (d.macAddress && d.macAddress.toUpperCase() === diff.deviceMac?.toUpperCase()) ||
+          d.ipAddress === diff.deviceIp
+      );
+      const selectedIds = matchingDevice ? [matchingDevice.id] : undefined;
+
+      const res = await fetch("/api/discovery/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: discoveryJobId,
+          acceptAll: false,
+          selectedDeviceIds: selectedIds,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✅ Modification réconciliée pour ${diff.deviceIp}`);
+        if (matchingDevice) {
+          onImportDiscoveredDevice?.(mapDiscoveredToDeviceTelemetry(matchingDevice));
+        }
+        setReconciliationDiffs((prev) => prev.filter((d) => d.id !== diff.id));
+        setSelectedDiffIds((prev) => {
+          const next = new Set(prev);
+          next.delete(diff.id);
+          return next;
+        });
+      } else {
+        showToast(`❌ Erreur : ${data.error}`);
+      }
+    } catch {
+      showToast("❌ Échec de l'application du diff");
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -584,8 +900,13 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
   // Synchroniser tous les équipements découverts vers le plan
   const handleSyncAllDevicesToFloor = () => {
-    discoveredDevices.forEach((dev) => onImportDiscoveredDevice?.(dev));
-    showToast(`📍 ${discoveredDevices.length} équipements synchronisés sur le plateau !`);
+    const devsToSync =
+      discoveredDevicesList.length > 0
+        ? discoveredDevicesList.map(mapDiscoveredToDeviceTelemetry)
+        : discoveredDevices;
+
+    devsToSync.forEach((dev) => onImportDiscoveredDevice?.(dev));
+    showToast(`📍 ${devsToSync.length} équipements synchronisés sur le plateau !`);
   };
 
   // Test d'intégration via API route
@@ -1982,207 +2303,935 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* ================= TAB 2 : SNMP & DÉCOUVERTE ================= */}
+          {/* ================= TAB 2 : SNMP & DÉCOUVERTE RÉSEAU (4 PASSES) ================= */}
           {activeTab === "snmp" && (
             <div className="space-y-6">
+              {/* 1. CARTE DE CONFIGURATION ET COMMANDE DE LA DÉCOUVERTE */}
               <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-xs font-bold text-slate-100 flex items-center gap-2">
                       <Radio className="w-4 h-4 text-cyan-400" />
-                      Sonde de Découverte Réseau Active (SNMP)
+                      Moteur Hybride de Découverte & Cartographie Réseau (Pipeline 4 Passes)
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      Scan physique des commutateurs, baies 42U, PDU et bornes Wi-Fi avec
-                      synchronisation vers le plan
+                      Scan physique combiné L3 Ping Sweep, Dorsale LLDP/CDP, Switch Port Mapper FDB
+                      et Réconciliation Human-in-the-Loop
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
+                    {recentJobs.length > 0 && (
+                      <select
+                        value={discoveryJobId || ""}
+                        onChange={(e) => {
+                          if (e.target.value) loadJobDetails(e.target.value);
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-300 font-mono focus:border-cyan-500 focus:outline-none"
+                        title="Charger un scan d'infrastructure précédent"
+                      >
+                        <option value="">-- Historique des scans récents --</option>
+                        {recentJobs.map((j) => (
+                          <option key={j.id} value={j.id}>
+                            #{j.id.slice(0, 8)} • {j.subnetCidr} ({j.status})
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       onClick={handleSyncAllDevicesToFloor}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
+                      disabled={discoveredDevicesList.length === 0}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
                       title="Associer automatiquement tous les équipements découverts sur le plan"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                       Tout synchroniser sur le plan
                     </button>
                     <button
-                      onClick={handleRunSnmpScan}
-                      disabled={isScanningSnmp}
-                      className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow transition"
+                      onClick={handleStartDiscoveryPipeline}
+                      disabled={discoveryStatus === "RUNNING"}
+                      className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow transition"
                     >
                       <RefreshCw
-                        className={`w-3.5 h-3.5 ${isScanningSnmp ? "animate-spin" : ""}`}
+                        className={`w-3.5 h-3.5 ${discoveryStatus === "RUNNING" ? "animate-spin" : ""}`}
                       />
-                      {isScanningSnmp ? "Scan en cours..." : "Lancer le scan SNMP"}
+                      {discoveryStatus === "RUNNING"
+                        ? `Passe ${currentPass}/4 en cours...`
+                        : "Lancer la Découverte (4 Passes)"}
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                {/* Formulaire des paramètres de découverte */}
+                <div className="grid grid-cols-3 gap-3 pt-1">
                   <div className="space-y-1">
-                    <label className="text-[11px] text-slate-300 font-medium">
-                      Plage Sous-Réseau CIDR
+                    <label className="text-[11px] text-slate-300 font-medium flex items-center justify-between">
+                      <span>Plage Sous-Réseau CIDR</span>
+                      <span className="text-[10px] text-slate-500 font-mono">IPv4 / Mask</span>
                     </label>
                     <input
                       type="text"
-                      value={settings.snmp.targetSubnet}
+                      placeholder="ex: 192.168.1.0/24 ou 10.42.0.0/24"
+                      value={scanConfig.subnetCidr}
                       onChange={(e) =>
-                        setSettings((prev) => ({
-                          ...prev,
-                          snmp: { ...prev.snmp, targetSubnet: e.target.value },
-                        }))
+                        setScanConfig((prev) => ({ ...prev, subnetCidr: e.target.value }))
                       }
                       className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[11px] text-slate-300 font-medium">
-                      Version Protocole
+                      Protocole d'Interrogation
                     </label>
                     <select
-                      value={settings.snmp.version}
+                      value={scanConfig.snmpVersion}
                       onChange={(e) =>
-                        setSettings((prev) => ({
+                        setScanConfig((prev) => ({
                           ...prev,
-                          snmp: { ...prev.snmp, version: e.target.value as any },
+                          snmpVersion: e.target.value as "v1" | "v2c" | "v3",
                         }))
                       }
                       className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 focus:border-cyan-500 focus:outline-none"
                     >
-                      <option value="v2c">SNMP v2c (Community string)</option>
-                      <option value="v3">SNMP v3 (AuthPriv chiffré SHA/AES)</option>
+                      <option value="v2c">SNMP v2c (Community string standard)</option>
+                      <option value="v3">SNMP v3 (USM AuthPriv Chiffré SHA/AES)</option>
+                      <option value="v1">SNMP v1 (Héritage legacy)</option>
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[11px] text-slate-300 font-medium">
-                      Communauté / Mot de passe
+                      {scanConfig.snmpVersion === "v3"
+                        ? "Utilisateur SNMP v3"
+                        : "Communauté de lecture"}
                     </label>
                     <input
-                      type="password"
-                      value={settings.snmp.community}
-                      onChange={(e) =>
-                        setSettings((prev) => ({
-                          ...prev,
-                          snmp: { ...prev.snmp, community: e.target.value },
-                        }))
+                      type={scanConfig.snmpVersion === "v3" ? "text" : "password"}
+                      value={
+                        scanConfig.snmpVersion === "v3"
+                          ? scanConfig.v3User
+                          : scanConfig.snmpCommunity
                       }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setScanConfig((prev) =>
+                          prev.snmpVersion === "v3"
+                            ? { ...prev, v3User: val }
+                            : { ...prev, snmpCommunity: val }
+                        );
+                      }}
+                      placeholder={scanConfig.snmpVersion === "v3" ? "ex: netadmin" : "public"}
                       className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
                     />
                   </div>
                 </div>
 
-                {snmpScanResult && (
-                  <div className="p-3 bg-cyan-950/40 border border-cyan-800/60 rounded text-cyan-300 text-xs flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-cyan-400" />
-                      <span>{snmpScanResult}</span>
+                {/* Paramètres spécifiques SNMP v3 */}
+                {scanConfig.snmpVersion === "v3" && (
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-slate-900/60 border border-slate-800/80 rounded-lg">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-300 font-medium">
+                        Mot de passe d'authentification (Auth SHA/MD5)
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="••••••••••••"
+                        value={scanConfig.v3AuthPass}
+                        onChange={(e) =>
+                          setScanConfig((prev) => ({ ...prev, v3AuthPass: e.target.value }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                      />
                     </div>
-                    {snmpIsLive !== null && (
-                      <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                          snmpIsLive
-                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                            : "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                        }`}
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-300 font-medium">
+                        Clé de chiffrement privé (Priv AES/DES)
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="••••••••••••"
+                        value={scanConfig.v3PrivPass}
+                        onChange={(e) =>
+                          setScanConfig((prev) => ({ ...prev, v3PrivPass: e.target.value }))
+                        }
+                        className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Bascule Options avancées */}
+                <div className="pt-1 flex items-center justify-between border-t border-slate-900">
+                  <button
+                    onClick={() => setShowAdvancedScanOptions((prev) => !prev)}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-medium transition"
+                  >
+                    <Sliders className="w-3 h-3" />
+                    {showAdvancedScanOptions
+                      ? "Masquer les options avancées de sonde"
+                      : "Afficher les options avancées de sonde (Port, Concurrence, Timeout, Cloud)"}
+                  </button>
+                  {discoveryJobId && (
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      Job ID: #{discoveryJobId.slice(0, 8)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Panneau des options avancées */}
+                {showAdvancedScanOptions && (
+                  <div className="grid grid-cols-4 gap-3 p-3 bg-slate-900/40 border border-slate-800/60 rounded-lg">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-300">Port UDP SNMP</label>
+                      <input
+                        type="number"
+                        value={scanConfig.snmpPort}
+                        onChange={(e) =>
+                          setScanConfig((prev) => ({
+                            ...prev,
+                            snmpPort: Number(e.target.value) || 161,
+                          }))
+                        }
+                        className="w-full px-2.5 py-1 bg-slate-950 border border-slate-800 rounded text-xs text-slate-200 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-300">Concurrence Parallèle</label>
+                      <select
+                        value={scanConfig.concurrency}
+                        onChange={(e) =>
+                          setScanConfig((prev) => ({
+                            ...prev,
+                            concurrency: Number(e.target.value),
+                          }))
+                        }
+                        className="w-full px-2.5 py-1 bg-slate-950 border border-slate-800 rounded text-xs text-slate-200"
                       >
-                        {snmpIsLive ? "🟢 Direct Réseau (RFC 1213)" : "Simulé (Secours)"}
-                      </span>
-                    )}
+                        <option value={16}>16 threads (Réseau faible)</option>
+                        <option value={32}>32 threads (Standard DSI)</option>
+                        <option value={64}>64 threads (Haut débit 10G)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-slate-300">Timeout Sonde Ping / TCP</label>
+                      <select
+                        value={scanConfig.pingTimeoutMs}
+                        onChange={(e) =>
+                          setScanConfig((prev) => ({
+                            ...prev,
+                            pingTimeoutMs: Number(e.target.value),
+                          }))
+                        }
+                        className="w-full px-2.5 py-1 bg-slate-950 border border-slate-800 rounded text-xs text-slate-200"
+                      >
+                        <option value={200}>200 ms (LAN rapide)</option>
+                        <option value={400}>400 ms (Recommandé)</option>
+                        <option value={1000}>1000 ms (WAN / VPN lent)</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 pt-5">
+                      <input
+                        type="checkbox"
+                        id="includeCloudCheck"
+                        checked={scanConfig.includeCloud}
+                        onChange={(e) =>
+                          setScanConfig((prev) => ({
+                            ...prev,
+                            includeCloud: e.target.checked,
+                          }))
+                        }
+                        className="w-4 h-4 rounded bg-slate-950 border-slate-800 text-cyan-600 focus:ring-0"
+                      />
+                      <label
+                        htmlFor="includeCloudCheck"
+                        className="text-[11px] text-slate-300 cursor-pointer select-none"
+                      >
+                        Sonder aussi le Cloud Meraki / Aruba
+                      </label>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Cartes d'équipements découverts avec bouton d'import direct sur le plan */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-emerald-400" />
-                    Matériels Détectés sur le Réseau ({discoveredDevices.length})
-                  </h4>
-                  <span className="text-[11px] font-mono text-slate-500">
-                    Cliquez sur &quot;Importer sur le plan&quot; pour répercuter l&apos;IP et la
-                    télémétrie sur le canvas
-                  </span>
-                </div>
+              {/* 2. STEPPER VISUEL D'AVANCEMENT DU PIPELINE (4 PASSES) */}
+              {(discoveryStatus === "RUNNING" ||
+                discoveryStatus === "COMPLETED" ||
+                discoveryStatus === "FAILED" ||
+                discoveryLogs.length > 0) && (
+                <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-cyan-400" />
+                      <span className="text-xs font-bold text-slate-200">
+                        État du Pipeline de Cartographie Réseau
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          discoveryStatus === "RUNNING"
+                            ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30 animate-pulse"
+                            : discoveryStatus === "COMPLETED"
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                              : discoveryStatus === "FAILED"
+                                ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                                : "bg-slate-800 text-slate-400 border-slate-700"
+                        }`}
+                      >
+                        {discoveryStatus === "RUNNING"
+                          ? "🔴 SCAN ACTIF EN COURS"
+                          : discoveryStatus === "COMPLETED"
+                            ? "🟢 CARTOGRAPHIE VALIDÉE"
+                            : discoveryStatus === "FAILED"
+                              ? "⚠️ ÉCHEC DU PIPELINE"
+                              : "EN ATTENTE"}
+                      </span>
+                    </div>
+                    {passName && (
+                      <span className="text-xs text-cyan-300 font-mono">{passName}</span>
+                    )}
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  {discoveredDevices.map((device) => (
+                  {/* Barre de progression globale */}
+                  <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
                     <div
-                      key={device.id}
-                      className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2.5 hover:border-slate-700 transition"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="p-2 rounded bg-slate-900 border border-slate-800 text-cyan-400">
-                            {device.deviceType === "SWITCH" ? (
-                              <Network className="w-4 h-4" />
-                            ) : device.deviceType === "SERVER_RACK" ? (
-                              <Server className="w-4 h-4 text-purple-400" />
-                            ) : device.deviceType === "WIFI_AP" ? (
-                              <Wifi className="w-4 h-4 text-indigo-400" />
+                      className={`h-full transition-all duration-500 ${
+                        discoveryStatus === "COMPLETED"
+                          ? "bg-emerald-500"
+                          : discoveryStatus === "FAILED"
+                            ? "bg-rose-500"
+                            : "bg-gradient-to-r from-cyan-500 to-indigo-500"
+                      }`}
+                      style={{
+                        width:
+                          discoveryStatus === "COMPLETED"
+                            ? "100%"
+                            : currentPass === 1
+                              ? "25%"
+                              : currentPass === 2
+                                ? "50%"
+                                : currentPass === 3
+                                  ? "75%"
+                                  : currentPass === 4
+                                    ? "90%"
+                                    : "5%",
+                      }}
+                    />
+                  </div>
+
+                  {/* Grille des 4 Passes */}
+                  <div className="grid grid-cols-4 gap-2.5 pt-1">
+                    {[
+                      {
+                        passNum: 1,
+                        name: "Passe 1 : Découverte L3",
+                        detail: "Balayage CIDR, ARP, ICMP Ping, TCP & DNS inverse",
+                      },
+                      {
+                        passNum: 2,
+                        name: "Passe 2 : Topologie Dorsale",
+                        detail: "Sondes SNMP MIB-II, Trunks, LLDP & Cisco CDP",
+                      },
+                      {
+                        passNum: 3,
+                        name: "Passe 3 : Corrélation FDB",
+                        detail: "Switch Port Mapper, élagage trunks & cascade VoIP",
+                      },
+                      {
+                        passNum: 4,
+                        name: "Passe 4 : Dérive & Réconciliation",
+                        detail: "Comparateur jumeau NetFloor & alertes isLocked",
+                      },
+                    ].map((step) => {
+                      const isCompleted =
+                        discoveryStatus === "COMPLETED" || currentPass > step.passNum;
+                      const isCurrent =
+                        discoveryStatus === "RUNNING" && currentPass === step.passNum;
+
+                      return (
+                        <div
+                          key={step.passNum}
+                          className={`p-2.5 rounded-lg border transition ${
+                            isCurrent
+                              ? "bg-cyan-950/40 border-cyan-500/60 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                              : isCompleted
+                                ? "bg-emerald-950/25 border-emerald-600/40"
+                                : "bg-slate-900/40 border-slate-800 opacity-60"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span
+                              className={`text-[10px] font-bold uppercase tracking-wider ${
+                                isCurrent
+                                  ? "text-cyan-400"
+                                  : isCompleted
+                                    ? "text-emerald-400"
+                                    : "text-slate-400"
+                              }`}
+                            >
+                              {step.name}
+                            </span>
+                            {isCompleted ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : isCurrent ? (
+                              <RefreshCw className="w-3 h-3 text-cyan-400 animate-spin" />
                             ) : (
-                              <Printer className="w-4 h-4 text-amber-400" />
+                              <Clock className="w-3 h-3 text-slate-500" />
                             )}
                           </div>
-                          <div>
-                            <div className="font-semibold text-xs text-slate-100 flex items-center gap-2">
-                              {device.name}
-                              <span
-                                className={`text-[9px] font-mono px-1.5 py-0.2 rounded ${
-                                  device.status === "ONLINE"
-                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                    : device.status === "WARNING"
-                                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                      : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                                }`}
-                              >
-                                {device.status}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              IP: {device.ip} • MAC: {device.mac}
-                            </div>
-                          </div>
+                          <p className="text-[10px] text-slate-400 leading-tight">{step.detail}</p>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                        <button
-                          onClick={() => handleSyncDeviceToFloor(device)}
-                          className="px-2.5 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded text-[10px] font-medium border border-cyan-500/30 flex items-center gap-1 transition"
-                          title="Mettre à jour ou ajouter sur le plan"
-                        >
-                          <Plus className="w-3 h-3" />
-                          Importer
-                        </button>
-                      </div>
-
-                      {/* Métriques */}
-                      <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-900 text-center font-mono text-[10px]">
-                        <div className="p-1 rounded bg-slate-900/80">
-                          <div className="text-[9px] text-slate-500">CPU</div>
-                          <div className="font-bold text-slate-200">{device.cpuLoadPercent}%</div>
-                        </div>
-                        <div className="p-1 rounded bg-slate-900/80">
-                          <div className="text-[9px] text-slate-500">RAM</div>
-                          <div className="font-bold text-slate-200">
-                            {device.memoryUsagePercent}%
-                          </div>
-                        </div>
-                        <div className="p-1 rounded bg-slate-900/80">
-                          <div className="text-[9px] text-slate-500">TEMP</div>
-                          <div className="font-bold text-amber-400">{device.temperatureC}°C</div>
-                        </div>
-                        <div className="p-1 rounded bg-slate-900/80">
-                          <div className="text-[9px] text-slate-500">PORTS</div>
-                          <div className="font-bold text-emerald-400">
-                            {device.activePorts}/{device.totalPorts}
-                          </div>
-                        </div>
-                      </div>
+              {/* 3. CARTOUCHES KPI DE L'INFRASTRUCTURE DÉCOUVERTE */}
+              <div className="grid grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-cyan-950/60 border border-cyan-800/40 text-cyan-400">
+                    <Laptop className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold">
+                      Hôtes & Terminaux
                     </div>
-                  ))}
+                    <div className="text-lg font-bold text-slate-100 font-mono">
+                      {discoveredDevicesList.length}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      {discoveredDevicesList.filter((d) => d.deviceType === "ACCESS_POINT").length}{" "}
+                      AP Wi-Fi •{" "}
+                      {discoveredDevicesList.filter((d) => d.deviceType === "SERVER").length}{" "}
+                      Serveurs
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-indigo-950/60 border border-indigo-800/40 text-indigo-400">
+                    <Network className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold">
+                      Commutateurs Managés
+                    </div>
+                    <div className="text-lg font-bold text-slate-100 font-mono">
+                      {discoveredDevicesList.filter((d) => d.isManagedSwitch).length}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      MIB-II (RFC 1213 / 2863) actifs
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-purple-950/60 border border-purple-800/40 text-purple-400">
+                    <Cable className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold">
+                      Liaisons Physiques L2
+                    </div>
+                    <div className="text-lg font-bold text-slate-100 font-mono">
+                      {discoveredConnectionsList.length}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      {
+                        discoveredConnectionsList.filter((c) =>
+                          c.connectionType.includes("BACKBONE")
+                        ).length
+                      }{" "}
+                      Dorsales •{" "}
+                      {
+                        discoveredConnectionsList.filter((c) => c.connectionType.includes("FDB"))
+                          .length
+                      }{" "}
+                      FDB
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-amber-950/60 border border-amber-800/40 text-amber-400">
+                    <GitPullRequest className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold">
+                      Écarts Topologiques
+                    </div>
+                    <div className="text-lg font-bold text-amber-300 font-mono">
+                      {reconciliationDiffs.length}
+                    </div>
+                    <div className="text-[10px] text-slate-500">Validation Human-in-the-Loop</div>
+                  </div>
                 </div>
               </div>
+
+              {/* 4. SOUS-ONGLETS DE NAVIGATION DU MOTEUR DE DÉCOUVERTE */}
+              <div className="flex items-center gap-1 border-b border-slate-800 pb-2">
+                <button
+                  onClick={() => setActiveDiscoverySubTab("RECONCILE")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                    activeDiscoverySubTab === "RECONCILE"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+                >
+                  <GitPullRequest className="w-3.5 h-3.5 text-amber-400" />
+                  Diff Réseau & Réconciliation ({reconciliationDiffs.length})
+                </button>
+                <button
+                  onClick={() => setActiveDiscoverySubTab("DEVICES")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                    activeDiscoverySubTab === "DEVICES"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+                >
+                  <Laptop className="w-3.5 h-3.5 text-cyan-400" />
+                  Inventaire Découvert ({discoveredDevicesList.length})
+                </button>
+                <button
+                  onClick={() => setActiveDiscoverySubTab("TOPOLOGY")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                    activeDiscoverySubTab === "TOPOLOGY"
+                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/30 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+                >
+                  <Cable className="w-3.5 h-3.5 text-purple-400" />
+                  Matrice Topologique L2 ({discoveredConnectionsList.length})
+                </button>
+                <button
+                  onClick={() => setActiveDiscoverySubTab("LOGS")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                    activeDiscoverySubTab === "LOGS"
+                      ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+                  }`}
+                >
+                  <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+                  Journal d'Audit du Scan ({discoveryLogs.length})
+                </button>
+              </div>
+
+              {/* 5. CONTENU DES SOUS-ONGLETS */}
+
+              {/* SOUS-ONGLET A : RÉCONCILIATION HUMAN-IN-THE-LOOP (OPTION A VALIDÉE) */}
+              {activeDiscoverySubTab === "RECONCILE" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                          <GitPullRequest className="w-4 h-4 text-amber-400" />
+                          Propositions de Réconciliation Human-in-the-Loop (Option A)
+                        </h4>
+                        <p className="text-[11px] text-slate-400">
+                          Passez en revue et validez les divergences détectées entre le réseau
+                          physique et le jumeau numérique NetFloor.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleToggleSelectAll}
+                          disabled={reconciliationDiffs.length === 0}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition"
+                        >
+                          <CheckSquare className="w-3.5 h-3.5 text-cyan-400" />
+                          {selectedDiffIds.size === reconciliationDiffs.length &&
+                          reconciliationDiffs.length > 0
+                            ? "Tout désélectionner"
+                            : `Tout sélectionner (${reconciliationDiffs.length})`}
+                        </button>
+                        <button
+                          onClick={() => handleApplyReconciliation(false)}
+                          disabled={selectedDiffIds.size === 0 || isReconciling}
+                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow transition"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Appliquer la sélection ({selectedDiffIds.size})
+                        </button>
+                        <button
+                          onClick={() => handleApplyReconciliation(true)}
+                          disabled={reconciliationDiffs.length === 0 || isReconciling}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow transition"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Tout Accepter & Réconcilier
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* État vide si aucun diff */}
+                    {reconciliationDiffs.length === 0 && (
+                      <div className="text-center py-10 px-4 bg-slate-900/30 border border-slate-800/60 rounded-lg space-y-2">
+                        {discoveryStatus === "COMPLETED" ? (
+                          <>
+                            <div className="w-10 h-10 mx-auto rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                              <CheckCircle2 className="w-5 h-5" />
+                            </div>
+                            <div className="font-semibold text-xs text-slate-200">
+                              🎉 Topologie Réseau 100% Alignée !
+                            </div>
+                            <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+                              Aucune dérive détectée entre le réseau physique interrogé et le jumeau
+                              numérique NetFloor. Tous les équipements et ports sont parfaitement
+                              synchronisés.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 mx-auto rounded-full bg-slate-800 text-slate-400 flex items-center justify-center">
+                              <Radio className="w-5 h-5" />
+                            </div>
+                            <div className="font-semibold text-xs text-slate-300">
+                              En attente d'une analyse réseau
+                            </div>
+                            <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                              Lancez le pipeline de découverte pour analyser votre parc et détecter
+                              les nouveaux matériels, migrations de ports ou conflits d'adressage
+                              IP.
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Liste des propositions de dérive */}
+                    {reconciliationDiffs.length > 0 && (
+                      <div className="space-y-2.5 max-h-[550px] overflow-y-auto pr-1">
+                        {reconciliationDiffs.map((diff) => {
+                          const isSelected = selectedDiffIds.has(diff.id);
+
+                          return (
+                            <div
+                              key={diff.id}
+                              className={`p-3.5 rounded-lg border transition space-y-2 ${
+                                diff.severity === "CRITICAL"
+                                  ? "bg-rose-950/20 border-rose-800/60 hover:border-rose-700"
+                                  : diff.type === "PORT_MIGRATED"
+                                    ? "bg-amber-950/20 border-amber-800/60 hover:border-amber-700"
+                                    : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-3">
+                                  <button
+                                    onClick={() => handleToggleDiffSelection(diff.id)}
+                                    className="pt-0.5 text-slate-400 hover:text-white transition"
+                                  >
+                                    {isSelected ? (
+                                      <CheckSquare className="w-4 h-4 text-cyan-400" />
+                                    ) : (
+                                      <Square className="w-4 h-4 text-slate-600" />
+                                    )}
+                                  </button>
+
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                                          diff.type === "NEW_DEVICE"
+                                            ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
+                                            : diff.type === "PORT_MIGRATED"
+                                              ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                              : diff.type === "IP_CONFLICT"
+                                                ? "bg-rose-500/20 text-rose-300 border-rose-500/30 animate-pulse"
+                                                : "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                                        }`}
+                                      >
+                                        {diff.type === "NEW_DEVICE"
+                                          ? "NOUVEL ÉQUIPEMENT DÉTECTÉ"
+                                          : diff.type === "PORT_MIGRATED"
+                                            ? "MIGRATION DE PORT PHYSIQUE"
+                                            : diff.type === "IP_CONFLICT"
+                                              ? "CONFLIT D'ADRESSE IP (CRITIQUE)"
+                                              : diff.type}
+                                      </span>
+                                      <span className="font-semibold text-xs text-slate-100">
+                                        {diff.title}
+                                      </span>
+                                    </div>
+
+                                    <p className="text-[11px] text-slate-300">{diff.description}</p>
+
+                                    <div className="flex items-center gap-4 text-[10px] font-mono text-slate-400 pt-0.5">
+                                      <span>IP: {diff.deviceIp}</span>
+                                      {diff.deviceMac && <span>MAC: {diff.deviceMac}</span>}
+                                      {diff.payload?.switchPort && (
+                                        <span className="text-cyan-400">
+                                          Port raccordé : {diff.payload.switchPort}
+                                        </span>
+                                      )}
+                                      {diff.payload?.vlanId && (
+                                        <span className="text-indigo-400">
+                                          VLAN: {diff.payload.vlanId}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => handleApplySingleDiff(diff)}
+                                  disabled={isReconciling}
+                                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded-lg text-xs font-medium flex items-center gap-1 transition flex-shrink-0"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  Appliquer
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SOUS-ONGLET B : INVENTAIRE DÉCOUVERT */}
+              {activeDiscoverySubTab === "DEVICES" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                      <Laptop className="w-4 h-4 text-cyan-400" />
+                      Inventaire Réseau Détecté ({discoveredDevicesList.length})
+                    </h4>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      Hôtes actifs découverts via sondes ARP / Ping sweep & MIB-II
+                    </span>
+                  </div>
+
+                  {discoveredDevicesList.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 text-xs">
+                      Aucun équipement scanné pour le moment. Lancez une découverte réseau
+                      ci-dessus.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 max-h-[550px] overflow-y-auto pr-1">
+                      {discoveredDevicesList.map((dev: any) => (
+                        <div
+                          key={dev.id}
+                          className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2.5 hover:border-slate-700 transition"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 rounded bg-slate-900 border border-slate-800 text-cyan-400">
+                                {dev.deviceType === "SWITCH" ? (
+                                  <Network className="w-4 h-4 text-cyan-400" />
+                                ) : dev.deviceType === "ACCESS_POINT" ? (
+                                  <Wifi className="w-4 h-4 text-indigo-400" />
+                                ) : dev.deviceType === "SERVER" ? (
+                                  <Server className="w-4 h-4 text-purple-400" />
+                                ) : dev.deviceType === "PRINTER" ? (
+                                  <Printer className="w-4 h-4 text-amber-400" />
+                                ) : dev.deviceType === "PHONE_VOIP" ? (
+                                  <Phone className="w-4 h-4 text-emerald-400" />
+                                ) : (
+                                  <Laptop className="w-4 h-4 text-slate-300" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-xs text-slate-100 flex items-center gap-2">
+                                  {dev.hostname || `${dev.manufacturer || "ÉQUIPEMENT"}`}
+                                  <span
+                                    className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
+                                      dev.isManagedSwitch
+                                        ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
+                                        : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                    }`}
+                                  >
+                                    {dev.deviceType}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  IP: {dev.ipAddress} • MAC: {dev.macAddress}
+                                </div>
+                                {dev.model && (
+                                  <div className="text-[10px] text-slate-500">
+                                    Modèle: {dev.model}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() =>
+                                handleSyncDeviceToFloor(mapDiscoveredToDeviceTelemetry(dev))
+                              }
+                              className="px-2.5 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded text-[10px] font-medium border border-cyan-500/30 flex items-center gap-1 transition"
+                              title="Synchroniser avec le plan 2D NetFloor"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Importer
+                            </button>
+                          </div>
+
+                          {dev.sysDescr && (
+                            <div className="p-2 rounded bg-slate-900/60 text-[10px] text-slate-400 font-mono truncate">
+                              {dev.sysDescr}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SOUS-ONGLET C : MATRICE TOPOLOGIQUE L2 */}
+              {activeDiscoverySubTab === "TOPOLOGY" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                      <Cable className="w-4 h-4 text-purple-400" />
+                      Liaisons Physiques & Interconnexions L2 ({discoveredConnectionsList.length})
+                    </h4>
+                    <span className="text-[11px] font-mono text-slate-500">
+                      Dorsales LLDP/CDP et attachements terminaux FDB (Switch Port Mapper)
+                    </span>
+                  </div>
+
+                  {discoveredConnectionsList.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 text-xs">
+                      Aucune liaison topologique détectée.
+                    </div>
+                  ) : (
+                    <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950">
+                      <div className="max-h-[500px] overflow-y-auto">
+                        <table className="w-full text-left text-xs font-mono">
+                          <thead className="text-[10px] text-slate-400 border-b border-slate-800 sticky top-0 bg-slate-900/90 backdrop-blur-sm">
+                            <tr>
+                              <th className="py-2.5 px-3">Port Commutateur Source</th>
+                              <th className="py-2.5 px-3">Équipement / Terminal Cible</th>
+                              <th className="py-2.5 px-3">Type de Liaison</th>
+                              <th className="py-2.5 px-3">VLAN</th>
+                              <th className="py-2.5 px-3">Score Confiance</th>
+                              <th className="py-2.5 px-3">Détails Protocole</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850 text-slate-300 text-[11px]">
+                            {discoveredConnectionsList.map((conn: any) => (
+                              <tr key={conn.id} className="hover:bg-slate-900/60 transition">
+                                <td className="py-2 px-3 font-semibold text-cyan-400">
+                                  {conn.sourcePortName}
+                                </td>
+                                <td className="py-2 px-3 text-slate-200 font-sans">
+                                  {conn.targetPortName
+                                    ? `Port ${conn.targetPortName}`
+                                    : "Attachement direct"}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                                      conn.connectionType.includes("BACKBONE")
+                                        ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                    }`}
+                                  >
+                                    {conn.connectionType}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 font-mono text-slate-300">
+                                  {conn.vlanId ? `VLAN ${conn.vlanId}` : "Natif"}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="font-bold text-emerald-400">
+                                    {conn.confidenceScore}%
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-slate-400 text-[10px]">
+                                  {conn.driftDetails || "Liaison vérifiée"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SOUS-ONGLET D : JOURNAL D'AUDIT DU SCAN (CONSOLE TERMINAL) */}
+              {activeDiscoverySubTab === "LOGS" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-indigo-400" />
+                      <h4 className="text-xs font-bold text-slate-200">
+                        Journal d'Audit du Pipeline ({discoveryLogs.length} événements)
+                      </h4>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <Filter className="w-3 h-3 text-slate-400" />
+                      {(["ALL", "INFO", "WARN", "ERROR"] as const).map((lvl) => (
+                        <button
+                          key={lvl}
+                          onClick={() => setLogLevelFilter(lvl)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono transition ${
+                            logLevelFilter === lvl
+                              ? "bg-indigo-600 text-white font-bold"
+                              : "bg-slate-900 text-slate-400 hover:bg-slate-800"
+                          }`}
+                        >
+                          {lvl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-black/90 border border-slate-800 rounded-lg font-mono text-xs max-h-[500px] overflow-y-auto space-y-1.5">
+                    {discoveryLogs
+                      .filter((l) => logLevelFilter === "ALL" || l.level === logLevelFilter)
+                      .map((log, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start gap-2.5 text-[11px] leading-relaxed"
+                        >
+                          <span className="text-slate-600 flex-shrink-0">
+                            {new Date(log.timestamp).toLocaleTimeString()}
+                          </span>
+                          {log.pass && (
+                            <span className="px-1 py-0.2 rounded bg-slate-900 text-cyan-400 border border-slate-800 text-[10px] flex-shrink-0">
+                              P{log.pass}
+                            </span>
+                          )}
+                          <span
+                            className={`px-1 py-0.2 rounded text-[10px] font-bold flex-shrink-0 ${
+                              log.level === "ERROR"
+                                ? "bg-rose-500/20 text-rose-400"
+                                : log.level === "WARN"
+                                  ? "bg-amber-500/20 text-amber-400"
+                                  : "bg-emerald-500/20 text-emerald-400"
+                            }`}
+                          >
+                            {log.level}
+                          </span>
+                          <span
+                            className={
+                              log.level === "ERROR"
+                                ? "text-rose-300"
+                                : log.level === "WARN"
+                                  ? "text-amber-300"
+                                  : "text-slate-300"
+                            }
+                          >
+                            {log.message}
+                          </span>
+                        </div>
+                      ))}
+
+                    {discoveryLogs.length === 0 && (
+                      <div className="text-slate-600 py-6 text-center">
+                        Aucun journal d'audit disponible. Les logs s'afficheront en temps réel lors
+                        de la prochaine découverte.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
