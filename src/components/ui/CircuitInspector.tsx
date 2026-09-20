@@ -346,16 +346,12 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const currentPorts = selectedNode.stackedPorts ?? [];
     if (currentPorts.length >= 8) return;
     const nextIdx = currentPorts.length;
-    const isEven = nextIdx % 2 === 0;
     const newPort: StackedPortItem = {
       portIndex: nextIdx,
       portLabel: `RJ45-${nextIdx + 1}`,
-      outletRole: isEven ? "DATA" : "VOIP",
-      vlanId: isEven ? 20 : 30,
-      ipAddress: `10.42.${isEven ? 20 : 30}.${100 + nextIdx}`,
-      macAddress: `00:1A:2B:3C:4D:${String(nextIdx + 10).padStart(2, "0")}`,
-      pingStatus: "ONLINE",
-      pingLatencyMs: 3,
+      outletRole: "GENERIC",
+      vlanId: undefined,
+      isPatched: false,
     };
     onUpdateNodeProperties?.(selectedNode.id, {
       stackedPorts: [...currentPorts, newPort],
@@ -1215,7 +1211,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       const ports = selectedNode.stackedPorts;
       const curPort = ports[safeStackedPortIdx] ?? ports[0];
       if (!curPort) return null;
-      const curPortRole = curPort.outletRole;
 
       // Résolution dynamique de la baie, du switch et du port pour ce port du bloc de prises
       const curPortRackId = curPort.connectedRackId || availableRacks[0]?.id || "rack-01";
@@ -1225,6 +1220,21 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       const curPortSwitch =
         curPortRackSwitches.find((s) => s.id === curPortSwitchId) ?? curPortRackSwitches[0];
       const curPortSwitchPortsCount = curPortSwitch?.portsCount ?? 24;
+
+      const curPortNetwork = resolveEffectiveOutletNetwork(
+        {
+          isPatched: curPort.isPatched,
+          connectedRackId: curPort.connectedRackId,
+          connectedSwitchId: curPort.connectedSwitchId,
+          connectedSwitchPort: curPort.connectedSwitchPort,
+        },
+        availableRacks
+      );
+      const curPortVlan = curPortNetwork.isPatched ? (curPortNetwork.vlanId ?? 20) : undefined;
+      const curPortVlanColor =
+        curPortVlan !== undefined
+          ? (vlanStyles?.[curPortVlan]?.color ?? DEFAULT_VLAN_STYLES[curPortVlan]?.color ?? "#38bdf8")
+          : "#94a3b8";
 
       return (
         <div className="h-full flex flex-col text-xs font-sans overflow-hidden">
@@ -1277,9 +1287,20 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 <div className="space-y-1.5">
                   {ports.map((p, idx) => {
                     const isPSelected = safeStackedPortIdx === idx;
-                    const pVlan = p.vlanId ?? 20;
+                    const pNetwork = resolveEffectiveOutletNetwork(
+                      {
+                        isPatched: p.isPatched,
+                        connectedRackId: p.connectedRackId,
+                        connectedSwitchId: p.connectedSwitchId,
+                        connectedSwitchPort: p.connectedSwitchPort,
+                      },
+                      availableRacks
+                    );
+                    const pVlan = pNetwork.isPatched ? (pNetwork.vlanId ?? 20) : undefined;
                     const vColor =
-                      vlanStyles?.[pVlan]?.color ?? DEFAULT_VLAN_STYLES[pVlan]?.color ?? "#38bdf8";
+                      pVlan !== undefined
+                        ? (vlanStyles?.[pVlan]?.color ?? DEFAULT_VLAN_STYLES[pVlan]?.color ?? "#38bdf8")
+                        : "#94a3b8";
                     const isOnline = p.pingStatus === "ONLINE";
                     const pRack = availableRacks.find((r) => r.id === p.connectedRackId);
                     const pSwitches = getSwitchesForRack(pRack?.id);
@@ -1297,28 +1318,41 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
                             <span
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: isOnline ? "#22c55e" : "#ef4444" }}
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{
+                                backgroundColor: p.isPatched
+                                  ? isOnline
+                                    ? "#22c55e"
+                                    : "#ef4444"
+                                  : "#64748b",
+                              }}
                             />
-                            <span className="font-mono font-bold text-slate-100 text-[11px]">
-                              {p.portLabel}
-                            </span>
+                            <input
+                              type="text"
+                              value={p.portLabel}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) =>
+                                handleUpdateStackedPort(idx, { portLabel: e.target.value })
+                              }
+                              className="font-mono font-bold text-slate-100 text-[11px] bg-transparent hover:bg-slate-900 focus:bg-slate-950 border border-transparent hover:border-slate-700 focus:border-sky-500 rounded px-1.5 py-0.5 w-24 focus:w-36 focus:outline-none transition"
+                              title="Cliquer pour renommer ce port"
+                            />
                             <span
-                              className="text-[9px] font-mono px-1.5 py-0.2 rounded border font-semibold"
+                              className="text-[9px] font-mono px-1.5 py-0.2 rounded border font-semibold flex-shrink-0"
                               style={{
                                 borderColor: `${vColor}60`,
                                 backgroundColor: `${vColor}20`,
                                 color: vColor,
                               }}
                             >
-                              VLAN {pVlan}
+                              {pNetwork.isPatched ? `VLAN ${pNetwork.vlanId}` : "Cuivre passif"}
                             </span>
                           </div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
                             <span className="text-[10px] text-slate-400 font-mono">
-                              {p.outletRole}
+                              {pNetwork.isPatched ? pNetwork.role : "Passif"}
                             </span>
                             {onExtractPortFromBlock && (
                               <button
@@ -1336,7 +1370,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                          <span className="truncate max-w-[140px] text-slate-300">
+                          <span className="truncate max-w-[150px] text-slate-300">
                             {p.isPatched && pRack
                               ? `🔌 ${pRack.name} > ${pSwitch ? pSwitch.name : "Switch"} [${p.connectedSwitchPort || "P1"}]`
                               : "⚪ Non branché"}
@@ -1344,9 +1378,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           <span>
                             {p.assignedPerson
                               ? `👤 ${p.assignedPerson}`
-                              : isOnline
-                                ? "🟢 3ms"
-                                : "🔴 Déconnecté"}
+                              : p.isPatched
+                                ? isOnline
+                                  ? "🟢 3ms"
+                                  : "🔴 Déconnecté"
+                                : "⚪ Non assigné"}
                           </span>
                         </div>
                       </div>
@@ -1358,34 +1394,57 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               {/* Télémétrie du port actif */}
               <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-                    <Activity className="w-3.5 h-3.5 text-sky-400" />
-                    Télémétrie : {curPort.portLabel}
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">
-                    {curPort.pingStatus === "ONLINE" ? "En ligne (3ms)" : "Déconnecté"}
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
+                    <Activity className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                    <span className="text-[11px] font-semibold text-slate-200">Port :</span>
+                    <input
+                      type="text"
+                      value={curPort.portLabel}
+                      onChange={(e) =>
+                        handleUpdateStackedPort(safeStackedPortIdx, { portLabel: e.target.value })
+                      }
+                      className="font-mono font-bold text-slate-100 text-[11px] bg-slate-950 border border-slate-700 focus:border-sky-500 rounded px-1.5 py-0.5 focus:outline-none transition w-28"
+                      title="Renommer ce port"
+                    />
+                  </div>
+                  <span className="text-[10px] text-emerald-400 font-mono flex-shrink-0">
+                    {curPortNetwork.isPatched
+                      ? curPort.pingStatus === "ONLINE"
+                        ? "En ligne (3ms)"
+                        : "Déconnecté"
+                      : "Non branché"}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
                   <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
-                    <span className="text-slate-400">IP : </span>
-                    <span className="text-slate-200">{curPort.ipAddress || "Non assignée"}</span>
-                  </div>
-                  <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
-                    <span className="text-slate-400">MAC : </span>
-                    <span className="text-slate-200">{curPort.macAddress || "Non assignée"}</span>
-                  </div>
-                  <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
                     <span className="text-slate-400">VLAN : </span>
                     <span className="text-sky-300 font-bold">
-                      {curPort.vlanId !== undefined
-                        ? `VLAN ${curPort.vlanId}`
-                        : "Cuivre passif (Non raccordé)"}
+                      {curPortNetwork.isPatched && curPortNetwork.vlanId !== undefined
+                        ? `VLAN ${curPortNetwork.vlanId}`
+                        : "Cuivre passif"}
                     </span>
                   </div>
                   <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
                     <span className="text-slate-400">Rôle : </span>
-                    <span className="text-slate-200">{curPort.outletRole}</span>
+                    <span className="text-slate-200">
+                      {curPortNetwork.isPatched ? curPortNetwork.role : "Passif (Switch)"}
+                    </span>
+                  </div>
+                  <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                    <span className="text-slate-400">Alimentation : </span>
+                    <span className="text-amber-300">
+                      {curPortNetwork.isPatched
+                        ? curPortNetwork.poeEnabled
+                          ? `PoE (${curPortNetwork.poePowerW}W)`
+                          : "Non-PoE"
+                        : "Passif"}
+                    </span>
+                  </div>
+                  <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                    <span className="text-slate-400">Débit : </span>
+                    <span className="text-slate-200">
+                      {curPortNetwork.isPatched ? curPortNetwork.speed || "1G" : "1G Cat6A"}
+                    </span>
                   </div>
                 </div>
                 {curPort.assignedPerson && (
@@ -1810,10 +1869,21 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                                 targetSwId,
                                 newSwitches[0]?.portsCount ?? 24
                               );
+                              const effective = resolveEffectiveOutletNetwork(
+                                {
+                                  isPatched: true,
+                                  connectedRackId: newRackId,
+                                  connectedSwitchId: targetSwId,
+                                  connectedSwitchPort: autoPort,
+                                },
+                                availableRacks
+                              );
                               handleUpdateStackedPort(safeStackedPortIdx, {
                                 connectedRackId: newRackId,
                                 connectedSwitchId: targetSwId,
                                 connectedSwitchPort: autoPort,
+                                vlanId: effective.vlanId,
+                                outletRole: effective.role,
                               });
                             }}
                             className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-purple-300 font-bold text-[10px] focus:outline-none focus:border-purple-500"
@@ -1850,9 +1920,20 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                                 swId,
                                 swObj?.portsCount ?? 24
                               );
+                              const effective = resolveEffectiveOutletNetwork(
+                                {
+                                  isPatched: true,
+                                  connectedRackId: curPortRackId,
+                                  connectedSwitchId: swId,
+                                  connectedSwitchPort: autoPort,
+                                },
+                                availableRacks
+                              );
                               handleUpdateStackedPort(safeStackedPortIdx, {
                                 connectedSwitchId: swId,
                                 connectedSwitchPort: autoPort,
+                                vlanId: effective.vlanId,
+                                outletRole: effective.role,
                               });
                             }}
                             className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sky-300 font-bold text-[10px] focus:outline-none focus:border-sky-500"
@@ -1880,11 +1961,23 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         </label>
                         <select
                           value={curPort.connectedSwitchPort || "Gi1/0/1"}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const selectedPort = e.target.value;
+                            const effective = resolveEffectiveOutletNetwork(
+                              {
+                                isPatched: true,
+                                connectedRackId: curPortRackId,
+                                connectedSwitchId: curPortSwitch?.id || curPortSwitchId,
+                                connectedSwitchPort: selectedPort,
+                              },
+                              availableRacks
+                            );
                             handleUpdateStackedPort(safeStackedPortIdx, {
-                              connectedSwitchPort: e.target.value,
-                            })
-                          }
+                              connectedSwitchPort: selectedPort,
+                              vlanId: effective.vlanId,
+                              outletRole: effective.role,
+                            });
+                          }}
                           className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px] focus:outline-none focus:border-blue-500 font-mono"
                         >
                           {Array.from({ length: curPortSwitchPortsCount }).map((_, i) => {
@@ -1925,12 +2018,13 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                             connectedRackId: undefined,
                             connectedSwitchId: undefined,
                             connectedSwitchPort: undefined,
+                            vlanId: undefined,
                           });
                         }}
                         className="w-full py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition mt-1"
                       >
                         <Unlink className="w-3.5 h-3.5 text-red-400" />
-                        <span>Débrancher ce port (Masquer le câble)</span>
+                        <span>Débrancher ce port (Passer en passif)</span>
                       </button>
                     </div>
                   ) : (
@@ -1951,11 +2045,22 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                             targetSwId,
                             sw?.portsCount ?? 24
                           );
+                          const effective = resolveEffectiveOutletNetwork(
+                            {
+                              isPatched: true,
+                              connectedRackId: targetRId,
+                              connectedSwitchId: targetSwId,
+                              connectedSwitchPort: autoPort,
+                            },
+                            availableRacks
+                          );
                           handleUpdateStackedPort(safeStackedPortIdx, {
                             isPatched: true,
                             connectedRackId: targetRId,
                             connectedSwitchId: targetSwId,
                             connectedSwitchPort: autoPort,
+                            vlanId: effective.vlanId,
+                            outletRole: effective.role,
                           });
                         }}
                         className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow"
@@ -1967,22 +2072,23 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   )}
                 </div>
 
-                {/* SECTION 4 : CONFIGURATION LOGIQUE DU PORT ACTIF (VLAN, Rôle, Place Bureau, IPAM) */}
+                {/* SECTION 4 : DÉSIGNATION DU PORT ET PROFIL RÉSEAU (CUIVRE PASSIF) */}
                 <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
-                      <Network className="w-3.5 h-3.5 text-sky-400" />
-                      Configuration Logique : P{safeStackedPortIdx + 1} ({curPort.portLabel})
+                      <Tag className="w-3.5 h-3.5 text-sky-400" />
+                      Désignation du Port P{safeStackedPortIdx + 1}
                     </span>
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                      {curPort.vlanId ? `VLAN ${curPort.vlanId}` : "VLAN 20"}
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
+                      {curPort.portLabel}
                     </span>
                   </div>
 
-                  {/* Libellé du port */}
+                  {/* Renommage du port */}
                   <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">
-                      Désignation du port :
+                    <label className="text-[10px] text-slate-400 block mb-1 font-medium flex items-center justify-between">
+                      <span>Nom / Libellé du port :</span>
+                      <span className="text-slate-500 font-mono text-[9px]">Édition libre</span>
                     </label>
                     <input
                       type="text"
@@ -1990,101 +2096,14 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       onChange={(e) =>
                         handleUpdateStackedPort(safeStackedPortIdx, { portLabel: e.target.value })
                       }
-                      className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded font-mono text-slate-200 text-[11px] focus:outline-none focus:border-blue-500"
+                      placeholder={`Ex: RJ45-${safeStackedPortIdx + 1}, P${safeStackedPortIdx + 1}-DATA...`}
+                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 focus:border-sky-500 rounded font-mono text-slate-100 text-xs font-semibold focus:outline-none transition"
                     />
-                  </div>
-
-                  {/* Attribution du VLAN pour ce port individuel */}
-                  <div>
-                    <div className="text-[10px] text-slate-400 mb-1 font-medium flex items-center justify-between">
-                      <span>Attribution du VLAN :</span>
-                      <span className="text-cyan-400 font-mono font-bold">
-                        VLAN {curPort.vlanId ?? (curPortRole === "VOIP" ? 30 : 20)}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1 text-[10px] font-mono">
-                      {Object.values(vlanStyles ?? DEFAULT_VLAN_STYLES)
-                        .sort((a, b) => a.vlanId - b.vlanId)
-                        .map((v) => {
-                          const isVlanSelected =
-                            curPort.vlanId !== undefined
-                              ? curPort.vlanId === v.vlanId
-                              : curPortRole === "VOIP"
-                                ? v.vlanId === 30
-                                : v.vlanId === 20;
-
-                          return (
-                            <button
-                              key={v.vlanId}
-                              onClick={() =>
-                                handleUpdateStackedPort(safeStackedPortIdx, {
-                                  vlanId: v.vlanId,
-                                  outletRole:
-                                    v.vlanId === 30
-                                      ? "VOIP"
-                                      : v.vlanId === 40
-                                        ? "PRINTER"
-                                        : v.vlanId === 50
-                                          ? "WIFI"
-                                          : "DATA",
-                                })
-                              }
-                              className={`py-1 px-1.5 rounded border text-[10px] flex items-center justify-between transition ${
-                                isVlanSelected
-                                  ? "bg-slate-800 text-white font-bold shadow-sm"
-                                  : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
-                              }`}
-                              style={{
-                                borderColor: isVlanSelected ? v.color : undefined,
-                              }}
-                            >
-                              <span className="truncate">{v.vlanName}</span>
-                              <span
-                                className="w-2 h-2 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: v.color }}
-                              />
-                            </button>
-                          );
-                        })}
-                    </div>
-                  </div>
-
-                  {/* Rôle métier / Usage du port */}
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">
-                      Rôle métier du port :
-                    </label>
-                    <select
-                      value={curPort.outletRole || "DATA"}
-                      onChange={(e) => {
-                        const newRole = e.target.value as "DATA" | "VOIP" | "PRINTER" | "WIFI";
-                        const autoVlan =
-                          newRole === "VOIP"
-                            ? 30
-                            : newRole === "PRINTER"
-                              ? 40
-                              : newRole === "WIFI"
-                                ? 50
-                                : 20;
-                        handleUpdateStackedPort(safeStackedPortIdx, {
-                          outletRole: newRole,
-                          vlanId: autoVlan,
-                        });
-                      }}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[10px] focus:outline-none focus:border-blue-500 font-mono"
-                    >
-                      <option value="DATA">DATA - Poste informatique standard (VLAN 20)</option>
-                      <option value="VOIP">VOIP - Téléphonie IP / Visioconférence (VLAN 30)</option>
-                      <option value="PRINTER">
-                        PRINTER - Imprimante / Copieur réseau (VLAN 40)
-                      </option>
-                      <option value="WIFI">WIFI - Borne Wi-Fi plafond / murale (VLAN 50)</option>
-                    </select>
                   </div>
 
                   {/* Place assise associée au port (si rattaché à un bureau) */}
                   {isLinked && linkedDesk && (
-                    <div>
+                    <div className="pt-2 border-t border-slate-800">
                       <label className="text-[10px] text-slate-400 block mb-1">
                         Affectation à une place du bureau ({linkedDesk.name}) :
                       </label>
@@ -2101,6 +2120,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           if (val === "") {
                             handleUpdateStackedPort(safeStackedPortIdx, {
                               assignedPerson: undefined,
+                              attachedSeatIndex: undefined,
                             });
                           } else {
                             const seatIdx = parseInt(val, 10);
@@ -2109,6 +2129,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                             );
                             handleUpdateStackedPort(safeStackedPortIdx, {
                               assignedPerson: seatOccupant?.fullName ?? `Place ${seatIdx + 1}`,
+                              attachedSeatIndex: seatIdx,
                             });
                           }
                         }}
@@ -2135,42 +2156,72 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     </div>
                   )}
 
-                  {/* IPAM & Ping pour ce port individuel */}
-                  <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-slate-400 font-mono flex items-center gap-1">
-                        <Globe className="w-3 3 text-slate-500" />
-                        IP Fixe / DHCP :
+                  {/* Caractéristiques réseau héritées du commutateur (Cuivre passif) */}
+                  <div className="pt-2 border-t border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Profil réseau (Cuivre passif) :
                       </span>
-                      <input
-                        type="text"
-                        value={curPort.ipAddress ?? ""}
-                        placeholder={`Ex: 10.42.${curPort.vlanId || 20}.${100 + safeStackedPortIdx}`}
-                        onChange={(e) =>
-                          handleUpdateStackedPort(safeStackedPortIdx, {
-                            ipAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
-                          })
-                        }
-                        className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-slate-400 font-mono flex items-center gap-1">
-                        <Activity className="w-3 3 text-slate-500" />
-                        Adresse MAC :
+                      <span
+                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+                          curPortNetwork.isPatched
+                            ? "bg-sky-500/20 text-sky-300 border-sky-500/30 font-bold"
+                            : "bg-slate-800 text-slate-400 border-slate-700"
+                        }`}
+                      >
+                        {curPortNetwork.isPatched ? "HÉRITÉ DU SWITCH" : "PASSIF / NON RACCORDÉ"}
                       </span>
-                      <input
-                        type="text"
-                        value={curPort.macAddress ?? ""}
-                        placeholder="Ex: 00:1A:2B:3C:4D:5E"
-                        onChange={(e) =>
-                          handleUpdateStackedPort(safeStackedPortIdx, {
-                            macAddress: e.target.value.trim() ? e.target.value.trim() : undefined,
-                          })
-                        }
-                        className="px-2 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-200 text-[10px] font-mono focus:outline-none focus:border-cyan-500 w-36 text-right"
-                      />
                     </div>
+
+                    {curPortNetwork.isPatched ? (
+                      <div className="space-y-1.5 text-[10px] font-mono">
+                        <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                          <span className="text-slate-400">VLAN Actif :</span>
+                          <span
+                            className="px-1.5 py-0.2 rounded border font-bold"
+                            style={{
+                              borderColor: `${curPortVlanColor}60`,
+                              backgroundColor: `${curPortVlanColor}20`,
+                              color: curPortVlanColor,
+                            }}
+                          >
+                            VID {curPortNetwork.vlanId} — {curPortNetwork.vlanName}
+                          </span>
+                        </div>
+                        <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                          <span className="text-slate-400">Rôle déterminé par le switch :</span>
+                          <span className="text-emerald-400 font-bold">
+                            {curPortNetwork.role === "VOIP"
+                              ? "📞 VOIP (Téléphonie IP)"
+                              : curPortNetwork.role === "PRINTER"
+                                ? "🖨️ PRINTER (Imprimante)"
+                                : curPortNetwork.role === "WIFI"
+                                  ? "📶 WIFI (Borne)"
+                                  : "💻 DATA (Poste de travail)"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                          <span className="text-slate-400">Alimentation PoE :</span>
+                          <span className="text-amber-300 font-bold">
+                            {curPortNetwork.poeEnabled
+                              ? `PoE (${curPortNetwork.poePowerW}W)`
+                              : "Non-PoE"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                          <span className="text-slate-400">Raccordement :</span>
+                          <span className="text-purple-300 font-bold">
+                            {curPortNetwork.rackName ?? curPortRack?.name ?? "Baie"} &gt;{" "}
+                            {curPortNetwork.switchName ?? curPortSwitch?.name ?? "Switch"} [
+                            {curPort.connectedSwitchPort || "P1"}]
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-slate-950/60 rounded border border-slate-850 text-[10px] text-slate-400 leading-relaxed">
+                        Le cuivre de ce port est passif. Raccordez ce port à un commutateur dans la section câblage ci-dessus pour qu'il reçoive dynamiquement son VLAN, son rôle métier et son alimentation PoE.
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -119,7 +119,7 @@ export function getSwitchPortProfile(
  * par héritage strict depuis le commutateur auquel elle est raccordée.
  */
 export function resolveEffectiveOutletNetwork(
-  outlet: NodeDisplay,
+  outlet: Partial<NodeDisplay>,
   racksOrSwitches: RackDisplay[] | RackDeviceItem[] = []
 ): EffectiveOutletNetwork {
   if (!outlet.isPatched || !outlet.connectedRackId || !outlet.connectedSwitchPort) {
