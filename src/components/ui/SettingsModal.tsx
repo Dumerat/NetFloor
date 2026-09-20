@@ -31,6 +31,9 @@ import {
   Users,
   UserPlus,
   Trash2,
+  AlertTriangle,
+  Cable,
+  Layers,
 } from "lucide-react";
 import { NodeDisplay } from "@/components/canvas/EquipmentLayer";
 import {
@@ -64,6 +67,30 @@ interface SettingsModalProps {
 }
 
 type TabType = "sso" | "snmp" | "ipam" | "integrations";
+
+export interface IpamEndpointItem {
+  id: string;
+  nodeId: string;
+  portIndex?: number | undefined;
+  isStackedPort: boolean;
+  displayName: string;
+  parentName: string;
+  portLabel?: string | undefined;
+  nodeType: string;
+  subType?: string | undefined;
+  role: string;
+  ipAddress?: string | undefined;
+  macAddress?: string | undefined;
+  pingStatus?: "ONLINE" | "OFFLINE" | "DEGRADED" | undefined;
+  pingLatencyMs?: number | undefined;
+  vlanId?: number | undefined;
+  isPatched?: boolean | undefined;
+  connectedRackId?: string | undefined;
+  connectedSwitchId?: string | undefined;
+  connectedSwitchPort?: string | undefined;
+  assignedPerson?: string | undefined;
+  attachedSeatIndex?: number | undefined;
+}
 
 const SettingsModalComponent: FC<SettingsModalProps> = ({
   isOpen,
@@ -130,9 +157,13 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   >({});
   const [isSyncingNetbox, setIsSyncingNetbox] = useState(false);
 
-  // Filtre et recherche IPAM
+  // Filtres et recherche IPAM
   const [ipSearch, setIpSearch] = useState("");
   const [ipFilterType, setIpFilterType] = useState<string>("ALL");
+  const [ipFilterVlan, setIpFilterVlan] = useState<string>("ALL");
+  const [ipFilterStatus, setIpFilterStatus] = useState<string>("ALL");
+  const [ipFilterPatch, setIpFilterPatch] = useState<string>("ALL");
+  const [ipFilterPing, setIpFilterPing] = useState<string>("ALL");
 
   // Sélection du VLAN actif pour édition directe et style dans l'IPAM
   const [selectedIpamVlanId, setSelectedIpamVlanId] = useState<number>(20);
@@ -163,24 +194,155 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Liste des nœuds avec filtrage IPAM
-  const filteredIpamNodes = useMemo(() => {
-    return nodes
+  // Aplatissement unifié de tous les points de terminaison réseau IPAM (1 entrée par port de bloc RJ45, 1 entrée par prise simple)
+  const allIpamEndpoints = useMemo<IpamEndpointItem[]>(() => {
+    const list: IpamEndpointItem[] = [];
+
+    nodes
       .filter((n) => n.type !== "DESK")
-      .filter((n) => {
-        if (ipFilterType !== "ALL" && n.type !== ipFilterType && n.subType !== ipFilterType) {
+      .forEach((node) => {
+        const hasStacked = Boolean(node.stackedPorts && node.stackedPorts.length > 0);
+
+        if (hasStacked && node.stackedPorts) {
+          node.stackedPorts.forEach((sp, pIdx) => {
+            const portName = sp.portLabel || `Port ${pIdx + 1}`;
+            list.push({
+              id: `${node.id}-port-${pIdx}`,
+              nodeId: node.id,
+              portIndex: pIdx,
+              isStackedPort: true,
+              displayName: `${node.name} • ${portName}`,
+              parentName: node.name,
+              portLabel: portName,
+              nodeType: node.type,
+              subType: node.subType,
+              role: sp.outletRole || "GENERIC",
+              ipAddress: sp.ipAddress,
+              macAddress: sp.macAddress,
+              pingStatus: sp.pingStatus,
+              pingLatencyMs: sp.pingLatencyMs,
+              vlanId: sp.vlanId,
+              isPatched: sp.isPatched,
+              connectedRackId: sp.connectedRackId,
+              connectedSwitchId: sp.connectedSwitchId,
+              connectedSwitchPort: sp.connectedSwitchPort,
+              assignedPerson: sp.assignedPerson,
+              attachedSeatIndex: sp.attachedSeatIndex,
+            });
+          });
+        } else {
+          list.push({
+            id: node.id,
+            nodeId: node.id,
+            portIndex: undefined,
+            isStackedPort: false,
+            displayName: node.name,
+            parentName: node.name,
+            portLabel: undefined,
+            nodeType: node.type,
+            subType: node.subType,
+            role: node.outletRole || (node.type === "SWITCH" ? "SWITCH" : "GENERIC"),
+            ipAddress: node.ipAddress,
+            macAddress: node.macAddress,
+            pingStatus: node.pingStatus,
+            pingLatencyMs: node.pingLatencyMs,
+            vlanId: node.vlanId,
+            isPatched: node.isPatched,
+            connectedRackId: node.connectedRackId,
+            connectedSwitchId: node.connectedSwitchId,
+            connectedSwitchPort: node.connectedSwitchPort,
+            assignedPerson: node.assignedPerson,
+            attachedSeatIndex: undefined,
+          });
+        }
+      });
+
+    return list;
+  }, [nodes]);
+
+  // Détection des conflits d'IP (doublons sur le réseau)
+  const ipConflictSet = useMemo(() => {
+    const counts = new Map<string, number>();
+    allIpamEndpoints.forEach((ep) => {
+      const ip = ep.ipAddress?.trim();
+      if (ip) {
+        counts.set(ip, (counts.get(ip) || 0) + 1);
+      }
+    });
+    const conflicts = new Set<string>();
+    counts.forEach((count, ip) => {
+      if (count > 1) conflicts.add(ip);
+    });
+    return conflicts;
+  }, [allIpamEndpoints]);
+
+  // Filtrage multi-critères des points de terminaison IPAM
+  const filteredIpamEndpoints = useMemo(() => {
+    return allIpamEndpoints.filter((ep) => {
+      // 1. Filtre par type d'équipement
+      if (ipFilterType !== "ALL") {
+        if (ipFilterType === "SOCKET_PORT") {
+          if (!ep.isStackedPort) return false;
+        } else if (ipFilterType === "WALL_OUTLET") {
+          if (ep.isStackedPort || (ep.nodeType !== "WALL_OUTLET" && ep.subType !== "WALL_OUTLET")) return false;
+        } else if (ipFilterType === "SWITCH") {
+          if (ep.nodeType !== "SWITCH") return false;
+        } else if (ipFilterType === "PATCH_PANEL") {
+          if (ep.nodeType !== "PATCH_PANEL" && !ep.subType?.startsWith("RACK")) return false;
+        } else if (ep.nodeType !== ipFilterType && ep.subType !== ipFilterType) {
           return false;
         }
-        if (!ipSearch.trim()) return true;
-        const q = ipSearch.toLowerCase();
-        return (
-          n.name.toLowerCase().includes(q) ||
-          (n.ipAddress && n.ipAddress.toLowerCase().includes(q)) ||
-          (n.macAddress && n.macAddress.toLowerCase().includes(q)) ||
-          (n.outletRole && n.outletRole.toLowerCase().includes(q))
-        );
-      });
-  }, [nodes, ipSearch, ipFilterType]);
+      }
+
+      // 2. Filtre par VLAN
+      if (ipFilterVlan !== "ALL") {
+        if (ipFilterVlan === "NONE") {
+          if (ep.vlanId !== undefined && ep.vlanId !== null) return false;
+        } else if (ep.vlanId !== Number(ipFilterVlan)) {
+          return false;
+        }
+      }
+
+      // 3. Filtre par statut d'attribution IP
+      if (ipFilterStatus !== "ALL") {
+        const hasIp = Boolean(ep.ipAddress && ep.ipAddress.trim().length > 0);
+        if (ipFilterStatus === "ALLOCATED" && !hasIp) return false;
+        if (ipFilterStatus === "UNALLOCATED" && hasIp) return false;
+        if (ipFilterStatus === "DUPLICATE") {
+          if (!hasIp || !ipConflictSet.has(ep.ipAddress!.trim())) return false;
+        }
+      }
+
+      // 4. Filtre par raccordement / brassage switch
+      if (ipFilterPatch !== "ALL") {
+        const isPatched = Boolean(ep.isPatched || ep.connectedSwitchId);
+        if (ipFilterPatch === "PATCHED" && !isPatched) return false;
+        if (ipFilterPatch === "UNPATCHED" && isPatched) return false;
+      }
+
+      // 5. Filtre par statut Ping ICMP
+      if (ipFilterPing !== "ALL") {
+        if (ipFilterPing === "ONLINE" && ep.pingStatus !== "ONLINE") return false;
+        if (ipFilterPing === "OFFLINE" && ep.pingStatus !== "OFFLINE") return false;
+        if (ipFilterPing === "UNTESTED" && ep.pingStatus) return false;
+      }
+
+      // 6. Recherche textuelle
+      if (!ipSearch.trim()) return true;
+      const q = ipSearch.toLowerCase();
+      return (
+        ep.displayName.toLowerCase().includes(q) ||
+        ep.parentName.toLowerCase().includes(q) ||
+        (ep.portLabel && ep.portLabel.toLowerCase().includes(q)) ||
+        (ep.ipAddress && ep.ipAddress.toLowerCase().includes(q)) ||
+        (ep.macAddress && ep.macAddress.toLowerCase().includes(q)) ||
+        (ep.role && ep.role.toLowerCase().includes(q)) ||
+        (ep.connectedSwitchId && ep.connectedSwitchId.toLowerCase().includes(q)) ||
+        (ep.connectedSwitchPort && ep.connectedSwitchPort.toLowerCase().includes(q)) ||
+        (ep.assignedPerson && ep.assignedPerson.toLowerCase().includes(q))
+      );
+    });
+  }, [allIpamEndpoints, ipSearch, ipFilterType, ipFilterVlan, ipFilterStatus, ipFilterPatch, ipFilterPing, ipConflictSet]);
 
   if (!isOpen) return null;
 
@@ -531,55 +693,154 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     showToast(`🌐 VLAN ${newSubnet.vlanId} (${newSubnet.vlanName}) ajouté à l'IPAM`);
   };
 
-  // Allocation automatique d'une IP libre dans le sous-réseau approprié
-  const handleAutoAssignIp = (nodeId: string, role?: string | undefined) => {
-    let targetVlan = settings.subnets.find((s) => s.vlanId === 20); // Par défaut VLAN 20 Data
-    if (role === "VOIP") targetVlan = settings.subnets.find((s) => s.vlanId === 30);
-    if (role === "PRINTER") targetVlan = settings.subnets.find((s) => s.vlanId === 40);
-    if (role === "WIFI") targetVlan = settings.subnets.find((s) => s.vlanId === 50);
+  // Mise à jour de l'adresse IP (port de bloc RJ45 ou prise simple)
+  const handleUpdateIpamIp = (endpoint: IpamEndpointItem, newIp: string) => {
+    const trimmed = newIp.trim() || undefined;
+    if (endpoint.isStackedPort && endpoint.portIndex !== undefined) {
+      const node = nodes.find((n) => n.id === endpoint.nodeId);
+      if (node && node.stackedPorts) {
+        const updatedPorts = node.stackedPorts.map((p, idx) =>
+          idx === endpoint.portIndex ? { ...p, ipAddress: trimmed } : p
+        );
+        onUpdateNodeProperties?.(endpoint.nodeId, { stackedPorts: updatedPorts });
+      }
+    } else {
+      onUpdateNodeProperties?.(endpoint.nodeId, { ipAddress: trimmed });
+    }
+    showToast(`IP mise à jour pour ${endpoint.displayName}`);
+  };
+
+  // Mise à jour de l'adresse MAC (port de bloc RJ45 ou prise simple)
+  const handleUpdateIpamMac = (endpoint: IpamEndpointItem, newMac: string) => {
+    const trimmed = newMac.trim() || undefined;
+    if (endpoint.isStackedPort && endpoint.portIndex !== undefined) {
+      const node = nodes.find((n) => n.id === endpoint.nodeId);
+      if (node && node.stackedPorts) {
+        const updatedPorts = node.stackedPorts.map((p, idx) =>
+          idx === endpoint.portIndex ? { ...p, macAddress: trimmed } : p
+        );
+        onUpdateNodeProperties?.(endpoint.nodeId, { stackedPorts: updatedPorts });
+      }
+    } else {
+      onUpdateNodeProperties?.(endpoint.nodeId, { macAddress: trimmed });
+    }
+    showToast(`MAC mise à jour pour ${endpoint.displayName}`);
+  };
+
+  // Allocation automatique d'une IP libre pour un endpoint donné dans son VLAN
+  const handleAutoAssignIp = (endpoint: IpamEndpointItem) => {
+    let targetVlan = settings.subnets.find((s) => s.vlanId === endpoint.vlanId);
+    if (!targetVlan) {
+      if (endpoint.role === "VOIP") targetVlan = settings.subnets.find((s) => s.vlanId === 30);
+      else if (endpoint.role === "PRINTER") targetVlan = settings.subnets.find((s) => s.vlanId === 40);
+      else if (endpoint.role === "WIFI") targetVlan = settings.subnets.find((s) => s.vlanId === 50);
+      else targetVlan = settings.subnets.find((s) => s.vlanId === 20) ?? settings.subnets[0];
+    }
 
     const prefix = targetVlan?.cidr
       ? (targetVlan.cidr.split("/")[0] ?? "10.42.20").replace(/\.\d+$/, "")
       : "10.42.20";
-    const randomHost = Math.floor(Math.random() * 80) + 120;
-    const generatedIp = `${prefix}.${randomHost}`;
 
-    onUpdateNodeProperties?.(nodeId, {
-      ipAddress: generatedIp,
-      pingStatus: "ONLINE",
-      pingLatencyMs: 2,
+    const usedHosts = new Set<number>();
+    allIpamEndpoints.forEach((ep) => {
+      if (ep.ipAddress?.startsWith(prefix + ".")) {
+        const host = parseInt(ep.ipAddress.split(".").pop() ?? "", 10);
+        if (!isNaN(host)) usedHosts.add(host);
+      }
     });
-    showToast(`✨ IP ${generatedIp} attribuée automatiquement`);
+
+    let assignedHost = 10;
+    while (usedHosts.has(assignedHost) && assignedHost < 254) {
+      assignedHost++;
+    }
+    const generatedIp = `${prefix}.${assignedHost}`;
+
+    if (endpoint.isStackedPort && endpoint.portIndex !== undefined) {
+      const node = nodes.find((n) => n.id === endpoint.nodeId);
+      if (node && node.stackedPorts) {
+        const updatedPorts = node.stackedPorts.map((p, idx) =>
+          idx === endpoint.portIndex
+            ? { ...p, ipAddress: generatedIp, pingStatus: "ONLINE" as const, pingLatencyMs: 2 }
+            : p
+        );
+        onUpdateNodeProperties?.(endpoint.nodeId, { stackedPorts: updatedPorts });
+      }
+    } else {
+      onUpdateNodeProperties?.(endpoint.nodeId, {
+        ipAddress: generatedIp,
+        pingStatus: "ONLINE",
+        pingLatencyMs: 2,
+      });
+    }
+    showToast(`✨ IP ${generatedIp} attribuée à ${endpoint.displayName}`);
   };
 
-  // Export CSV IPAM
+  // Ping ICMP d'un endpoint
+  const handlePingIpamEndpoint = (endpoint: IpamEndpointItem) => {
+    const randomLatency = Math.floor(Math.random() * 6) + 2;
+    if (endpoint.isStackedPort && endpoint.portIndex !== undefined) {
+      const node = nodes.find((n) => n.id === endpoint.nodeId);
+      if (node && node.stackedPorts) {
+        const updatedPorts = node.stackedPorts.map((p, idx) =>
+          idx === endpoint.portIndex
+            ? { ...p, pingStatus: "ONLINE" as const, pingLatencyMs: randomLatency }
+            : p
+        );
+        onUpdateNodeProperties?.(endpoint.nodeId, { stackedPorts: updatedPorts });
+      }
+    } else {
+      onUpdateNodeProperties?.(endpoint.nodeId, {
+        pingStatus: "ONLINE",
+        pingLatencyMs: randomLatency,
+      });
+    }
+    showToast(`Ping vers ${endpoint.displayName} : ${randomLatency}ms (Réussi)`);
+  };
+
+  // Export CSV IPAM complet (avec distinction de chaque port de bloc RJ45)
   const handleExportIpamCsv = () => {
     const headers = [
-      "ID",
-      "Nom",
-      "Type",
-      "Rôle",
-      "Adresse IP",
-      "Adresse MAC",
-      "Statut Ping",
-      "Latence (ms)",
+      "ID_Equipement",
+      "Nom_Equipement",
+      "Est_Port_De_Bloc",
+      "Index_Port",
+      "Label_Port",
+      "Nom_Complet",
+      "Type_Materiel",
+      "Role_Service",
+      "VLAN_ID",
+      "Adresse_IP",
+      "Adresse_MAC",
+      "Statut_Brassage",
+      "Switch_Connecte",
+      "Port_Switch",
+      "Collaborateur_Assigne",
+      "Statut_Ping",
+      "Latence_ms",
     ];
-    const rows = nodes
-      .filter((n) => n.type !== "DESK")
-      .map((n) => [
-        n.id,
-        n.name,
-        n.type,
-        n.outletRole ?? "N/A",
-        n.ipAddress ?? "Non assigné",
-        n.macAddress ?? "Non assigné",
-        n.pingStatus ?? "N/A",
-        n.pingLatencyMs !== undefined ? `${n.pingLatencyMs}` : "N/A",
-      ]);
+    const rows = allIpamEndpoints.map((ep) => [
+      `"${ep.nodeId}"`,
+      `"${ep.parentName}"`,
+      ep.isStackedPort ? "OUI" : "NON",
+      ep.portIndex !== undefined ? `${ep.portIndex + 1}` : "N/A",
+      `"${ep.portLabel ?? "N/A"}"`,
+      `"${ep.displayName}"`,
+      `"${ep.nodeType}"`,
+      `"${ep.role}"`,
+      ep.vlanId !== undefined ? `${ep.vlanId}` : "N/A",
+      `"${ep.ipAddress ?? "Non assigné"}"`,
+      `"${ep.macAddress ?? "Non assigné"}"`,
+      ep.isPatched ? "BRASSE" : "NON_BRASSE",
+      `"${ep.connectedSwitchId ?? "N/A"}"`,
+      `"${ep.connectedSwitchPort ?? "N/A"}"`,
+      `"${ep.assignedPerson ?? "Non assigné"}"`,
+      `"${ep.pingStatus ?? "N/A"}"`,
+      ep.pingLatencyMs !== undefined ? `${ep.pingLatencyMs}` : "N/A",
+    ]);
 
     const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+      "data:text/csv;charset=utf-8,\uFEFF" +
+      [headers.join(";"), ...rows.map((e) => e.join(";"))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -590,7 +851,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("📥 Export IPAM CSV téléchargé");
+    showToast("📥 Export IPAM CSV complet téléchargé");
   };
 
   return (
@@ -2203,50 +2464,254 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                 );
               })()}
 
-              {/* Barre de recherche et filtres */}
-              <div className="flex items-center justify-between gap-3 pt-2">
-                <div className="flex items-center gap-2 flex-1">
-                  <div className="relative flex-1 max-w-md">
+              {/* KPI Récapitulatif IPAM */}
+              <div className="grid grid-cols-5 gap-2.5 pt-1">
+                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-mono">Total Endpoints</div>
+                    <div className="text-base font-bold text-slate-100 font-mono">
+                      {allIpamEndpoints.length}
+                    </div>
+                  </div>
+                  <div className="p-1.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-mono">Ports de Blocs RJ45</div>
+                    <div className="text-base font-bold text-cyan-400 font-mono">
+                      {allIpamEndpoints.filter((e) => e.isStackedPort).length}
+                    </div>
+                  </div>
+                  <div className="p-1.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    <Cable className="w-4 h-4" />
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-mono">IPs Allouées</div>
+                    <div className="text-base font-bold text-emerald-400 font-mono">
+                      {allIpamEndpoints.filter((e) => e.ipAddress).length}
+                      <span className="text-[10px] text-slate-500 font-normal"> / {allIpamEndpoints.length}</span>
+                    </div>
+                  </div>
+                  <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] text-slate-400 font-mono">Câblés au Switch</div>
+                    <div className="text-base font-bold text-purple-400 font-mono">
+                      {allIpamEndpoints.filter((e) => e.isPatched || e.connectedSwitchId).length}
+                    </div>
+                  </div>
+                  <div className="p-1.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    <Network className="w-4 h-4" />
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => {
+                    if (ipConflictSet.size > 0) {
+                      setIpFilterStatus((prev) => (prev === "DUPLICATE" ? "ALL" : "DUPLICATE"));
+                    }
+                  }}
+                  className={`p-2.5 rounded-lg border flex items-center justify-between transition ${
+                    ipConflictSet.size > 0
+                      ? "bg-rose-950/30 border-rose-500/40 text-rose-300 cursor-pointer hover:bg-rose-900/40"
+                      : "bg-slate-950 border-slate-800 text-slate-400"
+                  }`}
+                  title={ipConflictSet.size > 0 ? "Cliquer pour isoler les doublons d'IP" : "Aucun conflit d'IP"}
+                >
+                  <div>
+                    <div className="text-[10px] font-mono">Doublons d'IP</div>
+                    <div
+                      className={`text-base font-bold font-mono ${
+                        ipConflictSet.size > 0 ? "text-rose-400" : "text-slate-400"
+                      }`}
+                    >
+                      {ipConflictSet.size}
+                    </div>
+                  </div>
+                  <div
+                    className={`p-1.5 rounded border ${
+                      ipConflictSet.size > 0
+                        ? "bg-rose-500/20 text-rose-400 border-rose-500/30 animate-pulse"
+                        : "bg-slate-800 text-slate-500 border-slate-700"
+                    }`}
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Barre de recherche et filtres multi-critères */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between gap-2.5">
+                  <div className="relative flex-1">
                     <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      placeholder="Filtrer par nom, IP, MAC ou rôle..."
+                      placeholder="Rechercher IP, MAC, port, équipement, switch, collaborateur..."
                       value={ipSearch}
                       onChange={(e) => setIpSearch(e.target.value)}
                       className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
                     />
+                    {ipSearch && (
+                      <button
+                        onClick={() => setIpSearch("")}
+                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-200 text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
 
+                  <button
+                    onClick={handleExportIpamCsv}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition flex-shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Exporter IPAM CSV
+                  </button>
+                </div>
+
+                {/* Filtres secondaires granulaires */}
+                <div className="grid grid-cols-5 gap-2 text-xs">
+                  {/* Type d'équipement */}
                   <select
                     value={ipFilterType}
                     onChange={(e) => setIpFilterType(e.target.value)}
-                    className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
+                    className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-cyan-500 text-[11px]"
                   >
-                    <option value="ALL">Tous les types d'équipements</option>
-                    <option value="WALL_OUTLET">Prises Murales RJ45</option>
-                    <option value="FLOOR_BOX">Boîtiers de sol</option>
-                    <option value="PATCH_PANEL">Panneaux & Baies</option>
-                    <option value="SWITCH">Switches Réseau</option>
+                    <option value="ALL">Tous les types ({allIpamEndpoints.length})</option>
+                    <option value="SOCKET_PORT">
+                      Ports de Blocs RJ45 ({allIpamEndpoints.filter((e) => e.isStackedPort).length})
+                    </option>
+                    <option value="WALL_OUTLET">
+                      Prises simples ({allIpamEndpoints.filter((e) => !e.isStackedPort && e.nodeType === "WALL_OUTLET").length})
+                    </option>
+                    <option value="SWITCH">
+                      Switches ({allIpamEndpoints.filter((e) => e.nodeType === "SWITCH").length})
+                    </option>
+                    <option value="PATCH_PANEL">
+                      Panneaux & Baies ({allIpamEndpoints.filter((e) => e.nodeType === "PATCH_PANEL" || e.subType?.startsWith("RACK")).length})
+                    </option>
                   </select>
+
+                  {/* VLAN */}
+                  <select
+                    value={ipFilterVlan}
+                    onChange={(e) => setIpFilterVlan(e.target.value)}
+                    className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-cyan-500 text-[11px]"
+                  >
+                    <option value="ALL">Tous les VLANs</option>
+                    {settings.subnets.map((sub) => (
+                      <option key={sub.vlanId} value={sub.vlanId}>
+                        VLAN {sub.vlanId} - {sub.vlanName}
+                      </option>
+                    ))}
+                    <option value="NONE">Sans VLAN assigné</option>
+                  </select>
+
+                  {/* Statut IP */}
+                  <select
+                    value={ipFilterStatus}
+                    onChange={(e) => setIpFilterStatus(e.target.value)}
+                    className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-cyan-500 text-[11px]"
+                  >
+                    <option value="ALL">Tous les statuts IP</option>
+                    <option value="ALLOCATED">
+                      IP Allouée ({allIpamEndpoints.filter((e) => e.ipAddress).length})
+                    </option>
+                    <option value="UNALLOCATED">
+                      Sans IP / Libre ({allIpamEndpoints.filter((e) => !e.ipAddress).length})
+                    </option>
+                    {ipConflictSet.size > 0 && (
+                      <option value="DUPLICATE">⚠️ Conflits d'IP ({ipConflictSet.size})</option>
+                    )}
+                  </select>
+
+                  {/* Brassage Switch */}
+                  <select
+                    value={ipFilterPatch}
+                    onChange={(e) => setIpFilterPatch(e.target.value)}
+                    className="px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-cyan-500 text-[11px]"
+                  >
+                    <option value="ALL">Tout le raccordement</option>
+                    <option value="PATCHED">
+                      Brassé au switch ({allIpamEndpoints.filter((e) => e.isPatched || e.connectedSwitchId).length})
+                    </option>
+                    <option value="UNPATCHED">
+                      Non brassé / Passif ({allIpamEndpoints.filter((e) => !e.isPatched && !e.connectedSwitchId).length})
+                    </option>
+                  </select>
+
+                  {/* Ping ICMP ou Reset */}
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={ipFilterPing}
+                      onChange={(e) => setIpFilterPing(e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none focus:border-cyan-500 text-[11px]"
+                    >
+                      <option value="ALL">Tous les pings</option>
+                      <option value="ONLINE">En ligne (ONLINE)</option>
+                      <option value="OFFLINE">Hors ligne (OFFLINE)</option>
+                      <option value="UNTESTED">Non testé (—)</option>
+                    </select>
+
+                    {(ipSearch ||
+                      ipFilterType !== "ALL" ||
+                      ipFilterVlan !== "ALL" ||
+                      ipFilterStatus !== "ALL" ||
+                      ipFilterPatch !== "ALL" ||
+                      ipFilterPing !== "ALL") && (
+                      <button
+                        onClick={() => {
+                          setIpSearch("");
+                          setIpFilterType("ALL");
+                          setIpFilterVlan("ALL");
+                          setIpFilterStatus("ALL");
+                          setIpFilterPatch("ALL");
+                          setIpFilterPing("ALL");
+                        }}
+                        title="Réinitialiser tous les filtres"
+                        className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-mono border border-slate-700 transition"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <button
-                  onClick={handleExportIpamCsv}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Exporter IPAM CSV
-                </button>
+                <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono px-1">
+                  <span>
+                    Affichage de <span className="text-cyan-400 font-bold">{filteredIpamEndpoints.length}</span> sur{" "}
+                    <span className="text-slate-200">{allIpamEndpoints.length}</span> points de terminaison IP
+                  </span>
+                  {ipFilterStatus === "DUPLICATE" && (
+                    <span className="text-rose-400 flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Filtre actif : Doublons d'adresses IP
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Table IPAM des Équipements */}
+              {/* Table IPAM des Équipements & Ports RJ45 */}
               <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950">
                 <div className="max-h-72 overflow-y-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-900 text-slate-400 font-mono text-[11px] sticky top-0 border-b border-slate-800">
                       <tr>
-                        <th className="py-2.5 px-3">Équipement / Prise</th>
+                        <th className="py-2.5 px-3">Point de Terminaison / Port</th>
                         <th className="py-2.5 px-3">Service</th>
+                        <th className="py-2.5 px-3">VLAN & Raccordement Switch</th>
                         <th className="py-2.5 px-3">Adresse IP (Éditable)</th>
                         <th className="py-2.5 px-3">Adresse MAC</th>
                         <th className="py-2.5 px-3 text-center">État Ping ICMP</th>
@@ -2254,142 +2719,218 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-850">
-                      {filteredIpamNodes.map((node) => {
-                        const isVoip = node.outletRole === "VOIP";
-                        const isPrinter = node.outletRole === "PRINTER";
-                        const isWifi = node.outletRole === "WIFI";
-                        const isRack = Boolean(
-                          node.subType?.startsWith("RACK") ||
-                          node.type === "PATCH_PANEL" ||
-                          node.type === "SWITCH"
-                        );
+                      {filteredIpamEndpoints.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-500 font-mono text-xs">
+                            Aucun équipement ou port RJ45 ne correspond aux critères de recherche.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredIpamEndpoints.map((ep) => {
+                          const isVoip = ep.role === "VOIP";
+                          const isPrinter = ep.role === "PRINTER";
+                          const isWifi = ep.role === "WIFI";
+                          const isRack = Boolean(
+                            ep.subType?.startsWith("RACK") ||
+                            ep.nodeType === "PATCH_PANEL" ||
+                            ep.nodeType === "SWITCH"
+                          );
+                          const isConflict = Boolean(
+                            ep.ipAddress && ipConflictSet.has(ep.ipAddress.trim())
+                          );
+                          const vlanColor =
+                            ep.vlanId !== undefined
+                              ? (
+                                  vlanStyles?.[ep.vlanId] ??
+                                  DEFAULT_VLAN_STYLES[ep.vlanId]
+                                )?.color ?? "#38bdf8"
+                              : "#94a3b8";
 
-                        return (
-                          <tr key={node.id} className="hover:bg-slate-900/60 transition">
-                            <td className="py-2 px-3">
-                              <div className="font-semibold text-slate-200 flex items-center gap-2">
-                                {isRack ? (
-                                  <Server className="w-3.5 h-3.5 text-purple-400" />
-                                ) : isWifi ? (
-                                  <Wifi className="w-3.5 h-3.5 text-indigo-400" />
-                                ) : isVoip ? (
-                                  <Phone className="w-3.5 h-3.5 text-purple-400" />
-                                ) : isPrinter ? (
-                                  <Printer className="w-3.5 h-3.5 text-amber-400" />
-                                ) : (
-                                  <Laptop className="w-3.5 h-3.5 text-blue-400" />
-                                )}
-                                <span>{node.name}</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 font-mono">
-                                ID: {node.id}
-                              </div>
-                            </td>
+                          return (
+                            <tr key={ep.id} className="hover:bg-slate-900/60 transition">
+                              <td className="py-2 px-3">
+                                <div className="font-semibold text-slate-200 flex items-center gap-2">
+                                  {ep.isStackedPort ? (
+                                    <div className="p-1 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                                      <Cable className="w-3.5 h-3.5" />
+                                    </div>
+                                  ) : isRack ? (
+                                    <Server className="w-3.5 h-3.5 text-purple-400" />
+                                  ) : isWifi ? (
+                                    <Wifi className="w-3.5 h-3.5 text-indigo-400" />
+                                  ) : isVoip ? (
+                                    <Phone className="w-3.5 h-3.5 text-purple-400" />
+                                  ) : isPrinter ? (
+                                    <Printer className="w-3.5 h-3.5 text-amber-400" />
+                                  ) : (
+                                    <Laptop className="w-3.5 h-3.5 text-blue-400" />
+                                  )}
 
-                            <td className="py-2 px-3 font-mono text-[11px]">
-                              {node.outletRole ? (
-                                <span
-                                  className={`px-1.5 py-0.5 rounded border text-[10px] ${
-                                    isVoip
-                                      ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
-                                      : isPrinter
-                                        ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                                        : isWifi
-                                          ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
-                                          : "bg-blue-500/20 text-blue-300 border-blue-500/30"
-                                  }`}
-                                >
-                                  {node.outletRole}
-                                </span>
-                              ) : (
-                                <span className="text-slate-500 text-[10px]">Générique</span>
-                              )}
-                            </td>
+                                  <div className="flex items-center gap-1.5">
+                                    {ep.isStackedPort ? (
+                                      <>
+                                        <span className="text-slate-300 font-mono text-[11px] font-semibold">
+                                          {ep.parentName}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 font-mono text-[10px] font-bold">
+                                          {ep.portLabel}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span>{ep.displayName}</span>
+                                    )}
+                                  </div>
+                                </div>
 
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-1.5">
-                                <input
-                                  type="text"
-                                  defaultValue={node.ipAddress ?? ""}
-                                  placeholder="10.42.x.x"
-                                  onBlur={(e) => {
-                                    const val = e.target.value.trim();
-                                    onUpdateNodeProperties?.(node.id, {
-                                      ipAddress: val ? val : undefined,
-                                    });
-                                    showToast(`IP mise à jour pour ${node.name}`);
-                                  }}
-                                  className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 w-32"
-                                />
-                                {!node.ipAddress && (
-                                  <button
-                                    onClick={() => handleAutoAssignIp(node.id, node.outletRole)}
-                                    title="Attribuer la prochaine IP libre dans ce VLAN"
-                                    className="p-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded border border-cyan-500/30"
-                                  >
-                                    <Sparkles className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
+                                <div className="text-[10px] text-slate-500 font-mono flex items-center gap-2 mt-0.5">
+                                  <span>ID: {ep.nodeId}</span>
+                                  {ep.isStackedPort && ep.portIndex !== undefined && (
+                                    <span>• Port #{ep.portIndex + 1}</span>
+                                  )}
+                                  {ep.attachedSeatIndex !== undefined && (
+                                    <span className="text-slate-400">
+                                      • Place {ep.attachedSeatIndex + 1}
+                                    </span>
+                                  )}
+                                  {ep.assignedPerson && (
+                                    <span className="text-indigo-400 font-medium truncate max-w-[140px]">
+                                      • {ep.assignedPerson}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
 
-                            <td className="py-2 px-3">
-                              <input
-                                type="text"
-                                defaultValue={node.macAddress ?? ""}
-                                placeholder="00:1A:2B:3C:4D:5E"
-                                onBlur={(e) => {
-                                  const val = e.target.value.trim();
-                                  onUpdateNodeProperties?.(node.id, {
-                                    macAddress: val ? val : undefined,
-                                  });
-                                  showToast(`MAC mise à jour pour ${node.name}`);
-                                }}
-                                className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 w-36"
-                              />
-                            </td>
-
-                            <td className="py-2 px-3 text-center">
-                              {node.pingStatus ? (
-                                <span
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] ${
-                                    node.pingStatus === "ONLINE"
-                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                      : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                                  }`}
-                                >
+                              <td className="py-2 px-3 font-mono text-[11px]">
+                                {ep.role ? (
                                   <span
-                                    className={`w-1.5 h-1.5 rounded-full ${
-                                      node.pingStatus === "ONLINE"
-                                        ? "bg-emerald-400 animate-pulse"
-                                        : "bg-rose-400"
+                                    className={`px-1.5 py-0.5 rounded border text-[10px] ${
+                                      isVoip
+                                        ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                                        : isPrinter
+                                          ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                          : isWifi
+                                            ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
+                                            : "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                                    }`}
+                                  >
+                                    {ep.role}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 text-[10px]">Générique</span>
+                                )}
+                              </td>
+
+                              <td className="py-2 px-3">
+                                <div className="flex flex-col gap-0.5">
+                                  {ep.vlanId !== undefined ? (
+                                    <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                                      <div
+                                        className="w-2 h-2 rounded-full"
+                                        style={{ backgroundColor: vlanColor }}
+                                      />
+                                      <span className="text-slate-300 font-medium">
+                                        VLAN {ep.vlanId}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-500 text-[10px] font-mono">
+                                      Sans VLAN
+                                    </span>
+                                  )}
+
+                                  {ep.connectedSwitchId ? (
+                                    <span className="text-[10px] font-mono text-cyan-400/90 truncate max-w-[150px]">
+                                      {ep.connectedSwitchId}
+                                      {ep.connectedSwitchPort ? ` [${ep.connectedSwitchPort}]` : ""}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-mono text-slate-500">
+                                      {ep.isPatched ? "Brassé (Baie)" : "Non raccordé"}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="py-2 px-3">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    key={`${ep.id}-${ep.ipAddress ?? "none"}`}
+                                    type="text"
+                                    defaultValue={ep.ipAddress ?? ""}
+                                    placeholder="10.42.x.x"
+                                    onBlur={(e) => handleUpdateIpamIp(ep, e.target.value)}
+                                    className={`px-2 py-1 bg-slate-900 border rounded font-mono text-xs focus:outline-none focus:border-cyan-500 w-32 ${
+                                      isConflict
+                                        ? "border-rose-500 text-rose-300 bg-rose-950/20"
+                                        : "border-slate-800 text-slate-200"
                                     }`}
                                   />
-                                  {node.pingStatus} ({node.pingLatencyMs ?? 4}ms)
-                                </span>
-                              ) : (
-                                <span className="text-slate-500 text-[10px] font-mono">—</span>
-                              )}
-                            </td>
+                                  {isConflict && (
+                                    <span
+                                      title="Conflit : cette adresse IP est déjà attribuée à un autre port !"
+                                      className="p-1 bg-rose-500/20 text-rose-400 rounded border border-rose-500/40 animate-pulse"
+                                    >
+                                      <AlertTriangle className="w-3 h-3" />
+                                    </span>
+                                  )}
+                                  {!ep.ipAddress && (
+                                    <button
+                                      onClick={() => handleAutoAssignIp(ep)}
+                                      title="Attribuer la prochaine IP libre dans ce sous-réseau"
+                                      className="p-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 rounded border border-cyan-500/30"
+                                    >
+                                      <Sparkles className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
 
-                            <td className="py-2 px-3 text-right">
-                              <button
-                                onClick={() => {
-                                  const randomLatency = Math.floor(Math.random() * 6) + 2;
-                                  onUpdateNodeProperties?.(node.id, {
-                                    pingStatus: "ONLINE",
-                                    pingLatencyMs: randomLatency,
-                                  });
-                                  showToast(`Ping vers ${node.name} : ${randomLatency}ms (Réussi)`);
-                                }}
-                                className="px-2 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 rounded text-[10px] font-mono border border-cyan-500/30 transition"
-                              >
-                                Ping
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              <td className="py-2 px-3">
+                                <input
+                                  key={`${ep.id}-${ep.macAddress ?? "none"}`}
+                                  type="text"
+                                  defaultValue={ep.macAddress ?? ""}
+                                  placeholder="00:1A:2B:3C:4D:5E"
+                                  onBlur={(e) => handleUpdateIpamMac(ep, e.target.value)}
+                                  className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 w-36"
+                                />
+                              </td>
+
+                              <td className="py-2 px-3 text-center">
+                                {ep.pingStatus ? (
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[10px] ${
+                                      ep.pingStatus === "ONLINE"
+                                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                        : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`w-1.5 h-1.5 rounded-full ${
+                                        ep.pingStatus === "ONLINE"
+                                          ? "bg-emerald-400 animate-pulse"
+                                          : "bg-rose-400"
+                                      }`}
+                                    />
+                                    {ep.pingStatus} ({ep.pingLatencyMs ?? 4}ms)
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 text-[10px] font-mono">—</span>
+                                )}
+                              </td>
+
+                              <td className="py-2 px-3 text-right">
+                                <button
+                                  onClick={() => handlePingIpamEndpoint(ep)}
+                                  className="px-2 py-1 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 rounded text-[10px] font-mono border border-cyan-500/30 transition"
+                                >
+                                  Ping
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
