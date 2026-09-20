@@ -213,5 +213,26 @@ export async function executePingSweep(
     options.onProgress?.(scannedCount, targetIps.length);
   }
 
+  // Si une cible unique a été spécifiée explicitement (ex: /32 ou IP unique) et n'a pas répondu en TCP
+  // (fréquent sur des commutateurs durcis où seul SNMP UDP 161 est ouvert), on la conserve pour la passe SNMP.
+  if (targetIps.length === 1 && results.length === 0) {
+    const singleIp = targetIps[0]!;
+    const freshArp = await getSystemArpTable();
+    const mac = freshArp.get(singleIp);
+    const hostname = await resolveReverseDns(singleIp);
+    const { vendor } = mac ? lookupOui(mac) : { vendor: undefined };
+
+    results.push({
+      ip: singleIp,
+      mac: mac ? normalizeMac(mac) : undefined,
+      hostname,
+      isAlive: true,
+      responseTimeMs: 0,
+      openPorts: [161],
+      vendor,
+      source: "TCP_PROBE",
+    });
+  }
+
   return results;
 }

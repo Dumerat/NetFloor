@@ -83,6 +83,20 @@ export async function runDiscoveryPipeline(
       concurrency: options.concurrency || 32,
     });
 
+    // Support explicite des cibles uniques (/32 ou IP isolée comme 172.18.0.6/32)
+    const singleTargetIp = options.subnetCidr.replace(/\/32$/, "").trim();
+    const isSingleTarget = !options.subnetCidr.includes("/") || options.subnetCidr.endsWith("/32");
+
+    if (isSingleTarget && !probedHosts.some((h) => h.ip === singleTargetIp)) {
+      probedHosts.push({
+        ip: singleTargetIp,
+        isAlive: true,
+        responseTimeMs: 0,
+        openPorts: [161],
+        source: "TCP_PROBE",
+      });
+    }
+
     await logPass(
       jobId,
       1,
@@ -110,8 +124,24 @@ export async function runDiscoveryPipeline(
     const switchCandidates = probedHosts.filter((h) => {
       const isSnmpOpen = h.openPorts.includes(161);
       const { defaultType } = h.mac ? lookupOui(h.mac) : { defaultType: "UNKNOWN" };
-      return isSnmpOpen || defaultType === "SWITCH" || h.ip.endsWith(".1") || h.ip.endsWith(".254");
+      return (
+        isSnmpOpen ||
+        defaultType === "SWITCH" ||
+        h.ip.endsWith(".1") ||
+        h.ip.endsWith(".254") ||
+        (isSingleTarget && h.ip === singleTargetIp)
+      );
     });
+
+    if (isSingleTarget && !switchCandidates.some((h) => h.ip === singleTargetIp)) {
+      switchCandidates.push({
+        ip: singleTargetIp,
+        isAlive: true,
+        responseTimeMs: 0,
+        openPorts: [161],
+        source: "TCP_PROBE",
+      });
+    }
 
     const discoveredSwitches: DiscoveredSwitch[] = [];
     const backboneLinks: TopologyLink[] = [];

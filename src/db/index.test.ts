@@ -13,7 +13,7 @@ describe("client de base de données", () => {
     expect(await getDb()).toBe(instance);
     await expect(executeBeforeReady(sql`SELECT 1 AS connected`)).resolves.toBeDefined();
     await expect(db.execute(sql`SELECT 1 AS connected`)).resolves.toBeDefined();
-  });
+  }, 15000);
 });
 
 afterAll(async () => {

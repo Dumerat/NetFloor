@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getDb } from "@/db";
+import { getDb, ensureDiscoveryTables } from "@/db";
 import { discoveryJobs } from "@/db/schema";
 import { runDiscoveryPipeline } from "@/engine/discovery/discovery-pipeline";
 
@@ -54,25 +54,52 @@ export async function POST(req: Request) {
 
     const db = await getDb();
 
-    // 1. Enregistrer le job de découverte en base
-    const [job] = await db
-      .insert(discoveryJobs)
-      .values({
-        subnetCidr,
-        snmpVersion,
-        status: "PENDING",
-        currentPass: 1,
-        totalPasses: 4,
-        options: {
-          snmpCommunity,
-          v3User,
-          v3AuthPass,
-          v3PrivPass,
-          pingTimeoutMs,
-          includeCloud,
-        },
-      })
-      .returning();
+    // 1. Enregistrer le job de découverte en base (avec auto-guérison du schéma si nécessaire)
+    let job;
+    try {
+      [job] = await db
+        .insert(discoveryJobs)
+        .values({
+          subnetCidr,
+          snmpVersion,
+          status: "PENDING",
+          currentPass: 1,
+          totalPasses: 4,
+          options: {
+            snmpCommunity,
+            v3User,
+            v3AuthPass,
+            v3PrivPass,
+            pingTimeoutMs,
+            includeCloud,
+          },
+        })
+        .returning();
+    } catch (insertErr) {
+      console.warn(
+        "[Discovery API] Échec de l'insertion du job, exécution de ensureDiscoveryTables()...",
+        insertErr
+      );
+      await ensureDiscoveryTables();
+      [job] = await db
+        .insert(discoveryJobs)
+        .values({
+          subnetCidr,
+          snmpVersion,
+          status: "PENDING",
+          currentPass: 1,
+          totalPasses: 4,
+          options: {
+            snmpCommunity,
+            v3User,
+            v3AuthPass,
+            v3PrivPass,
+            pingTimeoutMs,
+            includeCloud,
+          },
+        })
+        .returning();
+    }
 
     if (!job) {
       return NextResponse.json(
