@@ -218,8 +218,8 @@ export function parseAndAuditMatrixCsv(csvText: string): MatrixAuditResult {
     // Validation VLAN_ID
     let vlanId: number | undefined = undefined;
     if (rawVlan) {
-      const parsed = parseInt(rawVlan, 10);
-      if (isNaN(parsed) || parsed < 1 || parsed > 4094) {
+      const parsed = Number.parseInt(rawVlan, 10);
+      if (Number.isNaN(parsed) || parsed < 1 || parsed > 4094) {
         errors.push({
           row: rowNum,
           column: "VLAN_ID",

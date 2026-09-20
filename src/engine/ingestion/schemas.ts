@@ -34,15 +34,15 @@ export const CablingRowSchema = z
       .union([z.string(), z.number()])
       .transform((val) => {
         if (typeof val === "number") return val;
-        const parsed = parseFloat(val.replace(",", "."));
-        return isNaN(parsed) ? 25.0 : parsed;
+        const parsed = Number.parseFloat(val.replace(",", "."));
+        return Number.isNaN(parsed) ? 25.0 : parsed;
       })
       .pipe(z.number().nonnegative("La longueur de câble ne peut être négative").default(25.0)),
     switchName: z.string().trim().min(1, "Le commutateur est requis"),
     switchPort: z.string().trim().min(1, "Le port du commutateur est requis"),
     vlanVid: z
       .union([z.string(), z.number()])
-      .transform((val) => (typeof val === "number" ? val : parseInt(val, 10)))
+      .transform((val) => (typeof val === "number" ? val : Number.parseInt(val, 10)))
       .pipe(
         z
           .number()

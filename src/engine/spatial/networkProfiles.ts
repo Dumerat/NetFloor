@@ -53,8 +53,8 @@ export function getSwitchPortProfile(
   portName: string
 ): SwitchPortProfile {
   // Extraction du numéro de port (ex: "Gi1/0/14" -> 14)
-  const match = portName.match(/(\d+)$/);
-  const portNum = match ? parseInt(match[1]!, 10) : 1;
+  const match = portName.match(/\d+$/);
+  const portNum = match ? Number.parseInt(match[0], 10) : 1;
 
   // Profils standards selon le numéro de port et le type de commutateur
   const isPoeSwitch =
