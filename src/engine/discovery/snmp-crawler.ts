@@ -1,5 +1,12 @@
 import snmp from "net-snmp";
-import { DiscoveredSwitch, LldpNeighbor, CdpNeighbor, SwitchPortInfo, ScanOptions } from "./types";
+import {
+  DiscoveredSwitch,
+  DiscoveredDeviceType,
+  LldpNeighbor,
+  CdpNeighbor,
+  SwitchPortInfo,
+  ScanOptions,
+} from "./types";
 
 export function snmpGetPromise(session: any, oids: string[]): Promise<any[]> {
   return new Promise((resolve, reject) => {
@@ -76,9 +83,10 @@ export async function crawlSwitchLldpCdp(
       return null;
     }
 
-    const sysName = rawSysName || `SW-${host.replace(/\./g, "-")}`;
     let vendor = "Generic Managed Switch";
     const dLower = (rawSysDescr + " " + rawSysOid).toLowerCase();
+    const sLower = (rawSysName || "").toLowerCase();
+
     if (dLower.includes("cisco") || rawSysOid.includes(".1.3.6.1.4.1.9.")) vendor = "Cisco Systems";
     else if (
       dLower.includes("aruba") ||
@@ -94,7 +102,87 @@ export async function crawlSwitchLldpCdp(
       vendor = "Ubiquiti";
     else if (dLower.includes("zyxel") || rawSysOid.includes(".1.3.6.1.4.1.890.")) vendor = "Zyxel";
 
-    const model = rawSysDescr.split("\n")[0]?.split(",")[0] || `${vendor} Switch`;
+    // Détection précise du type d'équipement
+    let deviceType: DiscoveredDeviceType = "SWITCH";
+    let defaultPortsCount = 24;
+    let uSize = 1;
+
+    if (
+      dLower.includes("access point") ||
+      dLower.includes("ap-") ||
+      dLower.includes("arubaap") ||
+      dLower.includes("uap") ||
+      dLower.includes("wireless") ||
+      dLower.includes("aironet") ||
+      dLower.includes("meraki mr") ||
+      sLower.includes("ap-") ||
+      sLower.includes("uap") ||
+      sLower.startsWith("ap")
+    ) {
+      deviceType = "ACCESS_POINT";
+      defaultPortsCount = 1;
+      uSize = 0;
+    } else if (
+      dLower.includes("poweredge") ||
+      dLower.includes("proliant") ||
+      dLower.includes("esxi") ||
+      dLower.includes("linux") ||
+      dLower.includes("windows server")
+    ) {
+      deviceType = "SERVER";
+      defaultPortsCount = 4;
+      uSize = dLower.includes("1u") || dLower.includes("r6") ? 1 : 2;
+    } else if (
+      dLower.includes("fortigate") ||
+      dLower.includes("firepower") ||
+      dLower.includes("asa") ||
+      dLower.includes("pfsense") ||
+      dLower.includes("palo alto")
+    ) {
+      deviceType = "ROUTER";
+      defaultPortsCount = 10;
+      uSize = 1;
+    } else {
+      if (
+        dLower.includes("48p") ||
+        dLower.includes("48g") ||
+        dLower.includes("-48-") ||
+        dLower.includes("48hp") ||
+        dLower.includes(" 48")
+      ) {
+        defaultPortsCount = 48;
+      } else if (
+        dLower.includes("8p") ||
+        dLower.includes("8g") ||
+        dLower.includes("-8-") ||
+        dLower.includes(" 8")
+      ) {
+        defaultPortsCount = 8;
+      } else if (
+        dLower.includes("16p") ||
+        dLower.includes("16g") ||
+        dLower.includes("-16-") ||
+        dLower.includes(" 16")
+      ) {
+        defaultPortsCount = 16;
+      } else if (dLower.includes("52p") || dLower.includes("52g") || dLower.includes("-52-")) {
+        defaultPortsCount = 52;
+      } else {
+        defaultPortsCount = 24;
+      }
+      uSize = dLower.includes("9400") || dLower.includes("5406") || dLower.includes("6500") ? 4 : 1;
+    }
+
+    const namePrefix =
+      deviceType === "ACCESS_POINT" ? "AP-" : deviceType === "SERVER" ? "SRV-" : "SW-";
+    const sysName = rawSysName || `${namePrefix}${host.replace(/\./g, "-")}`;
+    const model =
+      rawSysDescr.split("\n")[0]?.split(",")[0] ||
+      (deviceType === "ACCESS_POINT"
+        ? `${vendor} Access Point`
+        : deviceType === "SERVER"
+          ? `${vendor} Server`
+          : `${vendor} Switch`);
 
     // 2. Interfaces physiques du commutateur (IF-MIB RFC 2863)
     const portsMap = new Map<number, SwitchPortInfo>();
@@ -146,11 +234,12 @@ export async function crawlSwitchLldpCdp(
         // Ignorer
       }
     } catch {
-      // Si la table IF échoue, créer des ports synthétiques 1 à 24
-      for (let i = 1; i <= 24; i++) {
+      // Si la table IF échoue, créer des ports synthétiques adaptés
+      for (let i = 1; i <= defaultPortsCount; i++) {
         portsMap.set(i, {
           ifIndex: i,
-          portName: `Gi1/0/${i}`,
+          portName:
+            deviceType === "ACCESS_POINT" ? (i === 1 ? "eth0" : `eth${i - 1}`) : `Gi1/0/${i}`,
           speedMbps: 1000,
           isUp: true,
           isUplink: false,
@@ -250,7 +339,7 @@ export async function crawlSwitchLldpCdp(
       `00:81:C4:00:${hostParts[2]?.toString(16).padStart(2, "0")}:${hostParts[3]?.toString(16).padStart(2, "0")}`.toUpperCase();
 
     return {
-      id: `sw-${host.replace(/\./g, "-")}`,
+      id: `${deviceType === "ACCESS_POINT" ? "ap" : deviceType === "SERVER" ? "srv" : "sw"}-${host.replace(/\./g, "-")}`,
       ip: host,
       mac,
       sysName,
@@ -258,6 +347,8 @@ export async function crawlSwitchLldpCdp(
       sysOid: rawSysOid,
       vendor,
       model,
+      deviceType,
+      uSize,
       ports: Array.from(portsMap.values()),
       lldpNeighbors,
       cdpNeighbors,

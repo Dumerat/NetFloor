@@ -28,7 +28,13 @@ import {
   Search,
   Zap,
 } from "lucide-react";
-import { OutletRole, NodeSubType, PoeMode, RackDisplay } from "@/components/canvas/EquipmentLayer";
+import {
+  OutletRole,
+  NodeSubType,
+  PoeMode,
+  RackDisplay,
+  NodeDisplay,
+} from "@/components/canvas/EquipmentLayer";
 import type { VlanStyle } from "@/data/vlanStyles";
 
 export type PaletteCategory = "FURNITURE" | "CONNECTIVITY" | "IOT" | "INFRASTRUCTURE";
@@ -56,6 +62,17 @@ export interface PaletteItem {
   customUHeight?: number | undefined;
 }
 
+export type ScannedDeviceType =
+  | "SWITCH"
+  | "ROUTER"
+  | "SERVER"
+  | "PATCH_PANEL"
+  | "FIREWALL"
+  | "PDU"
+  | "ACCESS_POINT"
+  | "PRINTER"
+  | "WORKSTATION";
+
 export interface ScannedDeviceItem {
   id: string;
   name: string;
@@ -63,11 +80,225 @@ export interface ScannedDeviceItem {
   mac: string;
   model: string;
   manufacturer: string;
-  deviceType: "SWITCH" | "ROUTER" | "SERVER" | "PATCH_PANEL" | "FIREWALL" | "PDU";
+  deviceType: ScannedDeviceType;
   portsCount: number;
   uSize?: number | undefined;
   status: "ONLINE" | "OFFLINE" | "SYNCED";
   poeBudgetW?: number | undefined;
+}
+
+export function inferScannedDeviceProfile(d: {
+  hostname?: string | null;
+  name?: string | null;
+  model?: string | null;
+  manufacturer?: string | null;
+  sysDescr?: string | null;
+  deviceType?: string | null;
+  metadata?: any;
+}): {
+  deviceType: ScannedDeviceType;
+  portsCount: number;
+  uSize: number;
+  isRackable: boolean;
+} {
+  const combined =
+    `${d.hostname || ""} ${d.name || ""} ${d.model || ""} ${d.sysDescr || ""} ${d.manufacturer || ""}`.toLowerCase();
+  const rawType = (d.deviceType || "").toUpperCase();
+
+  // 1. Point d'accès Wi-Fi (AP)
+  if (
+    rawType === "ACCESS_POINT" ||
+    combined.includes("access point") ||
+    combined.includes("ap-") ||
+    combined.includes("arubaap") ||
+    combined.includes("uap") ||
+    combined.includes("aironet") ||
+    combined.includes("meraki mr") ||
+    combined.includes("wireless") ||
+    (d.hostname || "").toLowerCase().startsWith("ap-") ||
+    (d.hostname || "").toLowerCase().startsWith("ap_")
+  ) {
+    return {
+      deviceType: "ACCESS_POINT",
+      portsCount: d.metadata?.portsCount || 1,
+      uSize: 0,
+      isRackable: false,
+    };
+  }
+
+  // 2. Imprimante / Copieur
+  if (
+    rawType === "PRINTER" ||
+    combined.includes("printer") ||
+    combined.includes("copieur") ||
+    combined.includes("laserjet")
+  ) {
+    return {
+      deviceType: "PRINTER",
+      portsCount: d.metadata?.portsCount || 1,
+      uSize: 0,
+      isRackable: false,
+    };
+  }
+
+  // 3. Serveur
+  if (
+    rawType === "SERVER" ||
+    combined.includes("poweredge") ||
+    combined.includes("proliant") ||
+    combined.includes("esxi") ||
+    combined.includes("hyperviseur") ||
+    combined.includes("linux") ||
+    combined.includes("windows server")
+  ) {
+    const u = d.metadata?.uSize || (combined.includes("1u") || combined.includes("r6") ? 1 : 2);
+    return {
+      deviceType: "SERVER",
+      portsCount: d.metadata?.portsCount || 4,
+      uSize: u,
+      isRackable: true,
+    };
+  }
+
+  // 4. Firewall / Routeur
+  if (
+    rawType === "FIREWALL" ||
+    rawType === "ROUTER" ||
+    combined.includes("fortigate") ||
+    combined.includes("firewall") ||
+    combined.includes("firepower") ||
+    combined.includes("asa") ||
+    combined.includes("pfsense") ||
+    combined.includes("palo alto")
+  ) {
+    return {
+      deviceType: "FIREWALL",
+      portsCount: d.metadata?.portsCount || 10,
+      uSize: d.metadata?.uSize || 1,
+      isRackable: true,
+    };
+  }
+
+  // 5. Panneau de Brassage
+  if (rawType === "PATCH_PANEL" || combined.includes("panneau") || combined.includes("brassage")) {
+    return {
+      deviceType: "PATCH_PANEL",
+      portsCount: d.metadata?.portsCount || 24,
+      uSize: 1,
+      isRackable: true,
+    };
+  }
+
+  // 6. PDU
+  if (rawType === "PDU" || combined.includes("pdu") || combined.includes("onduleur")) {
+    return {
+      deviceType: "PDU",
+      portsCount: d.metadata?.portsCount || 8,
+      uSize: 1,
+      isRackable: true,
+    };
+  }
+
+  // 7. Switchs (détection ports et U)
+  let ports = d.metadata?.portsCount;
+  if (!ports) {
+    if (
+      combined.includes("48p") ||
+      combined.includes("48g") ||
+      combined.includes("-48-") ||
+      combined.includes(" 48") ||
+      combined.includes("48hp")
+    ) {
+      ports = 48;
+    } else if (
+      combined.includes("8p") ||
+      combined.includes("8g") ||
+      combined.includes("-8-") ||
+      combined.includes(" 8")
+    ) {
+      ports = 8;
+    } else if (
+      combined.includes("16p") ||
+      combined.includes("16g") ||
+      combined.includes("-16-") ||
+      combined.includes(" 16")
+    ) {
+      ports = 16;
+    } else if (combined.includes("52p") || combined.includes("52g") || combined.includes("-52-")) {
+      ports = 52;
+    } else {
+      ports = 24;
+    }
+  }
+
+  const u =
+    d.metadata?.uSize ||
+    (combined.includes("9400") || combined.includes("5406") || combined.includes("6500") ? 4 : 1);
+
+  return {
+    deviceType: "SWITCH",
+    portsCount: ports,
+    uSize: u,
+    isRackable: true,
+  };
+}
+
+export function isDeviceMatch(
+  item: {
+    id?: string | undefined;
+    name?: string | undefined;
+    ip?: string | undefined;
+    ipAddress?: string | undefined;
+    mac?: string | undefined;
+    macAddress?: string | undefined;
+  },
+  scanned: {
+    id: string;
+    name?: string | undefined;
+    ip?: string | undefined;
+    mac?: string | undefined;
+  }
+): boolean {
+  const itemId = item.id || "";
+  if (
+    itemId === scanned.id ||
+    itemId === `dev-${scanned.id}` ||
+    itemId.startsWith(`dev-${scanned.id}-`) ||
+    itemId === `disc-${scanned.id}` ||
+    (itemId.startsWith("disc-") && scanned.id.startsWith("disc-") && itemId === scanned.id)
+  ) {
+    return true;
+  }
+  const itemMac = (item.mac || item.macAddress || "").trim().toLowerCase();
+  const scannedMac = (scanned.mac || "").trim().toLowerCase();
+  if (
+    itemMac &&
+    scannedMac &&
+    itemMac !== "non applicable" &&
+    scannedMac !== "non applicable" &&
+    itemMac === scannedMac
+  ) {
+    return true;
+  }
+  const itemIp = (item.ip || item.ipAddress || "").trim();
+  const scannedIp = (scanned.ip || "").trim();
+  if (
+    itemIp &&
+    scannedIp &&
+    itemIp !== "passif" &&
+    scannedIp !== "passif" &&
+    itemIp === scannedIp
+  ) {
+    return true;
+  }
+  if (
+    item.name &&
+    scanned.name &&
+    item.name.trim().toLowerCase() === scanned.name.trim().toLowerCase()
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export const DEFAULT_SCANNED_DEVICES: ScannedDeviceItem[] = [
@@ -145,6 +376,30 @@ export const DEFAULT_SCANNED_DEVICES: ScannedDeviceItem[] = [
     deviceType: "SERVER",
     portsCount: 8,
     uSize: 2,
+    status: "ONLINE",
+  },
+  {
+    id: "scanned-ap-aruba-515",
+    name: "AP-ETAGE-1-ARUBA-515",
+    ip: "10.42.0.80",
+    mac: "20:4C:03:AA:BB:01",
+    model: "Aruba AP-515 Unified Campus AP",
+    manufacturer: "Aruba Networks / HPE",
+    deviceType: "ACCESS_POINT",
+    portsCount: 1,
+    uSize: 0,
+    status: "ONLINE",
+  },
+  {
+    id: "scanned-ap-unifi-u6pro",
+    name: "AP-HALL-UNIFI-U6-PRO",
+    ip: "10.42.0.81",
+    mac: "74:83:C2:99:11:44",
+    model: "Ubiquiti UniFi U6 Pro Access Point",
+    manufacturer: "Ubiquiti Networks",
+    deviceType: "ACCESS_POINT",
+    portsCount: 1,
+    uSize: 0,
     status: "ONLINE",
   },
   {
@@ -329,6 +584,7 @@ interface EquipmentPaletteProps {
   inventoryContent?: React.ReactNode | undefined;
   onOpenBatchSpawner?: (() => void) | undefined;
   racks?: RackDisplay[] | undefined;
+  nodes?: NodeDisplay[] | undefined;
   selectedRackId?: string | null | undefined;
   onInsertScannedDevice?:
     ((rackId: string, device: ScannedDeviceItem, slotU?: number) => void) | undefined;
@@ -352,6 +608,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   inventoryContent,
   onOpenBatchSpawner,
   racks = [],
+  nodes = [],
   selectedRackId,
   onInsertScannedDevice,
 }) => {
@@ -375,24 +632,27 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
     setCustomRackName(`BAIE-DSI-0${(racks?.length ?? 0) + 1}`);
   }, [racks?.length]);
 
-  // Récupération dynamique des équipements découverts par l'API de découverte
+  // Récupération dynamique des équipements découverts par l'API de découverte avec inférence de profil
   useEffect(() => {
     fetch("/api/discovery/status?allDevices=true")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.success && Array.isArray(data.devices) && data.devices.length > 0) {
-          const apiDevices: ScannedDeviceItem[] = data.devices.map((d: any) => ({
-            id: `disc-${d.id}`,
-            name: d.hostname || d.model || `Équipement ${d.ipAddress}`,
-            ip: d.ipAddress,
-            mac: d.macAddress,
-            model: d.model || d.sysDescr?.slice(0, 45) || "Switch Découvert",
-            manufacturer: d.manufacturer || "Constructeur Découvert",
-            deviceType: (d.deviceType as any) || "SWITCH",
-            portsCount: 24,
-            uSize: 1,
-            status: "ONLINE",
-          }));
+          const apiDevices: ScannedDeviceItem[] = data.devices.map((d: any) => {
+            const profile = inferScannedDeviceProfile(d);
+            return {
+              id: `disc-${d.id}`,
+              name: d.hostname || d.model || `Équipement ${d.ipAddress}`,
+              ip: d.ipAddress,
+              mac: d.macAddress,
+              model: d.model || d.sysDescr?.slice(0, 45) || `${profile.deviceType} Découvert`,
+              manufacturer: d.manufacturer || "Constructeur Découvert",
+              deviceType: profile.deviceType,
+              portsCount: profile.portsCount,
+              uSize: profile.uSize,
+              status: "ONLINE",
+            };
+          });
           const existingIps = new Set(apiDevices.map((d) => d.ip));
           const complementary = DEFAULT_SCANNED_DEVICES.filter((d) => !existingIps.has(d.ip));
           setScannedDevices([...apiDevices, ...complementary]);
@@ -408,8 +668,47 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
     return racks.find((r) => r.id === selectedRackId) || null;
   }, [racks, selectedRackId]);
 
+  // Détection si un équipement est déjà placé (dans une baie ou sur le plan)
+  const getDevicePlacement = (
+    dev: ScannedDeviceItem
+  ): { isPlaced: boolean; locationLabel: string; rackId?: string; slotU?: number } | null => {
+    if (racks && racks.length > 0) {
+      for (const r of racks) {
+        const found = (r.devices || []).find((d) => isDeviceMatch(d, dev));
+        if (found) {
+          return {
+            isPlaced: true,
+            locationLabel: `📍 Placé : ${r.name} (U${found.slotU})`,
+            rackId: r.id,
+            slotU: found.slotU,
+          };
+        }
+      }
+    }
+    if (nodes && nodes.length > 0) {
+      for (const n of nodes) {
+        if (isDeviceMatch(n, dev)) {
+          return {
+            isPlaced: true,
+            locationLabel: `📍 Placé sur plan`,
+          };
+        }
+      }
+    }
+    return null;
+  };
+
   const filteredScannedDevices = useMemo(() => {
     return scannedDevices.filter((dev) => {
+      // Filtrer les équipements non rackables (bornes Wi-Fi, imprimantes, postes)
+      if (
+        dev.uSize === 0 ||
+        dev.deviceType === "ACCESS_POINT" ||
+        dev.deviceType === "PRINTER" ||
+        dev.deviceType === "WORKSTATION"
+      ) {
+        return false;
+      }
       if (scannedFilterType === "SWITCHS" && dev.deviceType !== "SWITCH") return false;
       if (scannedFilterType === "FIREWALLS" && dev.deviceType !== "FIREWALL") return false;
       if (scannedFilterType === "SERVEURS" && dev.deviceType !== "SERVER") return false;
@@ -432,6 +731,12 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
       return true;
     });
   }, [scannedDevices, scannedFilterType, scannedSearchQuery]);
+
+  const iotScannedDevices = useMemo(() => {
+    return scannedDevices.filter(
+      (dev) => dev.deviceType === "ACCESS_POINT" || dev.deviceType === "PRINTER" || dev.uSize === 0
+    );
+  }, [scannedDevices]);
 
   const renderIcon = (iconName: string, className: string = "w-4 h-4") => {
     switch (iconName) {
@@ -669,6 +974,45 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
     );
     e.dataTransfer.effectAllowed = "copy";
     setupScannedDeviceDragPreview(e, dev);
+  };
+
+  const handleScannedIotDeviceDragStart = (e: React.DragEvent, dev: ScannedDeviceItem) => {
+    e.dataTransfer.setData(
+      "application/json",
+      JSON.stringify({
+        type: "SCANNED_IOT_DEVICE",
+        device: dev,
+      })
+    );
+    e.dataTransfer.effectAllowed = "copy";
+    const ghost = document.createElement("div");
+    ghost.style.position = "absolute";
+    ghost.style.top = "-1000px";
+    ghost.style.left = "-1000px";
+    ghost.style.zIndex = "99999";
+    ghost.style.pointerEvents = "none";
+    ghost.style.display = "flex";
+    ghost.style.alignItems = "center";
+    ghost.style.gap = "8px";
+    ghost.style.padding = "6px 12px";
+    ghost.style.backgroundColor = "#090d16";
+    ghost.style.border = "2px solid #f59e0b";
+    ghost.style.borderRadius = "6px";
+    ghost.style.boxShadow = "0 10px 25px rgba(0,0,0,0.8), 0 0 15px rgba(245, 158, 11, 0.4)";
+    ghost.innerHTML = `
+      <span style="font-size:16px;">${dev.deviceType === "ACCESS_POINT" ? "📶" : "🖨️"}</span>
+      <div style="display:flex;flex-direction:column;">
+        <span style="font-size:10px;font-weight:bold;color:#f8fafc;font-family:monospace;white-space:nowrap;">${dev.name}</span>
+        <span style="font-size:8px;color:#fbbf24;font-family:monospace;">${dev.ip} • ${dev.manufacturer || dev.model}</span>
+      </div>
+    `;
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 40, 20);
+    setTimeout(() => {
+      if (document.body.contains(ghost)) {
+        document.body.removeChild(ghost);
+      }
+    }, 0);
   };
 
   return (
@@ -1007,6 +1351,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                       {/* Liste des cartes d'équipements scannés */}
                       <div className="space-y-1.5">
                         {filteredScannedDevices.map((dev: ScannedDeviceItem) => {
+                          const placement = getDevicePlacement(dev);
                           const isSwitch = dev.deviceType === "SWITCH";
                           const isFw = dev.deviceType === "FIREWALL";
                           const isSrv = dev.deviceType === "SERVER";
@@ -1056,11 +1401,18 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                                     </div>
                                   </div>
                                 </div>
-                                <span
-                                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${brandColor}`}
-                                >
-                                  {dev.uSize ?? 1}U • {dev.portsCount}P
-                                </span>
+                                <div className="flex flex-col items-end gap-1">
+                                  <span
+                                    className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${brandColor}`}
+                                  >
+                                    {dev.uSize ?? 1}U • {dev.portsCount}P
+                                  </span>
+                                  {placement && (
+                                    <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                      Placé
+                                    </span>
+                                  )}
+                                </div>
                               </div>
 
                               <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-400 bg-slate-950 p-1.5 rounded border border-slate-850">
@@ -1068,8 +1420,27 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                                 <div className="truncate">MAC : {dev.mac}</div>
                               </div>
 
-                              {/* Actions rapides : Insérer dans la baie active si sélectionnée, ou glisser */}
-                              {selectedRack ? (
+                              {/* Statut de placement & Actions */}
+                              {placement ? (
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center justify-between text-[10px] bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 px-2 py-1 rounded">
+                                    <span className="font-semibold">{placement.locationLabel}</span>
+                                    <span className="text-[9px] text-emerald-400/80">
+                                      Glisser pour replacer
+                                    </span>
+                                  </div>
+                                  {selectedRack && selectedRack.id !== placement.rackId && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onInsertScannedDevice?.(selectedRack.id, dev)}
+                                      className="w-full py-1 px-2 bg-purple-600/40 hover:bg-purple-600 text-purple-200 hover:text-white rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition border border-purple-500/40"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>Déplacer vers {selectedRack.name}</span>
+                                    </button>
+                                  )}
+                                </div>
+                              ) : selectedRack ? (
                                 <button
                                   type="button"
                                   onClick={() => onInsertScannedDevice?.(selectedRack.id, dev)}
@@ -1121,16 +1492,99 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
 
                     {/* Bannière d'introduction sous-menu IOT */}
                     {selectedCategory === "IOT" && (
-                      <div className="p-2.5 bg-amber-950/30 border border-amber-500/30 rounded-lg space-y-1 mb-2">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
-                          <Wifi className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Objets Connectés & Terminaux d&apos;Étage</span>
+                      <>
+                        <div className="p-2.5 bg-amber-950/30 border border-amber-500/30 rounded-lg space-y-1 mb-2">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                            <Wifi className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Objets Connectés & Terminaux d&apos;Étage</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 leading-tight">
+                            Points d&apos;accès Wi-Fi 6 plafonniers, stations d&apos;impression et
+                            caméras de surveillance PoE.
+                          </p>
                         </div>
-                        <p className="text-[10px] text-slate-400 leading-tight">
-                          Points d&apos;accès Wi-Fi 6 plafonniers, stations d&apos;impression et
-                          caméras de surveillance PoE.
-                        </p>
-                      </div>
+
+                        {/* Section Équipements IOT Découverts par scan */}
+                        {iotScannedDevices.length > 0 && (
+                          <div className="space-y-2 mb-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                                <Wifi className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Bornes Wi-Fi & IOT Découverts</span>
+                              </div>
+                              <span className="text-[9px] font-mono bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                {iotScannedDevices.length} dispos
+                              </span>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              {iotScannedDevices.map((dev) => {
+                                const placement = getDevicePlacement(dev);
+                                const isAp = dev.deviceType === "ACCESS_POINT";
+
+                                return (
+                                  <div
+                                    key={dev.id}
+                                    draggable={true}
+                                    onDragStart={(e) => handleScannedIotDeviceDragStart(e, dev)}
+                                    className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-lg transition flex flex-col gap-1.5 group cursor-grab active:cursor-grabbing hover:shadow-md"
+                                  >
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition flex-shrink-0" />
+                                        <div className="w-7 h-7 rounded-md bg-slate-850 flex items-center justify-center text-slate-300 group-hover:text-amber-400 transition">
+                                          <span className="text-sm">{isAp ? "📶" : "🖨️"}</span>
+                                        </div>
+                                        <div>
+                                          <div className="text-xs font-semibold text-slate-200 group-hover:text-white">
+                                            {dev.name}
+                                          </div>
+                                          <div className="text-[10px] text-slate-400 font-sans">
+                                            {dev.model}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col items-end gap-1">
+                                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border bg-amber-500/20 text-amber-300 border-amber-500/30">
+                                          {isAp ? "Wi-Fi AP" : "Imprimante"}
+                                        </span>
+                                        {placement && (
+                                          <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                            Placé
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-400 bg-slate-950 p-1.5 rounded border border-slate-850">
+                                      <div>IP : {dev.ip}</div>
+                                      <div className="truncate">MAC : {dev.mac}</div>
+                                    </div>
+
+                                    {placement ? (
+                                      <div className="flex items-center justify-between text-[10px] bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 px-2 py-1 rounded">
+                                        <span className="font-semibold">
+                                          {placement.locationLabel}
+                                        </span>
+                                        <span className="text-[9px] text-emerald-400/80">
+                                          Glisser pour replacer
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="text-[9px] text-slate-500 flex items-center justify-between font-mono pt-0.5">
+                                        <span>🟢 Découvert</span>
+                                        <span className="text-amber-400 font-semibold group-hover:translate-x-0.5 transition">
+                                          Glisser sur le plan →
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* Liste des équipements du catalogue */}

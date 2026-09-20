@@ -92,6 +92,8 @@ export interface DiscoveredSwitch {
   sysOid: string;
   vendor: string;
   model: string;
+  deviceType?: DiscoveredDeviceType;
+  uSize?: number;
   ports: SwitchPortInfo[];
   lldpNeighbors: LldpNeighbor[];
   cdpNeighbors: CdpNeighbor[];

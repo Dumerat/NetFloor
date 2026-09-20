@@ -4,7 +4,12 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
 import { CircuitInspector } from "@/components/ui/CircuitInspector";
-import { EquipmentPalette, PaletteItem, ScannedDeviceItem } from "@/components/ui/EquipmentPalette";
+import {
+  EquipmentPalette,
+  PaletteItem,
+  ScannedDeviceItem,
+  isDeviceMatch,
+} from "@/components/ui/EquipmentPalette";
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { SettingsModal } from "@/components/ui/SettingsModal";
 import { NetworkTopologyPanel } from "@/components/ui/NetworkTopologyPanel";
@@ -1768,17 +1773,31 @@ export default function NetFloorApp() {
   );
 
   // Insertion d'un équipement scanné directement dans une baie avec vérification de disponibilité de U
+  // et relocalisation automatique si déjà présent dans une baie (sans duplication)
   const handleInsertScannedDeviceIntoRack = useCallback(
     (rackId: string, dev: ScannedDeviceItem, targetSlotU?: number) => {
       const rack = racks.find((r) => r.id === rackId);
       if (!rack) return;
 
+      // 1. Chercher si l'équipement est déjà présent dans une baie existante
+      let previousRackId: string | null = null;
+      let existingDeviceItem: RackDeviceItem | null = null;
+      for (const r of racks) {
+        const found = (r.devices || []).find((d) => isDeviceMatch(d, dev));
+        if (found) {
+          previousRackId = r.id;
+          existingDeviceItem = found;
+          break;
+        }
+      }
+
+      // Appareils déjà dans la baie cible, en excluant l'équipement en cours de déplacement
+      const targetRackDevices = (rack.devices ?? []).filter((d) => !isDeviceMatch(d, dev));
       const totalU = rack.uHeight || 42;
-      const existingDevices = rack.devices ?? [];
       let slotU = targetSlotU ? Math.max(1, Math.min(totalU, targetSlotU)) : 24;
 
       const occupiedSlots = new Set(
-        existingDevices.flatMap((d) => {
+        targetRackDevices.flatMap((d) => {
           const uSize = d.uSize ?? 1;
           return Array.from({ length: uSize }, (_, i) => d.slotU + i);
         })
@@ -1812,15 +1831,42 @@ export default function NetFloorApp() {
         }
       }
 
-      const newDeviceItem = convertScannedToRackDevice(dev, slotU);
-      const updatedDevices = [...existingDevices, newDeviceItem];
+      const deviceToAdd: RackDeviceItem = existingDeviceItem
+        ? { ...existingDeviceItem, slotU, uSize: dev.uSize ?? existingDeviceItem.uSize }
+        : convertScannedToRackDevice(dev, slotU);
 
       setRacks((prev) =>
-        prev.map((r) => (r.id === rackId ? { ...r, devices: updatedDevices } : r))
+        prev.map((r) => {
+          if (r.id === rackId) {
+            const cleaned = (r.devices || []).filter((d) => !isDeviceMatch(d, dev));
+            return { ...r, devices: [...cleaned, deviceToAdd] };
+          }
+          if (previousRackId && r.id === previousRackId) {
+            return {
+              ...r,
+              devices: (r.devices || []).filter((d) => !isDeviceMatch(d, dev)),
+            };
+          }
+          return r;
+        })
       );
+
       setNodes((prev) =>
-        prev.map((n) => (n.id === rackId ? { ...n, devices: updatedDevices } : n))
+        prev.map((n) => {
+          if (n.id === rackId) {
+            const cleaned = (n.devices || []).filter((d) => !isDeviceMatch(d, dev));
+            return { ...n, devices: [...cleaned, deviceToAdd] };
+          }
+          if (previousRackId && n.id === previousRackId) {
+            return {
+              ...n,
+              devices: (n.devices || []).filter((d) => !isDeviceMatch(d, dev)),
+            };
+          }
+          return n;
+        })
       );
+
       setSelectedNodeId(rackId);
     },
     [racks, convertScannedToRackDevice]
@@ -2848,6 +2894,7 @@ export default function NetFloorApp() {
             />
           }
           racks={visibleRacks}
+          nodes={visibleNodes}
           selectedRackId={selectedNode?.type === "PATCH_PANEL" ? selectedNode.id : null}
           onInsertScannedDevice={handleInsertScannedDeviceIntoRack}
         />
@@ -3038,6 +3085,18 @@ export default function NetFloorApp() {
                   handleInsertScannedDeviceIntoRack(hitRack.id, scannedDev, targetSlotU);
                 } else {
                   // Dépôt sur l'espace vide du plan : création automatique d'une Baie 42U contenant cet équipement
+                  // Vérifier si l'équipement était déjà présent dans une autre baie pour le relocaliser
+                  let previousRackId: string | null = null;
+                  let existingDevItem: RackDeviceItem | null = null;
+                  for (const r of racks) {
+                    const found = (r.devices || []).find((d) => isDeviceMatch(d, scannedDev));
+                    if (found) {
+                      previousRackId = r.id;
+                      existingDevItem = found;
+                      break;
+                    }
+                  }
+
                   const newRackId = `rack-${Date.now()}`;
                   const rackCount = racks.length + 1;
                   const rackWidth = 800;
@@ -3051,7 +3110,13 @@ export default function NetFloorApp() {
                   ).point;
 
                   const slotU = 24;
-                  const initialDevice = convertScannedToRackDevice(scannedDev, slotU);
+                  const initialDevice: RackDeviceItem = existingDevItem
+                    ? {
+                        ...existingDevItem,
+                        slotU,
+                        uSize: scannedDev.uSize ?? existingDevItem.uSize,
+                      }
+                    : convertScannedToRackDevice(scannedDev, slotU);
 
                   const newRack: RackDisplay = {
                     id: newRackId,
@@ -3082,9 +3147,90 @@ export default function NetFloorApp() {
                     siteId: newRack.siteId,
                   };
 
-                  setRacks((prev) => [...prev, newRack]);
-                  setNodes((prev) => [...prev, newRackNode]);
+                  setRacks((prev) => {
+                    const cleaned = previousRackId
+                      ? prev.map((r) =>
+                          r.id === previousRackId
+                            ? {
+                                ...r,
+                                devices: (r.devices || []).filter(
+                                  (d) => !isDeviceMatch(d, scannedDev)
+                                ),
+                              }
+                            : r
+                        )
+                      : prev;
+                    return [...cleaned, newRack];
+                  });
+
+                  setNodes((prev) => {
+                    const cleaned = previousRackId
+                      ? prev.map((n) =>
+                          n.id === previousRackId
+                            ? {
+                                ...n,
+                                devices: (n.devices || []).filter(
+                                  (d) => !isDeviceMatch(d, scannedDev)
+                                ),
+                              }
+                            : n
+                        )
+                      : prev;
+                    return [...cleaned, newRackNode];
+                  });
                   setSelectedNodeId(newRackId);
+                }
+                return;
+              }
+
+              // 3. Cas du glisser-déposer d'un équipement IOT/AP scanné (Borne Wi-Fi, Imprimante, etc.)
+              if (parsed && parsed.type === "SCANNED_IOT_DEVICE" && parsed.device) {
+                const scannedDev = parsed.device as ScannedDeviceItem;
+                const isAp = scannedDev.deviceType === "ACCESS_POINT";
+                const existingNode = nodes.find((n) => isDeviceMatch(n, scannedDev));
+                const widthMm = isAp ? 350 : 800;
+                const heightMm = isAp ? 350 : 700;
+                const snapped = snapToGrid(
+                  {
+                    x: Math.round(worldPos.x - widthMm / 2),
+                    y: Math.round(worldPos.y - heightMm / 2),
+                  },
+                  useCameraStore.getState().gridConfig
+                ).point;
+
+                if (existingNode) {
+                  // Déplacement / relocalisation sans duplication
+                  setNodes((prev) =>
+                    prev.map((n) =>
+                      n.id === existingNode.id ? { ...n, xMm: snapped.x, yMm: snapped.y } : n
+                    )
+                  );
+                  setSelectedNodeId(existingNode.id);
+                } else {
+                  // Création du noeud AP ou IOT sur le plan
+                  const newNodeId = `${isAp ? "node-ap" : "node-iot"}-${Date.now()}`;
+                  const newNode: NodeDisplay = {
+                    id: newNodeId,
+                    name: scannedDev.name,
+                    type: "WALL_OUTLET",
+                    subType: isAp ? "WIFI_AP" : "PRINTER_STATION",
+                    outletRole: isAp ? "WIFI" : "PRINTER",
+                    xMm: snapped.x,
+                    yMm: snapped.y,
+                    widthMm,
+                    heightMm,
+                    siteId: activeSiteId || DEFAULT_SITE_ID,
+                    ipAddress: scannedDev.ip !== "Passif" ? scannedDev.ip : undefined,
+                    macAddress: scannedDev.mac !== "Non applicable" ? scannedDev.mac : undefined,
+                    description:
+                      `${scannedDev.manufacturer || ""} ${scannedDev.model || ""}`.trim(),
+                    vlanId: isAp ? 50 : 40,
+                    poeMode: isAp ? "POE_PLUS" : "NONE",
+                    pingStatus: "ONLINE",
+                    customEmote: isAp ? "📶" : "🖨️",
+                  };
+                  setNodes((prev) => [...prev, newNode]);
+                  setSelectedNodeId(newNodeId);
                 }
                 return;
               }

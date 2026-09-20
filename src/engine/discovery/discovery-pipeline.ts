@@ -275,8 +275,10 @@ export async function runDiscoveryPipeline(
     // 1. Sauvegarder les équipements découverts
     const deviceIdMap = new Map<string, string>();
 
-    // Commutateurs
+    // Commutateurs & Équipements administrables
     for (const sw of discoveredSwitches) {
+      const isSwitchOrRouter =
+        !sw.deviceType || sw.deviceType === "SWITCH" || sw.deviceType === "ROUTER";
       const [inserted] = await db
         .insert(discoveredDevices)
         .values({
@@ -286,10 +288,13 @@ export async function runDiscoveryPipeline(
           hostname: sw.sysName,
           manufacturer: sw.vendor,
           model: sw.model,
-          deviceType: "SWITCH",
+          deviceType: sw.deviceType || "SWITCH",
           sysDescr: sw.sysDescr,
-          isManagedSwitch: true,
-          metadata: { portsCount: sw.ports.length },
+          isManagedSwitch: isSwitchOrRouter,
+          metadata: {
+            portsCount: sw.ports.length,
+            uSize: sw.uSize ?? (sw.deviceType === "ACCESS_POINT" ? 0 : 1),
+          },
         })
         .returning();
 
@@ -301,7 +306,9 @@ export async function runDiscoveryPipeline(
     // Terminaux et hôtes
     for (const h of updatedHosts) {
       if (!h.mac) continue;
-      const { vendor } = lookupOui(h.mac);
+      const { vendor, defaultType } = lookupOui(h.mac);
+      const resolvedType = h.deviceType || defaultType || "UNKNOWN";
+      const isAp = resolvedType === "ACCESS_POINT";
       const [inserted] = await db
         .insert(discoveredDevices)
         .values({
@@ -310,8 +317,13 @@ export async function runDiscoveryPipeline(
           macAddress: h.mac,
           hostname: h.hostname,
           manufacturer: h.vendor || vendor,
-          deviceType: h.deviceType || "UNKNOWN",
-          metadata: { openPorts: h.openPorts, latencyMs: h.responseTimeMs },
+          deviceType: resolvedType,
+          metadata: {
+            openPorts: h.openPorts,
+            latencyMs: h.responseTimeMs,
+            portsCount: isAp ? 1 : 1,
+            uSize: 0,
+          },
         })
         .onConflictDoNothing()
         .returning();
