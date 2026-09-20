@@ -323,6 +323,17 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [isEditingRackName, setIsEditingRackName] = useState(false);
   const [tempRackName, setTempRackName] = useState("");
 
+  // État pour le renommage du mobilier / bureau
+  const [isEditingDeskName, setIsEditingDeskName] = useState(false);
+  const [tempDeskName, setTempDeskName] = useState("");
+
+  useEffect(() => {
+    if (selectedNode?.type === "DESK") {
+      setTempDeskName(selectedNode.name);
+      setIsEditingDeskName(false);
+    }
+  }, [selectedNode?.id, selectedNode?.name, selectedNode?.type]);
+
   // Sécuriser l'index du port actif pour le slot multi-ports
   const safeStackedPortIdx = useMemo(() => {
     if (!selectedNode?.stackedPorts || selectedNode.stackedPorts.length === 0) return 0;
@@ -488,9 +499,10 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     if (!selectedNode) return;
     const labels = getDefaultSeatLabels(selectedNode.subType);
     const updatedSeats: DeskSeatOccupant[] = [...currentSeats];
+    const existingLabel = currentSeats[seatIdx]?.seatLabel || labels[seatIdx] || `Place ${seatIdx + 1}`;
     updatedSeats[seatIdx] = {
       seatIndex: seatIdx,
-      seatLabel: labels[seatIdx] ?? `Place ${seatIdx + 1}`,
+      seatLabel: existingLabel,
       userId: user.id,
       fullName: user.fullName,
       department: user.department,
@@ -532,9 +544,10 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     if (!selectedNode) return;
     const labels = getDefaultSeatLabels(selectedNode.subType);
     const updatedSeats: DeskSeatOccupant[] = [...currentSeats];
+    const existingLabel = currentSeats[seatIdx]?.seatLabel || labels[seatIdx] || `Place ${seatIdx + 1}`;
     updatedSeats[seatIdx] = {
       seatIndex: seatIdx,
-      seatLabel: labels[seatIdx] ?? `Place ${seatIdx + 1}`,
+      seatLabel: existingLabel,
       userId: undefined,
       fullName: undefined,
       department: undefined,
@@ -567,6 +580,22 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       } else if (n.attachedSeatIndex === seatIdx) {
         onUpdateNodeProperties?.(n.id, { assignedPerson: undefined });
       }
+    });
+  };
+
+  // Modification personnalisée du libellé d'une place
+  const handleUpdateSeatLabel = (seatIdx: number, newLabel: string) => {
+    if (!selectedNode) return;
+    const labels = getDefaultSeatLabels(selectedNode.subType);
+    const updatedSeats: DeskSeatOccupant[] = [...currentSeats];
+    const currentSeat = updatedSeats[seatIdx] || { seatIndex: seatIdx };
+    updatedSeats[seatIdx] = {
+      ...currentSeat,
+      seatIndex: seatIdx,
+      seatLabel: newLabel || labels[seatIdx] || `Place ${seatIdx + 1}`,
+    };
+    onUpdateNodeProperties?.(selectedNode.id, {
+      seats: updatedSeats,
     });
   };
 
@@ -4812,18 +4841,70 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {/* Carte d'identité du bureau */}
           <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5 truncate">
-                <Monitor className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="truncate">{selectedNode.name}</span>
-              </span>
-              <button
-                onClick={() => setInspectorMode("EDIT")}
-                className="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-semibold transition flex items-center gap-1 flex-shrink-0"
-              >
-                ✏️ Modifier
-              </button>
-            </div>
+            {isEditingDeskName ? (
+              <div className="flex items-center gap-1.5 w-full">
+                <Monitor className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={tempDeskName}
+                  onChange={(e) => setTempDeskName(e.target.value)}
+                  className="flex-1 px-2 py-0.5 bg-slate-950 border border-emerald-500 rounded text-slate-100 text-xs font-semibold focus:outline-none"
+                  autoFocus
+                  placeholder="Nom du bureau..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && tempDeskName.trim()) {
+                      onUpdateNodeProperties?.(selectedNode.id, { name: tempDeskName.trim() });
+                      setIsEditingDeskName(false);
+                    }
+                    if (e.key === "Escape") setIsEditingDeskName(false);
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (tempDeskName.trim()) {
+                      onUpdateNodeProperties?.(selectedNode.id, { name: tempDeskName.trim() });
+                    }
+                    setIsEditingDeskName(false);
+                  }}
+                  className="p-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded transition"
+                  title="Valider le renommage"
+                >
+                  <Check className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => setIsEditingDeskName(false)}
+                  className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded transition"
+                  title="Annuler"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 truncate min-w-0">
+                  <Monitor className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-slate-200 truncate">
+                    {selectedNode.name}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setTempDeskName(selectedNode.name);
+                      setIsEditingDeskName(true);
+                    }}
+                    className="p-1 text-slate-400 hover:text-emerald-300 transition"
+                    title="Renommer ce bureau"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => setInspectorMode("EDIT")}
+                  className="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-semibold transition flex items-center gap-1 flex-shrink-0"
+                >
+                  ✏️ Modifier
+                </button>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 border-t border-slate-800">
               <div className="bg-slate-950 p-2 rounded border border-slate-850">
@@ -5131,17 +5212,26 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       ) : (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* En-tête Bureau */}
-          <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-100 flex items-center gap-1.5">
-                <Monitor className="w-4 h-4 text-emerald-400" />
-                {selectedNode.name}
-              </span>
-              <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">
+          <div className="border-b border-slate-800 pb-3 mb-3 flex-shrink-0 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <Monitor className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={selectedNode.name}
+                  onChange={(e) =>
+                    onUpdateNodeProperties?.(selectedNode.id, { name: e.target.value })
+                  }
+                  className="flex-1 px-2.5 py-1 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded text-slate-100 text-xs font-semibold focus:outline-none transition"
+                  placeholder="Nom du mobilier / bureau..."
+                  title="Renommer le bureau"
+                />
+              </div>
+              <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 flex-shrink-0">
                 MOBILIER RH
               </span>
             </div>
-            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between font-mono">
+            <div className="text-[11px] text-slate-400 flex items-center justify-between font-mono">
               <span>
                 Dimensions : {(currentWidth / 1000).toFixed(2)} ×{" "}
                 {(currentHeight / 1000).toFixed(2)} m
@@ -5227,15 +5317,22 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                               : "bg-slate-950/50 border-dashed border-slate-800"
                           }`}
                         >
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1.5">
-                              <span className="w-4 h-4 rounded-full bg-blue-600/30 text-blue-300 flex items-center justify-center text-[9px] font-mono">
+                          <div className="flex items-center justify-between mb-1.5 gap-2">
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                              <span className="w-4 h-4 rounded-full bg-blue-600/30 text-blue-300 flex items-center justify-center text-[9px] font-mono flex-shrink-0">
                                 {idx + 1}
                               </span>
-                              {seat.seatLabel ?? `Place ${idx + 1}`}
-                            </span>
+                              <input
+                                type="text"
+                                value={seat.seatLabel ?? `Place ${idx + 1}`}
+                                onChange={(e) => handleUpdateSeatLabel(idx, e.target.value)}
+                                className="bg-transparent hover:bg-slate-900 focus:bg-slate-950 border border-transparent hover:border-slate-800 focus:border-blue-500 rounded px-1.5 py-0.5 text-[10px] font-bold text-slate-200 focus:text-white focus:outline-none transition flex-1 min-w-0"
+                                title="Modifier le libellé de cette place"
+                                placeholder={`Place ${idx + 1}`}
+                              />
+                            </div>
                             <span
-                              className={`text-[8px] font-mono px-1.5 py-0.5 rounded border ${
+                              className={`text-[8px] font-mono px-1.5 py-0.5 rounded border flex-shrink-0 ${
                                 isOccupied
                                   ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
                                   : "bg-slate-800 text-slate-500 border-slate-700"

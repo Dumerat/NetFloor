@@ -1180,11 +1180,8 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
           const isBenchQuad = desk.subType === "BENCH_QUAD";
           const isBenchDouble = desk.subType === "BENCH_DOUBLE";
 
-          // Intitulé court : "Bureau {N}"
-          const matchNum = desk.name.match(/\d+/);
-          const shortTitle = matchNum
-            ? `Bureau ${matchNum[0]}`
-            : desk.name.replace(/^Poste\s+/i, "Bureau ");
+          // Intitulé affiché : respecte fidèlement le nom personnalisé du bureau
+          const shortTitle = desk.name.replace(/^Poste de travail\s*/i, "Bureau ");
 
           // Récupération sécurisée d'un occupant de place
           const getSeat = (idx: number): DeskSeatOccupant | undefined => {
@@ -1968,7 +1965,13 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                               x={-bW / 2 + 15}
                               y={-bH / 2 + 20}
                               width={bW - 30}
-                              text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"}
+                              text={
+                                seat?.fullName
+                                  ? `👤 ${seat.fullName}`
+                                  : seat?.seatLabel
+                                    ? `👤 ${seat.seatLabel}`
+                                    : "👤 Poste Libre"
+                              }
                               fontSize={nameFontSize}
                               fontFamily="sans-serif"
                               fontStyle="bold"
@@ -1981,7 +1984,15 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                               x={-bW / 2 + 15}
                               y={-bH / 2 + 105}
                               width={bW - 30}
-                              text={seat?.department ?? "Disponible / Flex"}
+                              text={
+                                seat?.fullName
+                                  ? seat.seatLabel
+                                    ? `${seat.seatLabel} • ${seat.department || "Actif"}`
+                                    : (seat.department ?? "Actif")
+                                  : seat?.seatLabel
+                                    ? "Place disponible"
+                                    : (seat?.department ?? "Disponible / Flex")
+                              }
                               fontSize={54}
                               fontFamily="sans-serif"
                               fill={isOccupied ? "#38bdf8" : "#64748b"}
@@ -2061,7 +2072,13 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                               x={-bW / 2 + 15}
                               y={-bH / 2 + 20}
                               width={bW - 30}
-                              text={seat?.fullName ? `👤 ${seat.fullName}` : "👤 Poste Libre"}
+                              text={
+                                seat?.fullName
+                                  ? `👤 ${seat.fullName}`
+                                  : seat?.seatLabel
+                                    ? `👤 ${seat.seatLabel}`
+                                    : "👤 Poste Libre"
+                              }
                               fontSize={nameFontSize}
                               fontFamily="sans-serif"
                               fontStyle="bold"
@@ -2074,7 +2091,15 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                               x={-bW / 2 + 15}
                               y={-bH / 2 + 105}
                               width={bW - 30}
-                              text={seat?.department ?? "Disponible / Flex"}
+                              text={
+                                seat?.fullName
+                                  ? seat.seatLabel
+                                    ? `${seat.seatLabel} • ${seat.department || "Actif"}`
+                                    : (seat.department ?? "Actif")
+                                  : seat?.seatLabel
+                                    ? "Place disponible"
+                                    : (seat?.department ?? "Disponible / Flex")
+                              }
                               fontSize={54}
                               fontFamily="sans-serif"
                               fill={isOccupied ? "#38bdf8" : "#64748b"}
