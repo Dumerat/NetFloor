@@ -112,6 +112,90 @@ export async function getDb(): Promise<Database> {
       await pgliteClient
         .exec("ALTER TABLE nodes ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;")
         .catch(() => {});
+
+      // Initialisation défensive des tables de découverte réseau (Discovery Pipeline)
+      await pgliteClient
+        .exec(
+          `
+          DO $$ BEGIN
+            CREATE TYPE "public"."discovery_job_status" AS ENUM('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED');
+          EXCEPTION WHEN duplicate_object THEN null; END $$;
+          DO $$ BEGIN
+            CREATE TYPE "public"."discovered_device_type" AS ENUM('SWITCH', 'ROUTER', 'ACCESS_POINT', 'WORKSTATION', 'PHONE_VOIP', 'PRINTER', 'SERVER', 'UNMANAGED_SWITCH', 'UNKNOWN');
+          EXCEPTION WHEN duplicate_object THEN null; END $$;
+          DO $$ BEGIN
+            CREATE TYPE "public"."connection_type" AS ENUM('LLDP_BACKBONE', 'CDP_BACKBONE', 'FDB_ACCESS', 'VOIP_CASCADED', 'WIFI_CLIENT', 'CLOUD_MANAGED', 'MANUAL_OVERRIDE');
+          EXCEPTION WHEN duplicate_object THEN null; END $$;
+          DO $$ BEGIN
+            CREATE TYPE "public"."drift_status" AS ENUM('SYNCED', 'NEW_DEVICE', 'PORT_MIGRATED', 'NEW_CONNECTION', 'DEVICE_OFFLINE', 'IP_CONFLICT');
+          EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+          CREATE TABLE IF NOT EXISTS "discovery_jobs" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+            "subnet_cidr" varchar(50) NOT NULL,
+            "snmp_version" varchar(10) DEFAULT 'v2c' NOT NULL,
+            "status" "discovery_job_status" DEFAULT 'PENDING' NOT NULL,
+            "current_pass" integer DEFAULT 1 NOT NULL,
+            "total_passes" integer DEFAULT 4 NOT NULL,
+            "devices_discovered_count" integer DEFAULT 0 NOT NULL,
+            "connections_discovered_count" integer DEFAULT 0 NOT NULL,
+            "diffs_count" integer DEFAULT 0 NOT NULL,
+            "started_at" timestamp with time zone DEFAULT now() NOT NULL,
+            "completed_at" timestamp with time zone,
+            "error" varchar(500),
+            "options" jsonb DEFAULT '{}'::jsonb
+          );
+
+          CREATE TABLE IF NOT EXISTS "discovered_devices" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+            "job_id" uuid NOT NULL REFERENCES "discovery_jobs"("id") ON DELETE CASCADE,
+            "ip_address" varchar(45) NOT NULL,
+            "mac_address" varchar(17) NOT NULL,
+            "hostname" varchar(150),
+            "manufacturer" varchar(100),
+            "model" varchar(100),
+            "device_type" "discovered_device_type" DEFAULT 'UNKNOWN' NOT NULL,
+            "sys_descr" varchar(500),
+            "os_version" varchar(100),
+            "vlan_id" integer,
+            "is_managed_switch" boolean DEFAULT false NOT NULL,
+            "matched_node_id" uuid REFERENCES "nodes"("id") ON DELETE SET NULL,
+            "is_manual_override" boolean DEFAULT false NOT NULL,
+            "is_locked" boolean DEFAULT false NOT NULL,
+            "last_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
+            "metadata" jsonb DEFAULT '{}'::jsonb
+          );
+
+          CREATE TABLE IF NOT EXISTS "discovered_connections" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+            "job_id" uuid NOT NULL REFERENCES "discovery_jobs"("id") ON DELETE CASCADE,
+            "source_device_id" uuid NOT NULL REFERENCES "discovered_devices"("id") ON DELETE CASCADE,
+            "source_port_name" varchar(50) NOT NULL,
+            "target_device_id" uuid NOT NULL REFERENCES "discovered_devices"("id") ON DELETE CASCADE,
+            "target_port_name" varchar(50),
+            "connection_type" "connection_type" NOT NULL,
+            "vlan_id" integer,
+            "confidence_score" integer DEFAULT 100 NOT NULL,
+            "drift_status" "drift_status" DEFAULT 'SYNCED' NOT NULL,
+            "drift_details" varchar(300),
+            "matched_cable_id" uuid REFERENCES "cables"("id") ON DELETE SET NULL,
+            "is_locked" boolean DEFAULT false NOT NULL,
+            "metadata" jsonb DEFAULT '{}'::jsonb,
+            "created_at" timestamp with time zone DEFAULT now() NOT NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS "discovery_logs" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+            "job_id" uuid NOT NULL REFERENCES "discovery_jobs"("id") ON DELETE CASCADE,
+            "level" varchar(10) DEFAULT 'INFO' NOT NULL,
+            "pass" integer,
+            "message" varchar(500) NOT NULL,
+            "metadata" jsonb DEFAULT '{}'::jsonb,
+            "created_at" timestamp with time zone DEFAULT now() NOT NULL
+          );
+        `
+        )
+        .catch(() => {});
     }
 
     activeDb = drizzlePglite(pgliteClient, { schema });

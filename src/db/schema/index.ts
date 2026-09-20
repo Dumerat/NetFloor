@@ -5,6 +5,12 @@ import { nodes } from "./nodes";
 import { ports, portVlans } from "./ports";
 import { cables } from "./cables";
 import { vlans } from "./vlans";
+import {
+  discoveryJobs,
+  discoveredDevices,
+  discoveredConnections,
+  discoveryLogs,
+} from "./discovery";
 
 // Export tables and enums
 export * from "./floors";
@@ -13,6 +19,7 @@ export * from "./nodes";
 export * from "./ports";
 export * from "./cables";
 export * from "./vlans";
+export * from "./discovery";
 
 // Relations
 export const floorsRelations = relations(floors, ({ many }) => ({
@@ -93,5 +100,52 @@ export const portVlansRelations = relations(portVlans, ({ one }) => ({
   vlan: one(vlans, {
     fields: [portVlans.vlanId],
     references: [vlans.id],
+  }),
+}));
+
+export const discoveryJobsRelations = relations(discoveryJobs, ({ many }) => ({
+  devices: many(discoveredDevices),
+  connections: many(discoveredConnections),
+  logs: many(discoveryLogs),
+}));
+
+export const discoveredDevicesRelations = relations(discoveredDevices, ({ one, many }) => ({
+  job: one(discoveryJobs, {
+    fields: [discoveredDevices.jobId],
+    references: [discoveryJobs.id],
+  }),
+  matchedNode: one(nodes, {
+    fields: [discoveredDevices.matchedNodeId],
+    references: [nodes.id],
+  }),
+  outboundConnections: many(discoveredConnections, { relationName: "source_device" }),
+  inboundConnections: many(discoveredConnections, { relationName: "target_device" }),
+}));
+
+export const discoveredConnectionsRelations = relations(discoveredConnections, ({ one }) => ({
+  job: one(discoveryJobs, {
+    fields: [discoveredConnections.jobId],
+    references: [discoveryJobs.id],
+  }),
+  sourceDevice: one(discoveredDevices, {
+    fields: [discoveredConnections.sourceDeviceId],
+    references: [discoveredDevices.id],
+    relationName: "source_device",
+  }),
+  targetDevice: one(discoveredDevices, {
+    fields: [discoveredConnections.targetDeviceId],
+    references: [discoveredDevices.id],
+    relationName: "target_device",
+  }),
+  matchedCable: one(cables, {
+    fields: [discoveredConnections.matchedCableId],
+    references: [cables.id],
+  }),
+}));
+
+export const discoveryLogsRelations = relations(discoveryLogs, ({ one }) => ({
+  job: one(discoveryJobs, {
+    fields: [discoveryLogs.jobId],
+    references: [discoveryJobs.id],
   }),
 }));
