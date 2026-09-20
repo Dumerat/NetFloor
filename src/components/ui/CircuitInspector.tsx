@@ -495,7 +495,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     if (!selectedNode) return;
     const labels = getDefaultSeatLabels(selectedNode.subType);
     const updatedSeats: DeskSeatOccupant[] = [...currentSeats];
-    const existingLabel = currentSeats[seatIdx]?.seatLabel || labels[seatIdx] || `Place ${seatIdx + 1}`;
+    const existingLabel =
+      currentSeats[seatIdx]?.seatLabel || labels[seatIdx] || `Place ${seatIdx + 1}`;
     updatedSeats[seatIdx] = {
       seatIndex: seatIdx,
       seatLabel: existingLabel,
@@ -540,7 +541,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     if (!selectedNode) return;
     const labels = getDefaultSeatLabels(selectedNode.subType);
     const updatedSeats: DeskSeatOccupant[] = [...currentSeats];
-    const existingLabel = currentSeats[seatIdx]?.seatLabel || labels[seatIdx] || `Place ${seatIdx + 1}`;
+    const existingLabel =
+      currentSeats[seatIdx]?.seatLabel || labels[seatIdx] || `Place ${seatIdx + 1}`;
     updatedSeats[seatIdx] = {
       seatIndex: seatIdx,
       seatLabel: existingLabel,
@@ -1233,7 +1235,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       const curPortVlan = curPortNetwork.isPatched ? (curPortNetwork.vlanId ?? 20) : undefined;
       const curPortVlanColor =
         curPortVlan !== undefined
-          ? (vlanStyles?.[curPortVlan]?.color ?? DEFAULT_VLAN_STYLES[curPortVlan]?.color ?? "#38bdf8")
+          ? (vlanStyles?.[curPortVlan]?.color ??
+            DEFAULT_VLAN_STYLES[curPortVlan]?.color ??
+            "#38bdf8")
           : "#94a3b8";
 
       return (
@@ -1299,7 +1303,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     const pVlan = pNetwork.isPatched ? (pNetwork.vlanId ?? 20) : undefined;
                     const vColor =
                       pVlan !== undefined
-                        ? (vlanStyles?.[pVlan]?.color ?? DEFAULT_VLAN_STYLES[pVlan]?.color ?? "#38bdf8")
+                        ? (vlanStyles?.[pVlan]?.color ??
+                          DEFAULT_VLAN_STYLES[pVlan]?.color ??
+                          "#38bdf8")
                         : "#94a3b8";
                     const isOnline = p.pingStatus === "ONLINE";
                     const pRack = availableRacks.find((r) => r.id === p.connectedRackId);
@@ -2219,7 +2225,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       </div>
                     ) : (
                       <div className="p-2.5 bg-slate-950/60 rounded border border-slate-850 text-[10px] text-slate-400 leading-relaxed">
-                        Le cuivre de ce port est passif. Raccordez ce port à un commutateur dans la section câblage ci-dessus pour qu'il reçoive dynamiquement son VLAN, son rôle métier et son alimentation PoE.
+                        Le cuivre de ce port est passif. Raccordez ce port à un commutateur dans la
+                        section câblage ci-dessus pour qu'il reçoive dynamiquement son VLAN, son
+                        rôle métier et son alimentation PoE.
                       </div>
                     )}
                   </div>

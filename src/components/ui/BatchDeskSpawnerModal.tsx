@@ -428,15 +428,45 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
                               {/* Ports RJ45 représentés dans le boîtier */}
                               {isQuad ? (
                                 <>
-                                  <circle cx={x + deskSvgW / 2 - 6} cy={y + deskSvgH / 2} r={1.2} fill="#38bdf8" />
-                                  <circle cx={x + deskSvgW / 2 - 2} cy={y + deskSvgH / 2} r={1.2} fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"} />
-                                  <circle cx={x + deskSvgW / 2 + 2} cy={y + deskSvgH / 2} r={1.2} fill="#38bdf8" />
-                                  <circle cx={x + deskSvgW / 2 + 6} cy={y + deskSvgH / 2} r={1.2} fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"} />
+                                  <circle
+                                    cx={x + deskSvgW / 2 - 6}
+                                    cy={y + deskSvgH / 2}
+                                    r={1.2}
+                                    fill="#38bdf8"
+                                  />
+                                  <circle
+                                    cx={x + deskSvgW / 2 - 2}
+                                    cy={y + deskSvgH / 2}
+                                    r={1.2}
+                                    fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"}
+                                  />
+                                  <circle
+                                    cx={x + deskSvgW / 2 + 2}
+                                    cy={y + deskSvgH / 2}
+                                    r={1.2}
+                                    fill="#38bdf8"
+                                  />
+                                  <circle
+                                    cx={x + deskSvgW / 2 + 6}
+                                    cy={y + deskSvgH / 2}
+                                    r={1.2}
+                                    fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"}
+                                  />
                                 </>
                               ) : (
                                 <>
-                                  <circle cx={x + deskSvgW / 2 - 3} cy={y + deskSvgH / 2} r={1.2} fill="#38bdf8" />
-                                  <circle cx={x + deskSvgW / 2 + 3} cy={y + deskSvgH / 2} r={1.2} fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"} />
+                                  <circle
+                                    cx={x + deskSvgW / 2 - 3}
+                                    cy={y + deskSvgH / 2}
+                                    r={1.2}
+                                    fill="#38bdf8"
+                                  />
+                                  <circle
+                                    cx={x + deskSvgW / 2 + 3}
+                                    cy={y + deskSvgH / 2}
+                                    r={1.2}
+                                    fill={outletsPerSeat === 2 ? "#c084fc" : "#38bdf8"}
+                                  />
                                 </>
                               )}
                             </g>
@@ -444,15 +474,38 @@ export const BatchDeskSpawnerModal: FC<BatchDeskSpawnerModalProps> = ({
                             <g>
                               {/* Prises séparées individuelles */}
                               <circle cx={x + 8} cy={y + 6} r={2} fill="#38bdf8" />
-                              {outletsPerSeat === 2 && <circle cx={x + 13} cy={y + 6} r={2} fill="#c084fc" />}
+                              {outletsPerSeat === 2 && (
+                                <circle cx={x + 13} cy={y + 6} r={2} fill="#c084fc" />
+                              )}
                               <circle cx={x + 8} cy={y + deskSvgH - 6} r={2} fill="#38bdf8" />
-                              {outletsPerSeat === 2 && <circle cx={x + 13} cy={y + deskSvgH - 6} r={2} fill="#c084fc" />}
+                              {outletsPerSeat === 2 && (
+                                <circle cx={x + 13} cy={y + deskSvgH - 6} r={2} fill="#c084fc" />
+                              )}
                               {isQuad && (
                                 <>
-                                  <circle cx={x + deskSvgW - (outletsPerSeat === 2 ? 13 : 8)} cy={y + 6} r={2} fill="#38bdf8" />
-                                  {outletsPerSeat === 2 && <circle cx={x + deskSvgW - 8} cy={y + 6} r={2} fill="#c084fc" />}
-                                  <circle cx={x + deskSvgW - (outletsPerSeat === 2 ? 13 : 8)} cy={y + deskSvgH - 6} r={2} fill="#38bdf8" />
-                                  {outletsPerSeat === 2 && <circle cx={x + deskSvgW - 8} cy={y + deskSvgH - 6} r={2} fill="#c084fc" />}
+                                  <circle
+                                    cx={x + deskSvgW - (outletsPerSeat === 2 ? 13 : 8)}
+                                    cy={y + 6}
+                                    r={2}
+                                    fill="#38bdf8"
+                                  />
+                                  {outletsPerSeat === 2 && (
+                                    <circle cx={x + deskSvgW - 8} cy={y + 6} r={2} fill="#c084fc" />
+                                  )}
+                                  <circle
+                                    cx={x + deskSvgW - (outletsPerSeat === 2 ? 13 : 8)}
+                                    cy={y + deskSvgH - 6}
+                                    r={2}
+                                    fill="#38bdf8"
+                                  />
+                                  {outletsPerSeat === 2 && (
+                                    <circle
+                                      cx={x + deskSvgW - 8}
+                                      cy={y + deskSvgH - 6}
+                                      r={2}
+                                      fill="#c084fc"
+                                    />
+                                  )}
                                 </>
                               )}
                             </g>

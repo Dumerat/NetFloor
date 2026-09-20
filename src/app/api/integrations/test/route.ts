@@ -299,8 +299,12 @@ export async function POST(req: Request) {
       }
 
       try {
-        const cleanCluster = cluster.replace(/^https?:\/\//, "").replace(/\/$/, "");
-        const res = await fetch(`https://${cleanCluster}/monitoring/v2/switches`, {
+        const arubaUrl =
+          cluster.startsWith("http://") || cluster.startsWith("https://")
+            ? `${cluster.replace(/\/$/, "")}/monitoring/v2/switches`
+            : `https://${cluster.replace(/\/$/, "")}/monitoring/v2/switches`;
+
+        const res = await fetch(arubaUrl, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -358,6 +362,7 @@ export async function POST(req: Request) {
     if (target === "zyxel" || target === "nebula") {
       const org = config?.org;
       const apiKey = config?.apiKey || config?.token;
+      const customUrl = config?.url || config?.host;
 
       if (!apiKey) {
         return NextResponse.json(
@@ -367,9 +372,16 @@ export async function POST(req: Request) {
       }
 
       try {
-        const endpoint = org
+        let endpoint = org
           ? `https://api.nebula.zyxel.com/v1/nebula/organizations/${encodeURIComponent(org)}/switches`
           : `https://api.nebula.zyxel.com/v1/nebula/switches`;
+
+        if (customUrl) {
+          const base = customUrl.startsWith("http") ? customUrl : `http://${customUrl}`;
+          endpoint = org
+            ? `${base.replace(/\/$/, "")}/v1/nebula/organizations/${encodeURIComponent(org)}/switches`
+            : `${base.replace(/\/$/, "")}/v1/nebula/switches`;
+        }
 
         const res = await fetch(endpoint, {
           method: "GET",
@@ -431,6 +443,7 @@ export async function POST(req: Request) {
     if (target === "meraki" || target === "cisco_meraki") {
       const apiKey = config?.apiKey || config?.token;
       const orgId = config?.orgId || config?.organizationId;
+      const customUrl = config?.url || config?.host;
 
       if (!apiKey) {
         return NextResponse.json(
@@ -440,9 +453,16 @@ export async function POST(req: Request) {
       }
 
       try {
-        const endpoint = orgId
+        let endpoint = orgId
           ? `https://api.meraki.com/api/v1/organizations/${encodeURIComponent(orgId)}/devices`
           : `https://api.meraki.com/api/v1/organizations`;
+
+        if (customUrl) {
+          const base = customUrl.startsWith("http") ? customUrl : `http://${customUrl}`;
+          endpoint = orgId
+            ? `${base.replace(/\/$/, "")}/api/v1/organizations/${encodeURIComponent(orgId)}/devices`
+            : `${base.replace(/\/$/, "")}/api/v1/organizations`;
+        }
 
         const res = await fetch(endpoint, {
           method: "GET",

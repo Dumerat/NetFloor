@@ -284,7 +284,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
         if (ipFilterType === "SOCKET_PORT") {
           if (!ep.isStackedPort) return false;
         } else if (ipFilterType === "WALL_OUTLET") {
-          if (ep.isStackedPort || (ep.nodeType !== "WALL_OUTLET" && ep.subType !== "WALL_OUTLET")) return false;
+          if (ep.isStackedPort || (ep.nodeType !== "WALL_OUTLET" && ep.subType !== "WALL_OUTLET"))
+            return false;
         } else if (ipFilterType === "SWITCH") {
           if (ep.nodeType !== "SWITCH") return false;
         } else if (ipFilterType === "PATCH_PANEL") {
@@ -342,7 +343,16 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
         (ep.assignedPerson && ep.assignedPerson.toLowerCase().includes(q))
       );
     });
-  }, [allIpamEndpoints, ipSearch, ipFilterType, ipFilterVlan, ipFilterStatus, ipFilterPatch, ipFilterPing, ipConflictSet]);
+  }, [
+    allIpamEndpoints,
+    ipSearch,
+    ipFilterType,
+    ipFilterVlan,
+    ipFilterStatus,
+    ipFilterPatch,
+    ipFilterPing,
+    ipConflictSet,
+  ]);
 
   if (!isOpen) return null;
 
@@ -732,7 +742,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     let targetVlan = settings.subnets.find((s) => s.vlanId === endpoint.vlanId);
     if (!targetVlan) {
       if (endpoint.role === "VOIP") targetVlan = settings.subnets.find((s) => s.vlanId === 30);
-      else if (endpoint.role === "PRINTER") targetVlan = settings.subnets.find((s) => s.vlanId === 40);
+      else if (endpoint.role === "PRINTER")
+        targetVlan = settings.subnets.find((s) => s.vlanId === 40);
       else if (endpoint.role === "WIFI") targetVlan = settings.subnets.find((s) => s.vlanId === 50);
       else targetVlan = settings.subnets.find((s) => s.vlanId === 20) ?? settings.subnets[0];
     }
@@ -2495,7 +2506,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                     <div className="text-[10px] text-slate-400 font-mono">IPs Allouées</div>
                     <div className="text-base font-bold text-emerald-400 font-mono">
                       {allIpamEndpoints.filter((e) => e.ipAddress).length}
-                      <span className="text-[10px] text-slate-500 font-normal"> / {allIpamEndpoints.length}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">
+                        {" "}
+                        / {allIpamEndpoints.length}
+                      </span>
                     </div>
                   </div>
                   <div className="p-1.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -2526,7 +2540,11 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       ? "bg-rose-950/30 border-rose-500/40 text-rose-300 cursor-pointer hover:bg-rose-900/40"
                       : "bg-slate-950 border-slate-800 text-slate-400"
                   }`}
-                  title={ipConflictSet.size > 0 ? "Cliquer pour isoler les doublons d'IP" : "Aucun conflit d'IP"}
+                  title={
+                    ipConflictSet.size > 0
+                      ? "Cliquer pour isoler les doublons d'IP"
+                      : "Aucun conflit d'IP"
+                  }
                 >
                   <div>
                     <div className="text-[10px] font-mono">Doublons d'IP</div>
@@ -2594,13 +2612,25 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                       Ports de Blocs RJ45 ({allIpamEndpoints.filter((e) => e.isStackedPort).length})
                     </option>
                     <option value="WALL_OUTLET">
-                      Prises simples ({allIpamEndpoints.filter((e) => !e.isStackedPort && e.nodeType === "WALL_OUTLET").length})
+                      Prises simples (
+                      {
+                        allIpamEndpoints.filter(
+                          (e) => !e.isStackedPort && e.nodeType === "WALL_OUTLET"
+                        ).length
+                      }
+                      )
                     </option>
                     <option value="SWITCH">
                       Switches ({allIpamEndpoints.filter((e) => e.nodeType === "SWITCH").length})
                     </option>
                     <option value="PATCH_PANEL">
-                      Panneaux & Baies ({allIpamEndpoints.filter((e) => e.nodeType === "PATCH_PANEL" || e.subType?.startsWith("RACK")).length})
+                      Panneaux & Baies (
+                      {
+                        allIpamEndpoints.filter(
+                          (e) => e.nodeType === "PATCH_PANEL" || e.subType?.startsWith("RACK")
+                        ).length
+                      }
+                      )
                     </option>
                   </select>
 
@@ -2645,10 +2675,12 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                   >
                     <option value="ALL">Tout le raccordement</option>
                     <option value="PATCHED">
-                      Brassé au switch ({allIpamEndpoints.filter((e) => e.isPatched || e.connectedSwitchId).length})
+                      Brassé au switch (
+                      {allIpamEndpoints.filter((e) => e.isPatched || e.connectedSwitchId).length})
                     </option>
                     <option value="UNPATCHED">
-                      Non brassé / Passif ({allIpamEndpoints.filter((e) => !e.isPatched && !e.connectedSwitchId).length})
+                      Non brassé / Passif (
+                      {allIpamEndpoints.filter((e) => !e.isPatched && !e.connectedSwitchId).length})
                     </option>
                   </select>
 
@@ -2691,8 +2723,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
                 <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono px-1">
                   <span>
-                    Affichage de <span className="text-cyan-400 font-bold">{filteredIpamEndpoints.length}</span> sur{" "}
-                    <span className="text-slate-200">{allIpamEndpoints.length}</span> points de terminaison IP
+                    Affichage de{" "}
+                    <span className="text-cyan-400 font-bold">{filteredIpamEndpoints.length}</span>{" "}
+                    sur <span className="text-slate-200">{allIpamEndpoints.length}</span> points de
+                    terminaison IP
                   </span>
                   {ipFilterStatus === "DUPLICATE" && (
                     <span className="text-rose-400 flex items-center gap-1">
@@ -2721,7 +2755,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                     <tbody className="divide-y divide-slate-850">
                       {filteredIpamEndpoints.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="py-8 text-center text-slate-500 font-mono text-xs">
+                          <td
+                            colSpan={7}
+                            className="py-8 text-center text-slate-500 font-mono text-xs"
+                          >
                             Aucun équipement ou port RJ45 ne correspond aux critères de recherche.
                           </td>
                         </tr>
@@ -2740,10 +2777,8 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                           );
                           const vlanColor =
                             ep.vlanId !== undefined
-                              ? (
-                                  vlanStyles?.[ep.vlanId] ??
-                                  DEFAULT_VLAN_STYLES[ep.vlanId]
-                                )?.color ?? "#38bdf8"
+                              ? ((vlanStyles?.[ep.vlanId] ?? DEFAULT_VLAN_STYLES[ep.vlanId])
+                                  ?.color ?? "#38bdf8")
                               : "#94a3b8";
 
                           return (

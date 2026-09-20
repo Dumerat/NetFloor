@@ -353,9 +353,18 @@ async function runSpatialTests() {
     outletMode: "pack",
   });
   assert(batchPackResult.desks.length === 2, "2 bureaux quad_4 générés");
-  assert(batchPackResult.outlets.length === 2, "2 Blocs RJ45 centralisés générés (1 par bureau, zéro spam)");
-  assert(batchPackResult.outlets[0]?.subType === "SOCKET_BLOCK", "Type de connectique SOCKET_BLOCK");
-  assert(batchPackResult.outlets[0]?.portCount === 4, "4 ports par bloc (1 port pour chacun des 4 sièges)");
+  assert(
+    batchPackResult.outlets.length === 2,
+    "2 Blocs RJ45 centralisés générés (1 par bureau, zéro spam)"
+  );
+  assert(
+    batchPackResult.outlets[0]?.subType === "SOCKET_BLOCK",
+    "Type de connectique SOCKET_BLOCK"
+  );
+  assert(
+    batchPackResult.outlets[0]?.portCount === 4,
+    "4 ports par bloc (1 port pour chacun des 4 sièges)"
+  );
   assert(batchPackResult.totalOutlets === 8, "Total de 8 ports consolidés");
   console.log("   ✅ Mode Pack centralisé (Bloc RJ45) et 1 prise par poste certifiés.");
 

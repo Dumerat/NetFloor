@@ -500,7 +500,9 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       const matchSource = user.source ? user.source.toLowerCase().includes(query) : false;
       const matchEmail = user.email ? user.email.toLowerCase().includes(query) : false;
       const matchOffice = user.office ? user.office.toLowerCase().includes(query) : false;
-      const matchSam = user.sAMAccountName ? user.sAMAccountName.toLowerCase().includes(query) : false;
+      const matchSam = user.sAMAccountName
+        ? user.sAMAccountName.toLowerCase().includes(query)
+        : false;
       const matchCustom =
         query === "custom" ||
         query === "manuel" ||
@@ -946,7 +948,9 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                   onChange={(e) => {
                                     const selectedDeskId = e.target.value;
                                     if (!selectedDeskId) return;
-                                    const targetDesk = deskNodes.find((d) => d.id === selectedDeskId);
+                                    const targetDesk = deskNodes.find(
+                                      (d) => d.id === selectedDeskId
+                                    );
                                     if (targetDesk) {
                                       onUpdateNode(targetDesk.id, {
                                         assignedPerson: user.fullName,
@@ -960,7 +964,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                   <option value="">＋ Assigner à un bureau du plan...</option>
                                   {deskNodes.map((d) => (
                                     <option key={d.id} value={d.id}>
-                                      {d.name} {d.assignedPerson ? `(occupé: ${d.assignedPerson})` : "(libre)"}
+                                      {d.name}{" "}
+                                      {d.assignedPerson
+                                        ? `(occupé: ${d.assignedPerson})`
+                                        : "(libre)"}
                                     </option>
                                   ))}
                                 </select>
