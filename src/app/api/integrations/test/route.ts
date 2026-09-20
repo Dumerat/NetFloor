@@ -607,6 +607,78 @@ export async function POST(req: Request) {
       }
     }
 
+    // ── Fortinet FortiCloud & FortiGate Controller ───────────────────────────
+    if (target === "fortinet" || target === "fortigate" || target === "forticloud") {
+      const host = config?.host || config?.url;
+      const apiToken = config?.apiToken || config?.apiKey || config?.token;
+
+      if (!host) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Hôte ou URL FortiGate requis (ex: https://10.42.0.254 ou https://fortigate.corp.local).",
+          },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const cleanHost = host.startsWith("http") ? host : `https://${host}`;
+        const endpoint = `${cleanHost.replace(/\/$/, "")}/api/v2/monitor/switch-controller/managed-switch`;
+
+        const res = await fetch(endpoint, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiToken || ""}`,
+            Accept: "application/json",
+          },
+          signal: AbortSignal.timeout(6000),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return NextResponse.json(
+            {
+              success: false,
+              error: `FortiGate a répondu HTTP ${res.status} (${err.message || "Token d'API invalide ou accès refusé"})`,
+            },
+            { status: 502 }
+          );
+        }
+
+        const data = await res.json().catch(() => ({ results: [] }));
+        const rawSwitches = Array.isArray(data.results) ? data.results : [];
+
+        const switches = rawSwitches.map((s: any) => ({
+          name: s.name || s.switch_id || "SW-FORTISWITCH-124F",
+          model: s.os_ver ? `FortiSwitch (${s.os_ver})` : "FortiSwitch 124F-FPOE",
+          portsCount: s.ports ? s.ports.length : 24,
+          poeBudgetW: 370,
+          ipAddress: s.connecting_from || "10.42.0.254",
+          macAddress: s.switch_id || "70:4C:A5:11:22:33",
+          serial: s.switch_id || "",
+          cloudStatus: s.status === "Authorized" ? ("ONLINE" as const) : ("SYNCED" as const),
+        }));
+
+        return NextResponse.json({
+          success: true,
+          target: "fortinet",
+          switches,
+          latencyMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err: unknown) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Impossible de contacter le contrôleur FortiGate : ${err instanceof Error ? err.message : "Contrôleur inaccessible"}`,
+          },
+          { status: 502 }
+        );
+      }
+    }
+
     return NextResponse.json(
       { success: false, error: "Cible d'intégration inconnue" },
       { status: 400 }

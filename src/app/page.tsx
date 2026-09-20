@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useCameraStore } from "@/engine/spatial/useCameraStore";
 import { CircuitInspector } from "@/components/ui/CircuitInspector";
-import { EquipmentPalette, PaletteItem } from "@/components/ui/EquipmentPalette";
+import { EquipmentPalette, PaletteItem, ScannedDeviceItem } from "@/components/ui/EquipmentPalette";
 import { CsvImportModal } from "@/components/ui/CsvImportModal";
 import { SettingsModal } from "@/components/ui/SettingsModal";
 import { NetworkTopologyPanel } from "@/components/ui/NetworkTopologyPanel";
@@ -15,6 +15,7 @@ import {
   NodeDisplay,
   RackDisplay,
   RackDeviceItem,
+  RackDeviceBrand,
   OutletRole,
   StackedPortItem,
   getDefaultSeatLabels,
@@ -44,6 +45,7 @@ import {
 import { autoRoutePortsToRack } from "@/engine/spatial/autoRoute";
 import { ApplyMatrixResult } from "@/engine/ingestion/matrixCsvParser";
 import { snapToGrid } from "@/engine/spatial/snapping";
+import { getRackAABB } from "@/components/canvas/FloorCanvas";
 import {
   ZoomIn,
   ZoomOut,
@@ -1735,6 +1737,95 @@ export default function NetFloorApp() {
     });
   };
 
+  // Helper de conversion d'un équipement scanné/découvert en élément de châssis baies (RackDeviceItem)
+  const convertScannedToRackDevice = useCallback(
+    (dev: ScannedDeviceItem, slotU: number): RackDeviceItem => {
+      const brandUpper = (dev.manufacturer || "").toUpperCase();
+      let brand: RackDeviceBrand = "GENERIC";
+      if (brandUpper.includes("ARUBA") || brandUpper.includes("HPE")) brand = "ARUBA";
+      else if (brandUpper.includes("CISCO") || brandUpper.includes("MERAKI")) brand = "CISCO";
+      else if (brandUpper.includes("ZYXEL")) brand = "ZYXEL";
+      else if (brandUpper.includes("UBIQUITI") || brandUpper.includes("UNIFI")) brand = "UBIQUITI";
+      else if (brandUpper.includes("FORTINET") || brandUpper.includes("FORTIGATE"))
+        brand = "FORTINET";
+
+      return {
+        id: `dev-${dev.id}-${Date.now()}`,
+        name: dev.name,
+        slotU,
+        uSize: dev.uSize || 1,
+        deviceType: (dev.deviceType as any) || "SWITCH",
+        brand,
+        model: dev.model,
+        ipAddress: dev.ip,
+        macAddress: dev.mac,
+        portsCount: dev.portsCount || 24,
+        poeBudgetW: dev.poeBudgetW,
+        status: dev.status || "ONLINE",
+      };
+    },
+    []
+  );
+
+  // Insertion d'un équipement scanné directement dans une baie avec vérification de disponibilité de U
+  const handleInsertScannedDeviceIntoRack = useCallback(
+    (rackId: string, dev: ScannedDeviceItem, targetSlotU?: number) => {
+      const rack = racks.find((r) => r.id === rackId);
+      if (!rack) return;
+
+      const totalU = rack.uHeight || 42;
+      const existingDevices = rack.devices ?? [];
+      let slotU = targetSlotU ? Math.max(1, Math.min(totalU, targetSlotU)) : 24;
+
+      const occupiedSlots = new Set(
+        existingDevices.flatMap((d) => {
+          const uSize = d.uSize ?? 1;
+          return Array.from({ length: uSize }, (_, i) => d.slotU + i);
+        })
+      );
+
+      const reqSize = dev.uSize ?? 1;
+      const isAvailable = (s: number) => {
+        if (s < 1 || s + reqSize - 1 > totalU) return false;
+        for (let i = 0; i < reqSize; i++) {
+          if (occupiedSlots.has(s + i)) return false;
+        }
+        return true;
+      };
+
+      if (!isAvailable(slotU)) {
+        let found = false;
+        for (let offset = 1; offset < totalU; offset++) {
+          if (isAvailable(slotU - offset)) {
+            slotU = slotU - offset;
+            found = true;
+            break;
+          }
+          if (isAvailable(slotU + offset)) {
+            slotU = slotU + offset;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          slotU = Math.max(1, Math.min(totalU - reqSize + 1, slotU));
+        }
+      }
+
+      const newDeviceItem = convertScannedToRackDevice(dev, slotU);
+      const updatedDevices = [...existingDevices, newDeviceItem];
+
+      setRacks((prev) =>
+        prev.map((r) => (r.id === rackId ? { ...r, devices: updatedDevices } : r))
+      );
+      setNodes((prev) =>
+        prev.map((n) => (n.id === rackId ? { ...n, devices: updatedDevices } : n))
+      );
+      setSelectedNodeId(rackId);
+    },
+    [racks, convertScannedToRackDevice]
+  );
+
   // Ajout depuis la Palette d'équipements multi-métiers (Générique, Profils Personnalisés, Mobilier, Baies)
   // Supporte le placement aux coordonnées mondes exactes (Glisser-Déposer) et la liaison automatique aux bureaux
   const handleAddItemFromPalette = (item: PaletteItem, position?: { x: number; y: number }) => {
@@ -1842,16 +1933,17 @@ export default function NetFloorApp() {
     const finalName = computeName();
 
     if (isRack) {
-      const rackU = item.subType === "RACK_18U" ? 18 : 42;
+      const rackU = item.customUHeight ?? (item.subType === "RACK_18U" ? 18 : 42);
+      const rackName = item.name && !item.name.startsWith("Baie ") ? item.name : finalName;
       const newRack: RackDisplay = {
         id: newId,
-        name: finalName,
+        name: rackName,
         xMm: newX,
         yMm: newY,
         widthMm: item.widthMm ?? 800,
         depthMm: Math.max(item.heightMm ?? 1000, 320 + rackU * 36),
         uHeight: rackU,
-        description: "",
+        description: item.description ?? "",
         devices: [],
         patches: [],
         siteId: activeSiteId || DEFAULT_SITE_ID,
@@ -2755,6 +2847,9 @@ export default function NetFloorApp() {
               }}
             />
           }
+          racks={visibleRacks}
+          selectedRackId={selectedNode?.type === "PATCH_PANEL" ? selectedNode.id : null}
+          onInsertScannedDevice={handleInsertScannedDeviceIntoRack}
         />
 
         {/* Main Canvas Area */}
@@ -2912,7 +3007,89 @@ export default function NetFloorApp() {
                 return;
               }
 
-              // 2. Cas standard du glisser-déposer d'un équipement depuis la palette
+              // 2. Cas du glisser-déposer d'un équipement scanné/découvert (Switch, Serveur, Firewall, etc.)
+              if (parsed && parsed.type === "SCANNED_RACK_DEVICE" && parsed.device) {
+                const scannedDev = parsed.device as ScannedDeviceItem;
+
+                // Détecter si on a déposé l'équipement au-dessus d'une baie existante
+                const hitRack = visibleRacks.find((r) => {
+                  const aabb = getRackAABB(r);
+                  return (
+                    worldPos.x >= aabb.minX &&
+                    worldPos.x <= aabb.maxX &&
+                    worldPos.y >= aabb.minY &&
+                    worldPos.y <= aabb.maxY
+                  );
+                });
+
+                if (hitRack) {
+                  const totalU = hitRack.uHeight || 42;
+                  const minDepthForU = 320 + totalU * 36;
+                  const rDepth = Math.max(hitRack.depthMm ?? 1000, minDepthForU);
+                  const usableTop = 150;
+                  const usableHeight = Math.max(300, rDepth - 330);
+                  const uStep = usableHeight / totalU;
+                  const relY = worldPos.y - hitRack.yMm;
+                  const targetSlotU = Math.max(
+                    1,
+                    Math.min(totalU, Math.round(totalU - (relY - usableTop) / uStep))
+                  );
+
+                  handleInsertScannedDeviceIntoRack(hitRack.id, scannedDev, targetSlotU);
+                } else {
+                  // Dépôt sur l'espace vide du plan : création automatique d'une Baie 42U contenant cet équipement
+                  const newRackId = `rack-${Date.now()}`;
+                  const rackCount = racks.length + 1;
+                  const rackWidth = 800;
+                  const rackDepth = 1000;
+                  const snapped = snapToGrid(
+                    {
+                      x: Math.round(worldPos.x - rackWidth / 2),
+                      y: Math.round(worldPos.y - rackDepth / 2),
+                    },
+                    useCameraStore.getState().gridConfig
+                  ).point;
+
+                  const slotU = 24;
+                  const initialDevice = convertScannedToRackDevice(scannedDev, slotU);
+
+                  const newRack: RackDisplay = {
+                    id: newRackId,
+                    name: `BAIE-DSI-0${rackCount}`,
+                    xMm: snapped.x,
+                    yMm: snapped.y,
+                    widthMm: rackWidth,
+                    depthMm: Math.max(rackDepth, 320 + 42 * 36),
+                    uHeight: 42,
+                    description: `Baie créée avec ${scannedDev.name}`,
+                    devices: [initialDevice],
+                    patches: [],
+                    siteId: activeSiteId || DEFAULT_SITE_ID,
+                  };
+
+                  const newRackNode: NodeDisplay = {
+                    id: newRackId,
+                    type: "PATCH_PANEL",
+                    subType: "RACK_42U",
+                    name: newRack.name,
+                    widthMm: newRack.widthMm,
+                    heightMm: newRack.depthMm,
+                    xMm: newRack.xMm,
+                    yMm: newRack.yMm,
+                    uHeight: 42,
+                    devices: [initialDevice],
+                    patches: [],
+                    siteId: newRack.siteId,
+                  };
+
+                  setRacks((prev) => [...prev, newRack]);
+                  setNodes((prev) => [...prev, newRackNode]);
+                  setSelectedNodeId(newRackId);
+                }
+                return;
+              }
+
+              // 3. Cas standard du glisser-déposer d'un équipement depuis la palette
               const item: PaletteItem = parsed;
               handleAddItemFromPalette(item, worldPos);
             } catch (err) {

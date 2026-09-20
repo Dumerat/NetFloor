@@ -8,6 +8,7 @@ import {
   Radio,
   Network,
   Plug,
+  Cloud,
   CheckCircle2,
   RefreshCw,
   Search,
@@ -73,7 +74,7 @@ interface SettingsModalProps {
   onResetVlanStyles?: (() => void) | undefined;
 }
 
-type TabType = "sso" | "snmp" | "ipam" | "integrations";
+type TabType = "sso" | "snmp" | "ipam" | "integrations" | "portals";
 
 export interface IpamEndpointItem {
   id: string;
@@ -210,6 +211,119 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   const [logLevelFilter, setLogLevelFilter] = useState<"ALL" | "INFO" | "WARN" | "ERROR">("ALL");
   const [recentJobs, setRecentJobs] = useState<any[]>([]);
   const [showAdvancedScanOptions, setShowAdvancedScanOptions] = useState(false);
+
+  // État des Portails Cloud & Constructeurs (Aruba, Cisco Meraki, Zyxel Nebula, Ubiquiti, Fortinet)
+  const [arubaCluster, setArubaCluster] = useState(
+    settings.portals?.aruba?.cluster || "eu-central-1.central.arubanetworks.com"
+  );
+  const [arubaToken, setArubaToken] = useState(settings.portals?.aruba?.token || "");
+  const [isTestingAruba, setIsTestingAruba] = useState(false);
+  const [arubaStatus, setArubaStatus] = useState<string | null>(null);
+  const [arubaSwitches, setArubaSwitches] = useState<any[]>([]);
+
+  const [merakiApiKey, setMerakiApiKey] = useState(settings.portals?.meraki?.apiKey || "");
+  const [merakiOrgId, setMerakiOrgId] = useState(settings.portals?.meraki?.orgId || "");
+  const [isTestingMeraki, setIsTestingMeraki] = useState(false);
+  const [merakiStatus, setMerakiStatus] = useState<string | null>(null);
+  const [merakiSwitches, setMerakiSwitches] = useState<any[]>([]);
+
+  const [nebulaApiKey, setNebulaApiKey] = useState(settings.portals?.nebula?.apiKey || "");
+  const [nebulaOrg, setNebulaOrg] = useState(settings.portals?.nebula?.orgId || "");
+  const [isTestingNebula, setIsTestingNebula] = useState(false);
+  const [nebulaStatus, setNebulaStatus] = useState<string | null>(null);
+  const [nebulaSwitches, setNebulaSwitches] = useState<any[]>([]);
+
+  const [unifiHost, setUnifiHost] = useState(settings.portals?.unifi?.host || "192.168.1.1");
+  const [unifiApiKey, setUnifiApiKey] = useState(settings.portals?.unifi?.apiKey || "");
+  const [unifiSite, setUnifiSite] = useState(settings.portals?.unifi?.site || "default");
+  const [isTestingUnifi, setIsTestingUnifi] = useState(false);
+  const [unifiStatus, setUnifiStatus] = useState<string | null>(null);
+  const [unifiSwitches, setUnifiSwitches] = useState<any[]>([]);
+
+  const [fortinetHost, setFortinetHost] = useState(
+    settings.portals?.fortinet?.host || "https://10.42.0.254"
+  );
+  const [fortinetToken, setFortinetToken] = useState(settings.portals?.fortinet?.apiToken || "");
+  const [isTestingFortinet, setIsTestingFortinet] = useState(false);
+  const [fortinetStatus, setFortinetStatus] = useState<string | null>(null);
+  const [fortinetSwitches, setFortinetSwitches] = useState<any[]>([]);
+
+  const handleTestPortal = async (target: "aruba" | "meraki" | "nebula" | "unifi" | "fortinet") => {
+    let payload: any = { target };
+    if (target === "aruba") {
+      setIsTestingAruba(true);
+      setArubaStatus(null);
+      payload = { target: "aruba", cluster: arubaCluster, token: arubaToken };
+    } else if (target === "meraki") {
+      setIsTestingMeraki(true);
+      setMerakiStatus(null);
+      payload = { target: "meraki", apiKey: merakiApiKey, orgId: merakiOrgId };
+    } else if (target === "nebula") {
+      setIsTestingNebula(true);
+      setNebulaStatus(null);
+      payload = { target: "zyxel", apiKey: nebulaApiKey, org: nebulaOrg };
+    } else if (target === "unifi") {
+      setIsTestingUnifi(true);
+      setUnifiStatus(null);
+      payload = { target: "unifi", host: unifiHost, apiKey: unifiApiKey, site: unifiSite };
+    } else if (target === "fortinet") {
+      setIsTestingFortinet(true);
+      setFortinetStatus(null);
+      payload = { target: "fortinet", host: fortinetHost, apiToken: fortinetToken };
+    }
+
+    try {
+      const res = await fetch("/api/integrations/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const swList = Array.isArray(data.switches) ? data.switches : [];
+        const msg = `✅ Connecté • ${swList.length} commutateur(s) découvert(s) (${data.latencyMs ?? 15}ms)`;
+        if (target === "aruba") {
+          setArubaStatus(msg);
+          setArubaSwitches(swList);
+        } else if (target === "meraki") {
+          setMerakiStatus(msg);
+          setMerakiSwitches(swList);
+        } else if (target === "nebula") {
+          setNebulaStatus(msg);
+          setNebulaSwitches(swList);
+        } else if (target === "unifi") {
+          setUnifiStatus(msg);
+          setUnifiSwitches(swList);
+        } else if (target === "fortinet") {
+          setFortinetStatus(msg);
+          setFortinetSwitches(swList);
+        }
+        showToast(msg);
+      } else {
+        const errMsg = `❌ Erreur : ${data.error || "Échec de connexion"}`;
+        if (target === "aruba") setArubaStatus(errMsg);
+        else if (target === "meraki") setMerakiStatus(errMsg);
+        else if (target === "nebula") setNebulaStatus(errMsg);
+        else if (target === "unifi") setUnifiStatus(errMsg);
+        else if (target === "fortinet") setFortinetStatus(errMsg);
+        showToast(errMsg);
+      }
+    } catch (err: unknown) {
+      const errMsg = `❌ Injoignable : ${err instanceof Error ? err.message : "Erreur réseau"}`;
+      if (target === "aruba") setArubaStatus(errMsg);
+      else if (target === "meraki") setMerakiStatus(errMsg);
+      else if (target === "nebula") setNebulaStatus(errMsg);
+      else if (target === "unifi") setUnifiStatus(errMsg);
+      else if (target === "fortinet") setFortinetStatus(errMsg);
+      showToast(errMsg);
+    } finally {
+      if (target === "aruba") setIsTestingAruba(false);
+      else if (target === "meraki") setIsTestingMeraki(false);
+      else if (target === "nebula") setIsTestingNebula(false);
+      else if (target === "unifi") setIsTestingUnifi(false);
+      else if (target === "fortinet") setIsTestingFortinet(false);
+    }
+  };
 
   // Synchroniser la config avec les settings au chargement
   useEffect(() => {
@@ -507,7 +621,44 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
 
   // Sauvegarde des paramètres dans localStorage
   const handleSaveSettings = () => {
-    saveStoredSettings(settings);
+    const updatedSettings: SystemSettings = {
+      ...settings,
+      portals: {
+        aruba: {
+          enabled: Boolean(arubaToken.trim()),
+          cluster: arubaCluster,
+          token: arubaToken,
+          status: arubaStatus?.includes("Connecté") ? "CONNECTED" : "DISCONNECTED",
+        },
+        meraki: {
+          enabled: Boolean(merakiApiKey.trim()),
+          apiKey: merakiApiKey,
+          orgId: merakiOrgId,
+          status: merakiStatus?.includes("Connecté") ? "CONNECTED" : "DISCONNECTED",
+        },
+        nebula: {
+          enabled: Boolean(nebulaApiKey.trim()),
+          apiKey: nebulaApiKey,
+          orgId: nebulaOrg,
+          status: nebulaStatus?.includes("Connecté") ? "CONNECTED" : "DISCONNECTED",
+        },
+        unifi: {
+          enabled: Boolean(unifiHost.trim()),
+          host: unifiHost,
+          apiKey: unifiApiKey,
+          site: unifiSite,
+          status: unifiStatus?.includes("Connecté") ? "CONNECTED" : "DISCONNECTED",
+        },
+        fortinet: {
+          enabled: Boolean(fortinetToken.trim()),
+          host: fortinetHost,
+          apiToken: fortinetToken,
+          status: fortinetStatus?.includes("Connecté") ? "CONNECTED" : "DISCONNECTED",
+        },
+      },
+    };
+    saveStoredSettings(updatedSettings);
+    setSettings(updatedSettings);
     showToast("💾 Paramètres DSI enregistrés avec succès dans le navigateur");
     onClose();
   };
@@ -1327,6 +1478,17 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
           >
             <Plug className="w-4 h-4" />
             🔌 Intégrations & Outils
+          </button>
+          <button
+            onClick={() => setActiveTab("portals")}
+            className={`py-3 px-4 text-xs font-semibold flex items-center gap-2 border-b-2 transition ${
+              activeTab === "portals"
+                ? "border-cyan-500 text-cyan-400 bg-slate-900/50"
+                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/20"
+            }`}
+          >
+            <Cloud className="w-4 h-4 text-sky-400" />
+            ☁️ Portails & Constructeurs
           </button>
         </div>
 
@@ -4340,6 +4502,505 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                   >
                     {integrationStatuses.webhooks?.loading ? "Envoi..." : "Tester Alerte Réelle"}
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= TAB 5 : PORTAILS CLOUD & CONSTRUCTEURS ================= */}
+          {activeTab === "portals" && (
+            <div className="space-y-6">
+              {/* En-tête explicatif */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-sky-950/40 via-indigo-950/30 to-purple-950/40 border border-sky-800/40 flex items-start gap-4">
+                <div className="p-3 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 flex-shrink-0">
+                  <Cloud className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-sky-200 flex items-center gap-2">
+                    Liaisons Directes aux Portails Cloud des Fabricants
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold">
+                      API REST HTTPS
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Connectez directement NetFloor Architect aux plateformes de management cloud
+                    (Aruba Central, Cisco Meraki, Zyxel Nebula, Ubiquiti UniFi, Fortinet). Les
+                    équipements découverts apparaissent automatiquement dans l'arborescence et
+                    peuvent être glissés-déposés dans vos baies informatiques.
+                  </p>
+                </div>
+              </div>
+
+              {/* Grille des 5 Connecteurs Constructeurs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. ARUBA CENTRAL */}
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-4 shadow-lg hover:border-amber-500/40 transition">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-xs">
+                          AC
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                            Aruba Central (HPE)
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                              Cloud AP / CX
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            HPE Networking Platform
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          arubaStatus?.startsWith("✅")
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                            : arubaStatus?.startsWith("❌")
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                              : "bg-slate-900 text-slate-400 border-slate-800"
+                        }`}
+                      >
+                        {arubaStatus?.startsWith("✅")
+                          ? "CONNECTÉ"
+                          : arubaStatus?.startsWith("❌")
+                            ? "ERREUR"
+                            : "NON CONFIGURÉ"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Cluster Central (Host / FQDN)
+                        </label>
+                        <input
+                          type="text"
+                          value={arubaCluster}
+                          onChange={(e) => setArubaCluster(e.target.value)}
+                          placeholder="eu-central-1.central.arubanetworks.com"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Token d'API / OAuth Bearer Token
+                        </label>
+                        <input
+                          type="password"
+                          value={arubaToken}
+                          onChange={(e) => setArubaToken(e.target.value)}
+                          placeholder="••••••••••••••••••••••••••••••••"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-900">
+                    {arubaStatus && (
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
+                        {arubaStatus}
+                      </div>
+                    )}
+                    {arubaSwitches.length > 0 && (
+                      <div className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {arubaSwitches.length} équipement(s) prêt(s) à être raqués
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleTestPortal("aruba")}
+                      disabled={isTestingAruba}
+                      className="w-full py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-200 border border-amber-500/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isTestingAruba ? "animate-spin" : ""}`}
+                      />
+                      {isTestingAruba
+                        ? "Interrogation de Central..."
+                        : "Tester & Découvrir Switchs"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. CISCO MERAKI */}
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-4 shadow-lg hover:border-emerald-500/40 transition">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-xs">
+                          CM
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                            Cisco Meraki Dashboard
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                              MS / MR
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            Meraki Cloud REST API v1
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          merakiStatus?.startsWith("✅")
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                            : merakiStatus?.startsWith("❌")
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                              : "bg-slate-900 text-slate-400 border-slate-800"
+                        }`}
+                      >
+                        {merakiStatus?.startsWith("✅")
+                          ? "CONNECTÉ"
+                          : merakiStatus?.startsWith("❌")
+                            ? "ERREUR"
+                            : "NON CONFIGURÉ"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Clé d'API Cisco Meraki Dashboard
+                        </label>
+                        <input
+                          type="password"
+                          value={merakiApiKey}
+                          onChange={(e) => setMerakiApiKey(e.target.value)}
+                          placeholder="6849b2823a41b58... (X-Cisco-Meraki-API-Key)"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Organization ID (Facultatif)
+                        </label>
+                        <input
+                          type="text"
+                          value={merakiOrgId}
+                          onChange={(e) => setMerakiOrgId(e.target.value)}
+                          placeholder="Ex: 549236 ou vide pour auto-détection"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-900">
+                    {merakiStatus && (
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
+                        {merakiStatus}
+                      </div>
+                    )}
+                    {merakiSwitches.length > 0 && (
+                      <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {merakiSwitches.length} équipement(s) prêt(s) à être raqués
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleTestPortal("meraki")}
+                      disabled={isTestingMeraki}
+                      className="w-full py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200 border border-emerald-500/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isTestingMeraki ? "animate-spin" : ""}`}
+                      />
+                      {isTestingMeraki ? "Scan Meraki en cours..." : "Tester & Découvrir Switchs"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. ZYXEL NEBULA */}
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-4 shadow-lg hover:border-sky-500/40 transition">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 font-bold text-xs">
+                          ZN
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                            Zyxel Nebula Cloud
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">
+                              GS1920 / XGS
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            Nebula Control Center (NCC)
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          nebulaStatus?.startsWith("✅")
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                            : nebulaStatus?.startsWith("❌")
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                              : "bg-slate-900 text-slate-400 border-slate-800"
+                        }`}
+                      >
+                        {nebulaStatus?.startsWith("✅")
+                          ? "CONNECTÉ"
+                          : nebulaStatus?.startsWith("❌")
+                            ? "ERREUR"
+                            : "NON CONFIGURÉ"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Clé d'API Nebula (X-Api-Key)
+                        </label>
+                        <input
+                          type="password"
+                          value={nebulaApiKey}
+                          onChange={(e) => setNebulaApiKey(e.target.value)}
+                          placeholder="Clé générée dans Mon Compte > Clé d'API"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-sky-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Organisation / Site Nebula
+                        </label>
+                        <input
+                          type="text"
+                          value={nebulaOrg}
+                          onChange={(e) => setNebulaOrg(e.target.value)}
+                          placeholder="Nom ou UUID d'organisation Nebula"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-sky-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-900">
+                    {nebulaStatus && (
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
+                        {nebulaStatus}
+                      </div>
+                    )}
+                    {nebulaSwitches.length > 0 && (
+                      <div className="text-[10px] text-sky-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {nebulaSwitches.length} équipement(s) prêt(s) à être raqués
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleTestPortal("nebula")}
+                      disabled={isTestingNebula}
+                      className="w-full py-2 bg-sky-600/20 hover:bg-sky-600/30 text-sky-200 border border-sky-500/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isTestingNebula ? "animate-spin" : ""}`}
+                      />
+                      {isTestingNebula
+                        ? "Interrogation de Nebula..."
+                        : "Tester & Découvrir Switchs"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. UBIQUITI UNIFI */}
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-4 shadow-lg hover:border-cyan-500/40 transition">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold text-xs">
+                          UI
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                            Ubiquiti UniFi Network
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                              USW / UDM
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            UniFi OS Controller API
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          unifiStatus?.startsWith("✅")
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                            : unifiStatus?.startsWith("❌")
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                              : "bg-slate-900 text-slate-400 border-slate-800"
+                        }`}
+                      >
+                        {unifiStatus?.startsWith("✅")
+                          ? "CONNECTÉ"
+                          : unifiStatus?.startsWith("❌")
+                            ? "ERREUR"
+                            : "NON CONFIGURÉ"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Hôte / URL du Contrôleur UniFi
+                        </label>
+                        <input
+                          type="text"
+                          value={unifiHost}
+                          onChange={(e) => setUnifiHost(e.target.value)}
+                          placeholder="192.168.1.1 ou https://unifi.corp.local:8443"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-medium">
+                            Clé API UniFi
+                          </label>
+                          <input
+                            type="password"
+                            value={unifiApiKey}
+                            onChange={(e) => setUnifiApiKey(e.target.value)}
+                            placeholder="Clé générée UniFi OS"
+                            className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-medium">
+                            Nom du Site
+                          </label>
+                          <input
+                            type="text"
+                            value={unifiSite}
+                            onChange={(e) => setUnifiSite(e.target.value)}
+                            placeholder="default"
+                            className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-900">
+                    {unifiStatus && (
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
+                        {unifiStatus}
+                      </div>
+                    )}
+                    {unifiSwitches.length > 0 && (
+                      <div className="text-[10px] text-cyan-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {unifiSwitches.length} équipement(s) prêt(s) à être raqués
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleTestPortal("unifi")}
+                      disabled={isTestingUnifi}
+                      className="w-full py-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-200 border border-cyan-500/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isTestingUnifi ? "animate-spin" : ""}`}
+                      />
+                      {isTestingUnifi ? "Interrogation UniFi..." : "Tester & Découvrir Switchs"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 5. FORTINET FORTIGATE & FORTICLOUD */}
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-4 shadow-lg hover:border-rose-500/40 transition md:col-span-2">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 font-bold text-xs">
+                          FN
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                            Fortinet FortiGate & FortiCloud
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                              FortiSwitch / FortiAP Controller
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            FortiOS REST API v2
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          fortinetStatus?.startsWith("✅")
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                            : fortinetStatus?.startsWith("❌")
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                              : "bg-slate-900 text-slate-400 border-slate-800"
+                        }`}
+                      >
+                        {fortinetStatus?.startsWith("✅")
+                          ? "CONNECTÉ"
+                          : fortinetStatus?.startsWith("❌")
+                            ? "ERREUR"
+                            : "NON CONFIGURÉ"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Hôte / IP du Contrôleur FortiGate
+                        </label>
+                        <input
+                          type="text"
+                          value={fortinetHost}
+                          onChange={(e) => setFortinetHost(e.target.value)}
+                          placeholder="https://10.42.0.254 ou https://fortigate.corp.local"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-rose-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-medium">
+                          Token d'API REST FortiOS
+                        </label>
+                        <input
+                          type="password"
+                          value={fortinetToken}
+                          onChange={(e) => setFortinetToken(e.target.value)}
+                          placeholder="Bearer token créé dans Système > Administrateurs"
+                          className="w-full mt-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-[11px] focus:outline-none focus:border-rose-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-900">
+                    {fortinetStatus && (
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
+                        {fortinetStatus}
+                      </div>
+                    )}
+                    {fortinetSwitches.length > 0 && (
+                      <div className="text-[10px] text-rose-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {fortinetSwitches.length} équipement(s) prêt(s) à être raqués
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleTestPortal("fortinet")}
+                      disabled={isTestingFortinet}
+                      className="w-full py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-200 border border-rose-500/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isTestingFortinet ? "animate-spin" : ""}`}
+                      />
+                      {isTestingFortinet
+                        ? "Interrogation FortiGate..."
+                        : "Tester & Découvrir Switchs"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

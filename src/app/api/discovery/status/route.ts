@@ -17,6 +17,20 @@ export async function GET(req: Request) {
 
     const db = await getDb();
 
+    // 0. Récupérer l'ensemble des équipements découverts pour le catalogue d'infrastructure
+    if (searchParams.get("allDevices") === "true") {
+      const allDevs = await db
+        .select()
+        .from(discoveredDevices)
+        .orderBy(desc(discoveredDevices.lastSeenAt))
+        .limit(100);
+
+      return NextResponse.json({
+        success: true,
+        devices: allDevs,
+      });
+    }
+
     // 1. Si aucun jobId spécifié, renvoyer les 10 derniers scans
     if (!jobId) {
       const recentJobs = await db
@@ -31,8 +45,27 @@ export async function GET(req: Request) {
       });
     }
 
-    // 2. Récupérer le job spécifique
-    const [job] = await db.select().from(discoveryJobs).where(eq(discoveryJobs.id, jobId));
+    // 2. Récupérer le job spécifique (ou le plus récent si jobId="latest")
+    let targetJobId = jobId;
+    if (jobId === "latest") {
+      const [latestJob] = await db
+        .select()
+        .from(discoveryJobs)
+        .orderBy(desc(discoveryJobs.startedAt))
+        .limit(1);
+      if (!latestJob) {
+        return NextResponse.json({
+          success: true,
+          job: null,
+          devices: [],
+          connections: [],
+          diffs: [],
+        });
+      }
+      targetJobId = latestJob.id;
+    }
+
+    const [job] = await db.select().from(discoveryJobs).where(eq(discoveryJobs.id, targetJobId));
 
     if (!job) {
       return NextResponse.json(
@@ -45,20 +78,20 @@ export async function GET(req: Request) {
     const logs = await db
       .select()
       .from(discoveryLogs)
-      .where(eq(discoveryLogs.jobId, jobId))
+      .where(eq(discoveryLogs.jobId, targetJobId))
       .orderBy(discoveryLogs.createdAt);
 
     // 4. Récupérer les équipements découverts
     const devices = await db
       .select()
       .from(discoveredDevices)
-      .where(eq(discoveredDevices.jobId, jobId));
+      .where(eq(discoveredDevices.jobId, targetJobId));
 
     // 5. Récupérer les connexions L2 découvertes
     const connections = await db
       .select()
       .from(discoveredConnections)
-      .where(eq(discoveredConnections.jobId, jobId));
+      .where(eq(discoveredConnections.jobId, targetJobId));
 
     // 6. Détection de dérive (diffs) avec les nœuds actuels
     const dbNodes = await db.select().from(nodes);

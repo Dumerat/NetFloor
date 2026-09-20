@@ -14,7 +14,6 @@ import {
   RackDeviceBrand,
   RackDeviceType,
 } from "@/components/canvas/EquipmentLayer";
-import { CloudSwitchDiscoveryModal } from "./CloudSwitchDiscoveryModal";
 import { SwitchPortVisualizer } from "./SwitchPortVisualizer";
 import { ENTERPRISE_DIRECTORY } from "@/data/directory";
 import { getRackPortAvailability } from "@/engine/spatial/autoRoute";
@@ -301,8 +300,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   // État pour la sélection du commutateur actif dans l'onglet SWITCHES
   const [selectedSwitchId, setSelectedSwitchId] = useState<string | null>(null);
 
-  // État pour la découverte Cloud / SNMP et gestion dynamique des équipements raqués
-  const [isCloudDiscoveryOpen, setIsCloudDiscoveryOpen] = useState(false);
+  // État pour la gestion dynamique des équipements raqués
   const [isAddingRackDevice, setIsAddingRackDevice] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState("");
   const [newDeviceSlotU, setNewDeviceSlotU] = useState(24);
@@ -4206,14 +4204,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       </div>
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => setIsCloudDiscoveryOpen(true)}
-                          className="px-2 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded text-[10px] font-medium flex items-center gap-1 transition shadow"
-                          title="Détecter automatiquement les switchs via Aruba Central, Zyxel Nebula Cloud ou SNMP Walk"
-                        >
-                          <Cloud className="w-3 h-3" />
-                          <span>Découverte</span>
-                        </button>
-                        <button
                           onClick={() => {
                             const nextState = !isAddingRackDevice;
                             setIsAddingRackDevice(nextState);
@@ -4868,16 +4858,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
             </div>
           </div>
         )}
-
-        {/* Modal de découverte switchs Cloud (Aruba Central, Nebula, SNMP) */}
-        <CloudSwitchDiscoveryModal
-          isOpen={isCloudDiscoveryOpen}
-          onClose={() => setIsCloudDiscoveryOpen(false)}
-          rackName={selectedNode.name}
-          rackUHeight={42}
-          existingDevices={rackDevices}
-          onAddDeviceToRack={handleAddRackDevice}
-        />
       </div>
     );
   }

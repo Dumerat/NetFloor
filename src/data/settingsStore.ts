@@ -98,11 +98,46 @@ export interface IntegrationsSettings {
   };
 }
 
+export interface CloudPortalsSettings {
+  aruba: {
+    enabled: boolean;
+    cluster: string;
+    token: string;
+    status: "CONNECTED" | "DISCONNECTED" | "ERROR";
+  };
+  meraki: {
+    enabled: boolean;
+    apiKey: string;
+    orgId: string;
+    status: "CONNECTED" | "DISCONNECTED" | "ERROR";
+  };
+  nebula: {
+    enabled: boolean;
+    apiKey: string;
+    orgId: string;
+    status: "CONNECTED" | "DISCONNECTED" | "ERROR";
+  };
+  unifi: {
+    enabled: boolean;
+    host: string;
+    apiKey: string;
+    site: string;
+    status: "CONNECTED" | "DISCONNECTED" | "ERROR";
+  };
+  fortinet: {
+    enabled: boolean;
+    host: string;
+    apiToken: string;
+    status: "CONNECTED" | "DISCONNECTED" | "ERROR";
+  };
+}
+
 export interface SystemSettings {
   sso: SsoSettings;
   snmp: SnmpSettings;
   subnets: SubnetDefinition[];
   integrations: IntegrationsSettings;
+  portals?: CloudPortalsSettings;
   directoryUsers?: DirectoryUser[];
 }
 
@@ -200,6 +235,39 @@ export const INITIAL_SETTINGS: SystemSettings = {
       webhookUrl: "",
       notifyOnPortDown: false,
       notifyOnHighTemp: false,
+    },
+  },
+  portals: {
+    aruba: {
+      enabled: false,
+      cluster: "eu-central-1.central.arubanetworks.com",
+      token: "",
+      status: "DISCONNECTED",
+    },
+    meraki: {
+      enabled: false,
+      apiKey: "",
+      orgId: "",
+      status: "DISCONNECTED",
+    },
+    nebula: {
+      enabled: false,
+      apiKey: "",
+      orgId: "",
+      status: "DISCONNECTED",
+    },
+    unifi: {
+      enabled: false,
+      host: "192.168.1.1",
+      apiKey: "",
+      site: "default",
+      status: "DISCONNECTED",
+    },
+    fortinet: {
+      enabled: false,
+      host: "https://10.42.0.254",
+      apiToken: "",
+      status: "DISCONNECTED",
     },
   },
   directoryUsers: [],
