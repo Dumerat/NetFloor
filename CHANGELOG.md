@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.4.0...netfloor-architect-v0.4.1) (2026-09-20)
+
+
+### 💄 Style / Formatage
+
+* apply prettier code formatting to all typescript files ([e5710b2](https://github.com/Dumerat/NetFloor/commit/e5710b20231467fed1e6bf348bc6c88699a1fce2))
+
 ## [0.4.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.3.0...netfloor-architect-v0.4.0) (2026-09-19)
 
 
