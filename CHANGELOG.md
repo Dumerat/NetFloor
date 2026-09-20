@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.4.2...netfloor-architect-v0.5.0) (2026-09-20)
+
+
+### ✨ Nouvelles fonctionnalités
+
+* **admin:** overhaul network discovery tab with 4-pass pipeline and Human-in-the-Loop reconciliation ([01dbdaa](https://github.com/Dumerat/NetFloor/commit/01dbdaa86af6c165403bf5014079c58e95e704ab))
+* **discovery:** enable smart equipment relocation without duplication and precise scan profiling ([73ac83f](https://github.com/Dumerat/NetFloor/commit/73ac83f6cab1a6cd8df4c63a00e999ad6e588d8c))
+* **discovery:** hybrid L2/L3 network discovery pipeline, Drizzle schema, and human-in-the-loop reconciliation ([a136b02](https://github.com/Dumerat/NetFloor/commit/a136b023d997ec0103c172bea8d5604abce2a997))
+* **rack:** revamp equipment catalog, rack drag-drop & cloud portals ([2b88957](https://github.com/Dumerat/NetFloor/commit/2b88957d1b2b2cb4d1403854e1ceb5b3c94d62e9))
+
+
+### 🐛 Corrections de bugs
+
+* **coverage:** fix sonarqube code coverage on engine and small fix ([002d860](https://github.com/Dumerat/NetFloor/commit/002d860f5b8f98db074961f8905eb4526de2fa64))
+* **db:** apply drizzle migrations and discovery schema on PostgreSQL and handle /32 probing ([c2e3469](https://github.com/Dumerat/NetFloor/commit/c2e3469e7ad65cf975be2accdce41843bc70e2e4))
+
 ## [0.4.2](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.4.1...netfloor-architect-v0.4.2) (2026-09-20)
 
 
