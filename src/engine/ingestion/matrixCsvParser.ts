@@ -4,11 +4,7 @@
  * pour les équipements réseau, bureaux et utilisateurs, avec gestion des éléments non positionnés.
  */
 
-import {
-  NodeDisplay,
-  RackDisplay,
-  IotCustomProperties,
-} from "@/components/canvas/EquipmentLayer";
+import { NodeDisplay, RackDisplay, IotCustomProperties } from "@/components/canvas/EquipmentLayer";
 
 export interface MatrixRowData {
   rowNumber: number;

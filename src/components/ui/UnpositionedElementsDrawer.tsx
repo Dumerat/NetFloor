@@ -110,19 +110,28 @@ export const UnpositionedElementsDrawer: FC<UnpositionedElementsDrawerProps> = (
                     style: "bg-blue-600/20 text-blue-400 border-blue-500/30",
                   };
                 }
-                if (node.subType === "WIFI_AP" || node.iotProperties?.deviceCategory === "WIFI_AP") {
+                if (
+                  node.subType === "WIFI_AP" ||
+                  node.iotProperties?.deviceCategory === "WIFI_AP"
+                ) {
                   return {
                     icon: <Wifi className="w-3 h-3" />,
                     style: "bg-amber-600/20 text-amber-400 border-amber-500/30",
                   };
                 }
-                if (node.subType === "CAMERA_IP" || node.iotProperties?.deviceCategory === "CAMERA") {
+                if (
+                  node.subType === "CAMERA_IP" ||
+                  node.iotProperties?.deviceCategory === "CAMERA"
+                ) {
                   return {
                     icon: <Camera className="w-3 h-3" />,
                     style: "bg-rose-600/20 text-rose-400 border-rose-500/30",
                   };
                 }
-                if (node.subType === "PRINTER_STATION" || node.iotProperties?.deviceCategory === "PRINTER") {
+                if (
+                  node.subType === "PRINTER_STATION" ||
+                  node.iotProperties?.deviceCategory === "PRINTER"
+                ) {
                   return {
                     icon: <Printer className="w-3 h-3" />,
                     style: "bg-cyan-600/20 text-cyan-400 border-cyan-500/30",

@@ -1222,8 +1222,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const isPrinter =
       selectedNode.outletRole === "PRINTER" || selectedNode.subType === "PRINTER_STATION";
     const isWifi = selectedNode.outletRole === "WIFI" || selectedNode.subType === "WIFI_AP";
-    const isCamera =
-      selectedNode.outletRole === "CAMERA" || selectedNode.subType === "CAMERA_IP";
+    const isCamera = selectedNode.outletRole === "CAMERA" || selectedNode.subType === "CAMERA_IP";
     const isFloorBox = selectedNode.subType === "FLOOR_BOX";
     const isIot =
       selectedNode.category === "IOT" ||
@@ -2483,7 +2482,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     <div className="flex justify-between items-center bg-indigo-950/30 p-1.5 rounded border border-indigo-500/30 text-indigo-200">
                       <span>Halo de couverture radio :</span>
                       <span className="font-bold text-indigo-300">
-                        {selectedNode.iotProperties?.coverageRadiusM ?? 15} mètres (visible sur le plan)
+                        {selectedNode.iotProperties?.coverageRadiusM ?? 15} mètres (visible sur le
+                        plan)
                       </span>
                     </div>
                     <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
@@ -2515,18 +2515,25 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     <div className="flex justify-between items-center bg-sky-950/30 p-1.5 rounded border border-sky-500/30 text-sky-200">
                       <span>Champ de vision (FOV) :</span>
                       <span className="font-bold text-sky-300">
-                        {selectedNode.iotProperties?.fovDegrees ?? 110}° (Cône directionnel {selectedNode.iotProperties?.orientationDeg ?? 90}°)
+                        {selectedNode.iotProperties?.fovDegrees ?? 110}° (Cône directionnel{" "}
+                        {selectedNode.iotProperties?.orientationDeg ?? 90}°)
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5">
                       <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
-                        <span className="text-slate-400 block text-[9px]">Vision Nocturne IR :</span>
+                        <span className="text-slate-400 block text-[9px]">
+                          Vision Nocturne IR :
+                        </span>
                         <span className="text-emerald-400 font-semibold">
-                          {selectedNode.iotProperties?.nightVisionEnabled !== false ? "Active" : "Désactivée"}
+                          {selectedNode.iotProperties?.nightVisionEnabled !== false
+                            ? "Active"
+                            : "Désactivée"}
                         </span>
                       </div>
                       <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
-                        <span className="text-slate-400 block text-[9px]">Enregistrement NVR :</span>
+                        <span className="text-slate-400 block text-[9px]">
+                          Enregistrement NVR :
+                        </span>
                         <span className="text-purple-300 font-semibold">
                           {selectedNode.iotProperties?.recordingMode ?? "CONTINU"}
                         </span>
@@ -2548,27 +2555,49 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       <span className="text-slate-400 block text-[9px]">Niveaux de toner :</span>
                       <div className="grid grid-cols-4 gap-1.5 text-center text-[9px]">
                         <div>
-                          <div className="text-cyan-400 font-bold">C: {selectedNode.iotProperties?.tonerCyan ?? 75}%</div>
+                          <div className="text-cyan-400 font-bold">
+                            C: {selectedNode.iotProperties?.tonerCyan ?? 75}%
+                          </div>
                           <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden mt-0.5">
-                            <div className="bg-cyan-400 h-full" style={{ width: `${selectedNode.iotProperties?.tonerCyan ?? 75}%` }} />
+                            <div
+                              className="bg-cyan-400 h-full"
+                              style={{ width: `${selectedNode.iotProperties?.tonerCyan ?? 75}%` }}
+                            />
                           </div>
                         </div>
                         <div>
-                          <div className="text-pink-400 font-bold">M: {selectedNode.iotProperties?.tonerMagenta ?? 80}%</div>
+                          <div className="text-pink-400 font-bold">
+                            M: {selectedNode.iotProperties?.tonerMagenta ?? 80}%
+                          </div>
                           <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden mt-0.5">
-                            <div className="bg-pink-400 h-full" style={{ width: `${selectedNode.iotProperties?.tonerMagenta ?? 80}%` }} />
+                            <div
+                              className="bg-pink-400 h-full"
+                              style={{
+                                width: `${selectedNode.iotProperties?.tonerMagenta ?? 80}%`,
+                              }}
+                            />
                           </div>
                         </div>
                         <div>
-                          <div className="text-yellow-400 font-bold">J: {selectedNode.iotProperties?.tonerYellow ?? 65}%</div>
+                          <div className="text-yellow-400 font-bold">
+                            J: {selectedNode.iotProperties?.tonerYellow ?? 65}%
+                          </div>
                           <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden mt-0.5">
-                            <div className="bg-yellow-400 h-full" style={{ width: `${selectedNode.iotProperties?.tonerYellow ?? 65}%` }} />
+                            <div
+                              className="bg-yellow-400 h-full"
+                              style={{ width: `${selectedNode.iotProperties?.tonerYellow ?? 65}%` }}
+                            />
                           </div>
                         </div>
                         <div>
-                          <div className="text-slate-300 font-bold">K: {selectedNode.iotProperties?.tonerBlack ?? 90}%</div>
+                          <div className="text-slate-300 font-bold">
+                            K: {selectedNode.iotProperties?.tonerBlack ?? 90}%
+                          </div>
                           <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden mt-0.5">
-                            <div className="bg-slate-300 h-full" style={{ width: `${selectedNode.iotProperties?.tonerBlack ?? 90}%` }} />
+                            <div
+                              className="bg-slate-300 h-full"
+                              style={{ width: `${selectedNode.iotProperties?.tonerBlack ?? 90}%` }}
+                            />
                           </div>
                         </div>
                       </div>
@@ -3109,7 +3138,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-slate-400 block mb-0.5">Réseau Invité (Secondary SSID) :</label>
+                        <label className="text-slate-400 block mb-0.5">
+                          Réseau Invité (Secondary SSID) :
+                        </label>
                         <input
                           type="text"
                           value={selectedNode.iotProperties?.secondarySsid ?? "NetFloor-Guests"}
@@ -3212,7 +3243,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           />
                         </div>
                         <div>
-                          <label className="text-slate-400 block mb-0.5">Puissance TX (dBm) :</label>
+                          <label className="text-slate-400 block mb-0.5">
+                            Puissance TX (dBm) :
+                          </label>
                           <input
                             type="number"
                             value={selectedNode.iotProperties?.txPowerDbm ?? 20}
@@ -3252,7 +3285,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-slate-400 block mb-0.5">Résolution Capteur :</label>
+                          <label className="text-slate-400 block mb-0.5">
+                            Résolution Capteur :
+                          </label>
                           <select
                             value={selectedNode.iotProperties?.resolution ?? "4K Ultra HD"}
                             onChange={(e) =>
@@ -3385,7 +3420,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         <label className="text-slate-400 block mb-0.5">Modèle d'Imprimante :</label>
                         <input
                           type="text"
-                          value={selectedNode.iotProperties?.printerModel ?? "Multifonction Réseau A3/A4"}
+                          value={
+                            selectedNode.iotProperties?.printerModel ?? "Multifonction Réseau A3/A4"
+                          }
                           onChange={(e) =>
                             onUpdateNodeProperties?.(selectedNode.id, {
                               iotProperties: {
@@ -3399,7 +3436,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-slate-400 block mb-0.5">Protocole Impression :</label>
+                          <label className="text-slate-400 block mb-0.5">
+                            Protocole Impression :
+                          </label>
                           <select
                             value={selectedNode.iotProperties?.protocol ?? "IPP_IPPS"}
                             onChange={(e) =>
@@ -3615,10 +3654,14 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         </div>
                       </div>
                       <div>
-                        <label className="text-slate-400 block mb-0.5">Dernière Valeur Télémétrique :</label>
+                        <label className="text-slate-400 block mb-0.5">
+                          Dernière Valeur Télémétrique :
+                        </label>
                         <input
                           type="text"
-                          value={selectedNode.iotProperties?.lastTelemetryValue ?? "21.5°C / 48% HR"}
+                          value={
+                            selectedNode.iotProperties?.lastTelemetryValue ?? "21.5°C / 48% HR"
+                          }
                           onChange={(e) =>
                             onUpdateNodeProperties?.(selectedNode.id, {
                               iotProperties: {

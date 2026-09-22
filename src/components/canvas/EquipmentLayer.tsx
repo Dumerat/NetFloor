@@ -132,11 +132,7 @@ export interface IotCustomProperties {
   ssid?: string | undefined;
   secondarySsid?: string | undefined;
   wifiStandard?:
-    | "Wi-Fi 5 (802.11ac)"
-    | "Wi-Fi 6 (802.11ax)"
-    | "Wi-Fi 6E"
-    | "Wi-Fi 7 (802.11be)"
-    | undefined;
+    "Wi-Fi 5 (802.11ac)" | "Wi-Fi 6 (802.11ax)" | "Wi-Fi 6E" | "Wi-Fi 7 (802.11be)" | undefined;
   frequencyBand?: "2.4GHz" | "5GHz" | "6GHz" | "DUAL_BAND" | "TRI_BAND" | undefined;
   channel?: number | undefined;
   txPowerDbm?: number | undefined;
@@ -168,13 +164,7 @@ export interface IotCustomProperties {
 
   // Autre IoT / Capteur
   sensorType?:
-    | "TEMPERATURE"
-    | "HUMIDITY"
-    | "CO2"
-    | "PRESENCE"
-    | "BADGE_READER"
-    | "SMOKE"
-    | undefined;
+    "TEMPERATURE" | "HUMIDITY" | "CO2" | "PRESENCE" | "BADGE_READER" | "SMOKE" | undefined;
   batteryLevelPercent?: number | undefined;
   transmissionIntervalSec?: number | undefined;
   protocolType?: "MQTT" | "HTTP_REST" | "COAP" | "ZIGBEE" | "BLE" | "LORAWAN" | undefined;
@@ -3754,10 +3744,44 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 {/* Mini jauges de niveau de toner CMJN si renseignées */}
                 {outlet.iotProperties && (
                   <Group x={-140} y={15} listening={false}>
-                    <Rect x={0} y={0} width={60} height={10} fill="#06b6d4" opacity={0.85} cornerRadius={2} />
-                    <Rect x={70} y={0} width={60} height={10} fill="#ec4899" opacity={0.85} cornerRadius={2} />
-                    <Rect x={140} y={0} width={60} height={10} fill="#eab308" opacity={0.85} cornerRadius={2} />
-                    <Rect x={210} y={0} width={60} height={10} fill="#0f172a" stroke="#64748b" strokeWidth={1} opacity={0.9} cornerRadius={2} />
+                    <Rect
+                      x={0}
+                      y={0}
+                      width={60}
+                      height={10}
+                      fill="#06b6d4"
+                      opacity={0.85}
+                      cornerRadius={2}
+                    />
+                    <Rect
+                      x={70}
+                      y={0}
+                      width={60}
+                      height={10}
+                      fill="#ec4899"
+                      opacity={0.85}
+                      cornerRadius={2}
+                    />
+                    <Rect
+                      x={140}
+                      y={0}
+                      width={60}
+                      height={10}
+                      fill="#eab308"
+                      opacity={0.85}
+                      cornerRadius={2}
+                    />
+                    <Rect
+                      x={210}
+                      y={0}
+                      width={60}
+                      height={10}
+                      fill="#0f172a"
+                      stroke="#64748b"
+                      strokeWidth={1}
+                      opacity={0.9}
+                      cornerRadius={2}
+                    />
                   </Group>
                 )}
                 {/* Voyant LED de statut vert ou rouge */}
@@ -3819,8 +3843,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               outlet.isPatched !== undefined ? outlet.isPatched : outlet.pingStatus === "ONLINE";
             const statusColor = isConnected ? "#22c55e" : "#ef4444";
             const fovDeg = outlet.iotProperties?.fovDegrees ?? 110;
-            const orientationDeg =
-              outlet.iotProperties?.orientationDeg ?? (outlet.rotationDeg ?? 90);
+            const orientationDeg = outlet.iotProperties?.orientationDeg ?? outlet.rotationDeg ?? 90;
             const fovRadiusMm = 8000;
             const showFov =
               isSelected ||
@@ -3871,14 +3894,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
 
                 {/* Lentille optique centrale orientée */}
                 <Group rotation={orientationDeg} listening={false}>
-                  <Rect
-                    x={-25}
-                    y={-45}
-                    width={50}
-                    height={55}
-                    fill="#0284c7"
-                    cornerRadius={8}
-                  />
+                  <Rect x={-25} y={-45} width={50} height={55} fill="#0284c7" cornerRadius={8} />
                   <Circle
                     x={0}
                     y={-25}
