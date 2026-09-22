@@ -3859,19 +3859,30 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 y={outlet.yMm}
                 {...interactiveProps}
               >
-                {/* Cône de vision FOV interactif (champ de surveillance) */}
+                {/* Cône de vision FOV interactif ou Couverture 360° Globe */}
                 {showFov && (
                   <Group listening={false}>
-                    <Wedge
-                      radius={fovRadiusMm}
-                      angle={fovDeg}
-                      rotation={orientationDeg - fovDeg / 2}
-                      fill="rgba(56, 189, 248, 0.08)"
-                      stroke={isSelected ? "#38bdf8" : "rgba(56, 189, 248, 0.4)"}
-                      strokeWidth={isSelected ? 10 : 6}
-                      dash={[40, 25]}
-                      opacity={isSelected ? 0.95 : 0.65}
-                    />
+                    {fovDeg >= 360 ? (
+                      <Circle
+                        radius={fovRadiusMm}
+                        fill="rgba(56, 189, 248, 0.08)"
+                        stroke={isSelected ? "#38bdf8" : "rgba(56, 189, 248, 0.4)"}
+                        strokeWidth={isSelected ? 10 : 6}
+                        dash={[40, 25]}
+                        opacity={isSelected ? 0.95 : 0.65}
+                      />
+                    ) : (
+                      <Wedge
+                        radius={fovRadiusMm}
+                        angle={fovDeg}
+                        rotation={orientationDeg - fovDeg / 2}
+                        fill="rgba(56, 189, 248, 0.08)"
+                        stroke={isSelected ? "#38bdf8" : "rgba(56, 189, 248, 0.4)"}
+                        strokeWidth={isSelected ? 10 : 6}
+                        dash={[40, 25]}
+                        opacity={isSelected ? 0.95 : 0.65}
+                      />
+                    )}
                   </Group>
                 )}
 
@@ -3892,21 +3903,37 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   listening={false}
                 />
 
-                {/* Lentille optique centrale orientée */}
-                <Group rotation={orientationDeg} listening={false}>
-                  <Rect x={-25} y={-45} width={50} height={55} fill="#0284c7" cornerRadius={8} />
-                  <Circle
-                    x={0}
-                    y={-25}
-                    radius={28}
-                    fill="#030712"
-                    stroke="#38bdf8"
-                    strokeWidth={5}
-                  />
-                  <Circle x={-8} y={-32} radius={6} fill="#ffffff" opacity={0.7} />
-                  <Circle x={-18} y={-25} radius={3.5} fill="#ef4444" opacity={0.8} />
-                  <Circle x={18} y={-25} radius={3.5} fill="#ef4444" opacity={0.8} />
-                </Group>
+                {/* Lentille optique : Dôme Globe 360° Fisheye ou Objectif orienté */}
+                {fovDeg >= 360 ? (
+                  <Group listening={false}>
+                    <Circle radius={52} fill="#030712" stroke="#38bdf8" strokeWidth={6} />
+                    <Circle
+                      radius={36}
+                      fill="#0284c7"
+                      opacity={0.35}
+                      stroke="#0284c7"
+                      strokeWidth={2}
+                    />
+                    <Circle radius={20} fill="#0f172a" stroke="#7dd3fc" strokeWidth={3} />
+                    <Circle x={-10} y={-10} radius={8} fill="#ffffff" opacity={0.8} />
+                    <Circle x={8} y={8} radius={4} fill="#ffffff" opacity={0.5} />
+                  </Group>
+                ) : (
+                  <Group rotation={orientationDeg} listening={false}>
+                    <Rect x={-25} y={-45} width={50} height={55} fill="#0284c7" cornerRadius={8} />
+                    <Circle
+                      x={0}
+                      y={-25}
+                      radius={28}
+                      fill="#030712"
+                      stroke="#38bdf8"
+                      strokeWidth={5}
+                    />
+                    <Circle x={-8} y={-32} radius={6} fill="#ffffff" opacity={0.7} />
+                    <Circle x={-18} y={-25} radius={3.5} fill="#ef4444" opacity={0.8} />
+                    <Circle x={18} y={-25} radius={3.5} fill="#ef4444" opacity={0.8} />
+                  </Group>
+                )}
 
                 {/* Voyant LED de statut réseau / enregistrement */}
                 <Circle

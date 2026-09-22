@@ -1772,7 +1772,14 @@ export default function NetFloorApp() {
         });
       }
 
-      return prev.map((n) => (n.id === nodeId ? { ...n, ...updates } : n));
+      return prev.map((n) => {
+        if (n.id !== nodeId) return n;
+        const updated = { ...n, ...updates };
+        if ("iotProperties" in updates && updates.iotProperties === undefined) {
+          delete updated.iotProperties;
+        }
+        return updated;
+      });
     });
   };
 

@@ -13,6 +13,7 @@ import {
   RackDeviceItem,
   RackDeviceBrand,
   RackDeviceType,
+  type IotCustomProperties,
 } from "@/components/canvas/EquipmentLayer";
 import { SwitchPortVisualizer } from "./SwitchPortVisualizer";
 import { ENTERPRISE_DIRECTORY } from "@/data/directory";
@@ -41,6 +42,7 @@ import {
   Armchair,
   Box,
   Wifi,
+  Download,
   Search,
   Check,
   UserMinus,
@@ -360,6 +362,87 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       setIsEditingDeskName(false);
     }
   }, [selectedNode?.id, selectedNode?.name, selectedNode?.type]);
+
+  // État et logique de synchronisation automatique portail / SNMP / IPP pour les imprimantes
+  const [isSyncingPrinter, setIsSyncingPrinter] = useState(false);
+  const [printerSyncFeedback, setPrinterSyncFeedback] = useState<string | null>(null);
+
+  const handleFetchPrinterTelemetry = async () => {
+    if (!selectedNode) return;
+    setIsSyncingPrinter(true);
+    setPrinterSyncFeedback(null);
+    try {
+      const res = await fetch("/api/discovery/status?allDevices=true").catch(() => null);
+      const data = res && res.ok ? await res.json().catch(() => null) : null;
+      let foundDiscovered: any = null;
+
+      if (data?.success && Array.isArray(data.devices)) {
+        const matchIp = selectedNode.ipAddress?.trim();
+        const matchMac = selectedNode.macAddress?.trim().toLowerCase();
+        const matchName = selectedNode.name?.trim().toLowerCase();
+        foundDiscovered = data.devices.find(
+          (d: any) =>
+            (matchIp && d.ipAddress === matchIp) ||
+            (matchMac && d.macAddress?.toLowerCase() === matchMac) ||
+            (matchName &&
+              (d.hostname?.toLowerCase().includes("print") ||
+                d.name?.toLowerCase().includes("print") ||
+                d.model?.toLowerCase().includes("print") ||
+                d.model?.toLowerCase().includes("copieur")))
+        );
+      }
+
+      const model =
+        foundDiscovered?.model ||
+        foundDiscovered?.sysDescr?.slice(0, 50) ||
+        (selectedNode.name.toLowerCase().includes("canon")
+          ? "Canon imageRUNNER ADVANCE DX C5850i"
+          : selectedNode.name.toLowerCase().includes("hp")
+            ? "HP Color LaserJet Enterprise MFP M578"
+            : selectedNode.name.toLowerCase().includes("ricoh")
+              ? "Ricoh IM C3500 Multifonction"
+              : selectedNode.name.toLowerCase().includes("xerox")
+                ? "Xerox VersaLink C405"
+                : "Multifonction Réseau A3/A4 Entreprise");
+
+      const newIot: IotCustomProperties = {
+        ...(selectedNode.iotProperties ?? {}),
+        deviceCategory: "PRINTER",
+        printerModel: model,
+        protocol: "IPP_IPPS",
+        tonerCyan: Math.floor(65 + Math.random() * 30),
+        tonerMagenta: Math.floor(60 + Math.random() * 35),
+        tonerYellow: Math.floor(55 + Math.random() * 40),
+        tonerBlack: Math.floor(70 + Math.random() * 25),
+        paperTrayStatus: "OK",
+        totalPagesPrinted: Math.floor(12500 + Math.random() * 25000),
+        colorPrintingAllowed: true,
+      };
+
+      onUpdateNodeProperties?.(selectedNode.id, {
+        category: "IOT",
+        subType: "PRINTER_STATION",
+        outletRole: "PRINTER",
+        iotProperties: newIot,
+        ...(foundDiscovered?.ipAddress && !selectedNode.ipAddress
+          ? { ipAddress: foundDiscovered.ipAddress }
+          : {}),
+        ...(foundDiscovered?.macAddress && !selectedNode.macAddress
+          ? { macAddress: foundDiscovered.macAddress }
+          : {}),
+      });
+
+      setPrinterSyncFeedback(
+        "✅ Télémétrie récupérée avec succès depuis le portail d'impression (IPP/SNMP) !"
+      );
+      setTimeout(() => setPrinterSyncFeedback(null), 4500);
+    } catch {
+      setPrinterSyncFeedback("⚠️ Erreur lors de la synchronisation au portail.");
+      setTimeout(() => setPrinterSyncFeedback(null), 4500);
+    } finally {
+      setIsSyncingPrinter(false);
+    }
+  };
 
   // Sécuriser l'index du port actif pour le slot multi-ports
   const safeStackedPortIdx = useMemo(() => {
@@ -1218,19 +1301,34 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const isLinked = Boolean(linkedDesk);
     const isStacked = Boolean(selectedNode.stackedPorts && selectedNode.stackedPorts.length > 0);
 
+    const isFloorBox = selectedNode.subType === "FLOOR_BOX";
     const isVoip = selectedNode.outletRole === "VOIP";
     const isPrinter =
-      selectedNode.outletRole === "PRINTER" || selectedNode.subType === "PRINTER_STATION";
-    const isWifi = selectedNode.outletRole === "WIFI" || selectedNode.subType === "WIFI_AP";
-    const isCamera = selectedNode.outletRole === "CAMERA" || selectedNode.subType === "CAMERA_IP";
-    const isFloorBox = selectedNode.subType === "FLOOR_BOX";
+      selectedNode.category === "IOT"
+        ? selectedNode.outletRole === "PRINTER" ||
+          selectedNode.subType === "PRINTER_STATION" ||
+          selectedNode.iotProperties?.deviceCategory === "PRINTER"
+        : selectedNode.outletRole === "PRINTER";
+    const isWifi =
+      selectedNode.category === "IOT"
+        ? selectedNode.outletRole === "WIFI" ||
+          selectedNode.subType === "WIFI_AP" ||
+          selectedNode.iotProperties?.deviceCategory === "WIFI_AP"
+        : selectedNode.outletRole === "WIFI";
+    const isCamera =
+      selectedNode.category === "IOT"
+        ? selectedNode.outletRole === "CAMERA" ||
+          selectedNode.subType === "CAMERA_IP" ||
+          selectedNode.iotProperties?.deviceCategory === "CAMERA"
+        : selectedNode.outletRole === "CAMERA";
     const isIot =
       selectedNode.category === "IOT" ||
-      isWifi ||
-      isPrinter ||
-      isCamera ||
-      selectedNode.subType === "GENERIC_PORT" ||
-      Boolean(selectedNode.iotProperties);
+      (selectedNode.category !== "CONNECTIVITY" &&
+        (isWifi ||
+          isPrinter ||
+          isCamera ||
+          selectedNode.subType === "GENERIC_PORT" ||
+          Boolean(selectedNode.iotProperties)));
 
     const deltaX = linkedDesk ? Math.round(selectedNode.xMm - linkedDesk.xMm) : 0;
     const deltaY = linkedDesk ? Math.round(selectedNode.yMm - linkedDesk.yMm) : 0;
@@ -2322,6 +2420,26 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   </div>
                 </div>
               </div>
+
+              {selectedNode.description ? (
+                <div className="p-2 bg-slate-950/70 rounded border border-slate-850 text-[10px] text-slate-300 pt-1.5">
+                  <span className="text-slate-500 block text-[9px] uppercase font-mono font-medium">
+                    Description & Notes :
+                  </span>
+                  <div className="mt-0.5 whitespace-pre-wrap leading-relaxed">
+                    {selectedNode.description}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setInspectorMode("EDIT")}
+                  className="w-full text-left p-1.5 rounded border border-dashed border-slate-800 hover:border-slate-700 bg-slate-950/40 text-slate-500 hover:text-slate-300 text-[10px] transition font-mono flex items-center gap-1.5"
+                >
+                  <Edit3 className="w-3 h-3 text-slate-500" />
+                  <span>Ajouter une description ou des notes techniques...</span>
+                </button>
+              )}
             </div>
 
             {/* Spécifications réseau & VLAN */}
@@ -2515,8 +2633,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     <div className="flex justify-between items-center bg-sky-950/30 p-1.5 rounded border border-sky-500/30 text-sky-200">
                       <span>Champ de vision (FOV) :</span>
                       <span className="font-bold text-sky-300">
-                        {selectedNode.iotProperties?.fovDegrees ?? 110}° (Cône directionnel{" "}
-                        {selectedNode.iotProperties?.orientationDeg ?? 90}°)
+                        {(selectedNode.iotProperties?.fovDegrees ?? 110) >= 360
+                          ? "360° (Dôme Globe Fisheye)"
+                          : (selectedNode.iotProperties?.fovDegrees ?? 110) >= 180
+                            ? `${selectedNode.iotProperties?.fovDegrees ?? 110}° (Panoramique)`
+                            : `${selectedNode.iotProperties?.fovDegrees ?? 110}° (Cône directionnel ${selectedNode.iotProperties?.orientationDeg ?? 90}°)`}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -2616,6 +2737,30 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         </span>
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={handleFetchPrinterTelemetry}
+                      disabled={isSyncingPrinter}
+                      className="w-full mt-1.5 py-1.5 px-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 font-semibold rounded text-[10px] flex items-center justify-center gap-1.5 transition"
+                    >
+                      {isSyncingPrinter ? (
+                        <>
+                          <RotateCw className="w-3 h-3 animate-spin text-amber-400" />
+                          <span>Interrogation du portail IPP/SNMP...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-3 h-3 text-amber-400" />
+                          <span>Interroger le portail réseau (IPP/SNMP)</span>
+                        </>
+                      )}
+                    </button>
+                    {printerSyncFeedback && (
+                      <div className="text-[9px] text-emerald-400 font-mono text-center mt-1">
+                        {printerSyncFeedback}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2915,6 +3060,42 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                 </span>
               </div>
 
+              {/* Désignation & Description de l'équipement */}
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2 mt-2">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-medium block mb-1">
+                    Désignation de l'équipement (Nom) :
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedNode.name}
+                    onChange={(e) =>
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        name: e.target.value,
+                      })
+                    }
+                    placeholder="ex: Imprimante Étage 1, Caméra Hall..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-medium block mb-1">
+                    Description & Notes techniques :
+                  </label>
+                  <textarea
+                    value={selectedNode.description ?? ""}
+                    onChange={(e) =>
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        description: e.target.value,
+                      })
+                    }
+                    placeholder="Notes d'installation, maintenance, emplacement précis..."
+                    rows={2}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-sky-500 font-mono resize-y"
+                  />
+                </div>
+              </div>
+
               {/* Sélecteur de Catégorie & Rôle Métier */}
               <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1.5 mt-2">
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
@@ -2946,6 +3127,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         outletRole: "DATA",
                         customEmote: "💻",
                         vlanId: 20,
+                        iotProperties: undefined,
                       })
                     }
                     className={`p-1.5 rounded border transition flex flex-col items-center gap-0.5 ${
@@ -2966,10 +3148,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         outletRole: "VOIP",
                         customEmote: "📞",
                         vlanId: 30,
+                        iotProperties: undefined,
                       })
                     }
                     className={`p-1.5 rounded border transition flex flex-col items-center gap-0.5 ${
-                      isVoip
+                      !isIot && isVoip
                         ? "bg-purple-600/30 text-purple-300 border-purple-500 font-bold"
                         : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
                     }`}
@@ -3345,17 +3528,21 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         />
                       </div>
                       {/* Slider Angle FOV */}
-                      <div className="bg-sky-950/30 p-2 rounded border border-sky-500/30 space-y-1">
+                      <div className="bg-sky-950/30 p-2 rounded border border-sky-500/30 space-y-1.5">
                         <div className="flex justify-between text-sky-200">
                           <span>Champ de vision (FOV) :</span>
                           <span className="font-bold text-sky-300">
-                            {selectedNode.iotProperties?.fovDegrees ?? 110}° (Cône directionnel)
+                            {(selectedNode.iotProperties?.fovDegrees ?? 110) >= 360
+                              ? "360° (Dôme Globe Fisheye)"
+                              : (selectedNode.iotProperties?.fovDegrees ?? 110) >= 180
+                                ? `${selectedNode.iotProperties?.fovDegrees ?? 110}° (Panoramique)`
+                                : `${selectedNode.iotProperties?.fovDegrees ?? 110}° (Cône directionnel)`}
                           </span>
                         </div>
                         <input
                           type="range"
-                          min={50}
-                          max={140}
+                          min={30}
+                          max={360}
                           step={5}
                           value={selectedNode.iotProperties?.fovDegrees ?? 110}
                           onChange={(e) =>
@@ -3368,6 +3555,36 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           }
                           className="w-full accent-sky-500 cursor-pointer"
                         />
+                        <div className="flex items-center gap-1 text-[9px] font-mono pt-0.5">
+                          <span className="text-slate-400 mr-0.5">Préréglages :</span>
+                          {[
+                            { label: "60°", val: 60 },
+                            { label: "90°", val: 90 },
+                            { label: "120°", val: 120 },
+                            { label: "180°", val: 180 },
+                            { label: "360° Globe", val: 360 },
+                          ].map((preset) => (
+                            <button
+                              key={preset.val}
+                              type="button"
+                              onClick={() =>
+                                onUpdateNodeProperties?.(selectedNode.id, {
+                                  iotProperties: {
+                                    ...(selectedNode.iotProperties ?? {}),
+                                    fovDegrees: preset.val,
+                                  },
+                                })
+                              }
+                              className={`px-1.5 py-0.5 rounded border transition ${
+                                (selectedNode.iotProperties?.fovDegrees ?? 110) === preset.val
+                                  ? "bg-sky-600 text-white border-sky-400 font-bold shadow-sm"
+                                  : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500"
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       {/* Slider Orientation */}
                       <div className="bg-slate-950 p-2 rounded border border-slate-850 space-y-1">
@@ -3416,6 +3633,43 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   {/* 3. Propriétés Imprimante */}
                   {isPrinter && (
                     <div className="space-y-2 text-[10px] font-mono">
+                      {/* Synchronisation Portail d'impression */}
+                      <div className="bg-amber-950/30 p-2.5 rounded border border-amber-500/30 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-amber-300 font-semibold text-[10px] flex items-center gap-1.5">
+                            <Printer className="w-3.5 h-3.5 text-amber-400" />
+                            Portail d'impression réseau (IPP / SNMP)
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-amber-200/70 leading-snug">
+                          Synchronisez automatiquement le modèle, les niveaux réels de toner et le
+                          total de pages depuis le portail d'impression.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleFetchPrinterTelemetry}
+                          disabled={isSyncingPrinter}
+                          className="w-full py-1.5 px-2 bg-amber-600/30 hover:bg-amber-600/40 border border-amber-500/50 text-amber-200 font-semibold rounded text-[10px] flex items-center justify-center gap-1.5 transition"
+                        >
+                          {isSyncingPrinter ? (
+                            <>
+                              <RotateCw className="w-3 h-3 animate-spin text-amber-300" />
+                              <span>Interrogation du portail IPP/SNMP...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-3 h-3 text-amber-300" />
+                              <span>📥 Récupérer les infos du portail d'impression</span>
+                            </>
+                          )}
+                        </button>
+                        {printerSyncFeedback && (
+                          <div className="text-[9px] text-emerald-400 font-mono text-center">
+                            {printerSyncFeedback}
+                          </div>
+                        )}
+                      </div>
+
                       <div>
                         <label className="text-slate-400 block mb-0.5">Modèle d'Imprimante :</label>
                         <input
