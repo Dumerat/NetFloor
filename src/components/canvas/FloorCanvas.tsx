@@ -64,6 +64,11 @@ interface FloorCanvasProps {
   onCloseRuler?: (() => void) | undefined;
   onExtractPortFromBlock?:
     ((blockId: string, portIndex: number, worldPos: { x: number; y: number }) => void) | undefined;
+  onRackDblClick?: ((rack: RackDisplay) => void) | undefined;
+  onSelectRackDevice?: ((rack: RackDisplay, device: any) => void) | undefined;
+  onMoveRackDeviceSlot?:
+    ((rackId: string, deviceId: string, targetSlotU: number) => void) | undefined;
+  selectedRackDeviceId?: string | null | undefined;
 }
 
 export function getNodeAABB(n: NodeDisplay): {
@@ -144,9 +149,9 @@ export function getRackAABB(r: RackDisplay): {
   minY: number;
   maxY: number;
 } {
-  const rWidth = r.widthMm ?? 800;
+  const rWidth = Math.max(r.widthMm ?? 800, 960);
   const totalU = r.uHeight || 42;
-  const minDepthForU = 320 + totalU * 36;
+  const minDepthForU = 340 + totalU * 58;
   const rDepth = Math.max(r.depthMm ?? 1000, minDepthForU);
   return {
     minX: r.xMm,
@@ -192,10 +197,23 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
   onCalibrateScale,
   isRulerActive,
   onCloseRuler,
+  onRackDblClick,
+  onSelectRackDevice,
+  onMoveRackDeviceSlot,
+  selectedRackDeviceId,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { viewport, setViewport, zoomAt, fitFloor, gridConfig } = useCameraStore();
+  const { viewport, setViewport, zoomAt, fitFloor, fitBounds, gridConfig } = useCameraStore();
   const [dimensions, setDimensions] = useState({ width: 1200, height: 800 });
+
+  const handleRackDblClick = useCallback(
+    (rack: RackDisplay) => {
+      const aabb = getRackAABB(rack);
+      fitBounds(aabb, dimensions.width, dimensions.height, 50);
+      onRackDblClick?.(rack);
+    },
+    [dimensions.width, dimensions.height, fitBounds, onRackDblClick]
+  );
   const [selectionBox, setSelectionBox] = useState<{
     startX: number;
     startY: number;
@@ -660,6 +678,10 @@ export const FloorCanvas: FC<FloorCanvasProps> = ({
             onRackDragMove={onRackDragMove}
             onExtractPortFromBlock={onExtractPortFromBlock}
             isMarqueeJustEnded={isMarqueeJustEnded}
+            onRackDblClick={handleRackDblClick}
+            onSelectRackDevice={onSelectRackDevice}
+            onMoveRackDeviceSlot={onMoveRackDeviceSlot}
+            selectedRackDeviceId={selectedRackDeviceId}
           />
         </Layer>
 

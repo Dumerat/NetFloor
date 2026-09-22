@@ -169,6 +169,7 @@ export default function NetFloorApp() {
   const fitFloor = useCameraStore((s) => s.fitFloor);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectedRackDeviceId, setSelectedRackDeviceId] = useState<string | null>(null);
   const [isRulerActive, setIsRulerActive] = useState<boolean>(false);
   const [isPlanManagerOpen, setIsPlanManagerOpen] = useState<boolean>(false);
   const [allBackgroundPlans, setAllBackgroundPlans] = useState<StoredBackgroundPlan[]>([]);
@@ -751,7 +752,40 @@ export default function NetFloorApp() {
     setRacks((prev) => prev.filter((r) => !idSet.has(r.id)));
     setSelectedNodeIds([]);
     setSelectedNodeId(null);
+    setSelectedRackDeviceId(null);
   }, []);
+
+  const handleSelectRackDevice = useCallback((rack: RackDisplay, device: any) => {
+    setSelectedZoneId(null);
+    setSelectedNodeIds([rack.id]);
+    setSelectedNodeId(rack.id);
+    setSelectedRackDeviceId(device.id);
+    setInspectorWidth((w) => Math.max(w, 384));
+  }, []);
+
+  const handleMoveRackDeviceSlot = useCallback(
+    (rackId: string, deviceId: string, targetSlotU: number) => {
+      setRacks((prev) =>
+        prev.map((r) => {
+          if (r.id !== rackId) return r;
+          const updatedDevices = (r.devices || []).map((d) =>
+            d.id === deviceId ? { ...d, slotU: targetSlotU } : d
+          );
+          return { ...r, devices: updatedDevices };
+        })
+      );
+      setNodes((prev) =>
+        prev.map((n) => {
+          if (n.id !== rackId) return n;
+          const updatedDevices = (n.devices || []).map((d) =>
+            d.id === deviceId ? { ...d, slotU: targetSlotU } : d
+          );
+          return { ...n, devices: updatedDevices };
+        })
+      );
+    },
+    []
+  );
 
   const handleClearMultiSelection = useCallback(() => {
     setSelectedNodeIds([]);
@@ -1794,20 +1828,23 @@ export default function NetFloorApp() {
       // Appareils déjà dans la baie cible, en excluant l'équipement en cours de déplacement
       const targetRackDevices = (rack.devices ?? []).filter((d) => !isDeviceMatch(d, dev));
       const totalU = rack.uHeight || 42;
-      let slotU = targetSlotU ? Math.max(1, Math.min(totalU, targetSlotU)) : 24;
+      const reqSize = dev.uSize ?? 1;
+      let slotU = targetSlotU ? Math.max(reqSize, Math.min(totalU, targetSlotU)) : 24;
 
+      // Les équipements occupent les slots [slotU - uSize + 1, slotU]
       const occupiedSlots = new Set(
         targetRackDevices.flatMap((d) => {
           const uSize = d.uSize ?? 1;
-          return Array.from({ length: uSize }, (_, i) => d.slotU + i);
+          return Array.from({ length: uSize }, (_, i) => d.slotU - i);
         })
       );
 
-      const reqSize = dev.uSize ?? 1;
       const isAvailable = (s: number) => {
-        if (s < 1 || s + reqSize - 1 > totalU) return false;
-        for (let i = 0; i < reqSize; i++) {
-          if (occupiedSlots.has(s + i)) return false;
+        const minU = s - reqSize + 1;
+        const maxU = s;
+        if (minU < 1 || maxU > totalU) return false;
+        for (let u = minU; u <= maxU; u++) {
+          if (occupiedSlots.has(u)) return false;
         }
         return true;
       };
@@ -1827,7 +1864,10 @@ export default function NetFloorApp() {
           }
         }
         if (!found) {
-          slotU = Math.max(1, Math.min(totalU - reqSize + 1, slotU));
+          console.warn(
+            `[Baie ${rack.name}] Espace insuffisant pour placer un équipement de ${reqSize}U.`
+          );
+          return;
         }
       }
 
@@ -3071,7 +3111,7 @@ export default function NetFloorApp() {
 
                 if (hitRack) {
                   const totalU = hitRack.uHeight || 42;
-                  const minDepthForU = 320 + totalU * 36;
+                  const minDepthForU = 340 + totalU * 58;
                   const rDepth = Math.max(hitRack.depthMm ?? 1000, minDepthForU);
                   const usableTop = 150;
                   const usableHeight = Math.max(300, rDepth - 330);
@@ -3099,7 +3139,7 @@ export default function NetFloorApp() {
 
                   const newRackId = `rack-${Date.now()}`;
                   const rackCount = racks.length + 1;
-                  const rackWidth = 800;
+                  const rackWidth = 960;
                   const rackDepth = 1000;
                   const snapped = snapToGrid(
                     {
@@ -3124,7 +3164,7 @@ export default function NetFloorApp() {
                     xMm: snapped.x,
                     yMm: snapped.y,
                     widthMm: rackWidth,
-                    depthMm: Math.max(rackDepth, 320 + 42 * 36),
+                    depthMm: Math.max(rackDepth, 340 + 42 * 58),
                     uHeight: 42,
                     description: `Baie créée avec ${scannedDev.name}`,
                     devices: [initialDevice],
@@ -3183,13 +3223,17 @@ export default function NetFloorApp() {
                 return;
               }
 
-              // 3. Cas du glisser-déposer d'un équipement IOT/AP scanné (Borne Wi-Fi, Imprimante, etc.)
+              // 3. Cas du glisser-déposer d'un équipement IOT/AP scanné (Borne Wi-Fi, Imprimante, Caméra, Poste, etc.)
               if (parsed && parsed.type === "SCANNED_IOT_DEVICE" && parsed.device) {
                 const scannedDev = parsed.device as ScannedDeviceItem;
                 const isAp = scannedDev.deviceType === "ACCESS_POINT";
+                const isCam = scannedDev.deviceType === "CAMERA";
+                const isPc = scannedDev.deviceType === "WORKSTATION";
+                const isPhone = scannedDev.deviceType === "PHONE_VOIP";
+
                 const existingNode = nodes.find((n) => isDeviceMatch(n, scannedDev));
-                const widthMm = isAp ? 350 : 800;
-                const heightMm = isAp ? 350 : 700;
+                const widthMm = isAp ? 350 : isCam ? 300 : isPc ? 800 : isPhone ? 250 : 800;
+                const heightMm = isAp ? 350 : isCam ? 300 : isPc ? 600 : isPhone ? 250 : 700;
                 const snapped = snapToGrid(
                   {
                     x: Math.round(worldPos.x - widthMm / 2),
@@ -3208,13 +3252,52 @@ export default function NetFloorApp() {
                   setSelectedNodeId(existingNode.id);
                 } else {
                   // Création du noeud AP ou IOT sur le plan
-                  const newNodeId = `${isAp ? "node-ap" : "node-iot"}-${Date.now()}`;
+                  const prefix = isAp
+                    ? "node-ap"
+                    : isCam
+                      ? "node-cam"
+                      : isPc
+                        ? "node-pc"
+                        : isPhone
+                          ? "node-voip"
+                          : "node-iot";
+                  const newNodeId = `${prefix}-${Date.now()}`;
+                  const subType = isAp
+                    ? "WIFI_AP"
+                    : isCam
+                      ? "CAMERA_IP"
+                      : isPc
+                        ? "DESK_SOLO"
+                        : isPhone
+                          ? "WALL_OUTLET"
+                          : "PRINTER_STATION";
+                  const outletRole = isAp
+                    ? "WIFI"
+                    : isCam
+                      ? "CAMERA"
+                      : isPc
+                        ? "DATA"
+                        : isPhone
+                          ? "VOIP"
+                          : "PRINTER";
+                  const customEmote = isAp
+                    ? "📶"
+                    : isCam
+                      ? "🎥"
+                      : isPc
+                        ? "💻"
+                        : isPhone
+                          ? "📞"
+                          : "🖨️";
+                  const vlanId = isAp ? 50 : isCam ? 50 : isPc ? 20 : isPhone ? 30 : 40;
+                  const poeMode = isAp ? "POE_PLUS" : isCam ? "POE" : isPhone ? "POE" : "NONE";
+
                   const newNode: NodeDisplay = {
                     id: newNodeId,
                     name: scannedDev.name,
-                    type: "WALL_OUTLET",
-                    subType: isAp ? "WIFI_AP" : "PRINTER_STATION",
-                    outletRole: isAp ? "WIFI" : "PRINTER",
+                    type: isPc ? "DESK" : "WALL_OUTLET",
+                    subType,
+                    outletRole,
                     xMm: snapped.x,
                     yMm: snapped.y,
                     widthMm,
@@ -3224,10 +3307,10 @@ export default function NetFloorApp() {
                     macAddress: scannedDev.mac !== "Non applicable" ? scannedDev.mac : undefined,
                     description:
                       `${scannedDev.manufacturer || ""} ${scannedDev.model || ""}`.trim(),
-                    vlanId: isAp ? 50 : 40,
-                    poeMode: isAp ? "POE_PLUS" : "NONE",
+                    vlanId,
+                    poeMode,
                     pingStatus: "ONLINE",
-                    customEmote: isAp ? "📶" : "🖨️",
+                    customEmote,
                   };
                   setNodes((prev) => [...prev, newNode]);
                   setSelectedNodeId(newNodeId);
@@ -3363,10 +3446,12 @@ export default function NetFloorApp() {
               setSelectedZoneId(null);
               setSelectedNodeId(null);
               setSelectedNodeIds([]);
+              setSelectedRackDeviceId(null);
             }}
             onSelectOutlet={handleSelectOutlet}
             onSelectNode={(node) => {
               setSelectedZoneId(null);
+              setSelectedRackDeviceId(null);
               handleSelectNode(node);
             }}
             onNodeContextMenu={handleNodeContextMenu}
@@ -3375,6 +3460,9 @@ export default function NetFloorApp() {
             onRackDragMove={handleThrottledRackDragMove}
             onPivotChange={handleThrottledPivotChange}
             onExtractPortFromBlock={handleExtractPortFromBlock}
+            selectedRackDeviceId={selectedRackDeviceId}
+            onSelectRackDevice={handleSelectRackDevice}
+            onMoveRackDeviceSlot={handleMoveRackDeviceSlot}
             backgroundPlan={{
               ...backgroundPlan,
               plans:
@@ -3487,6 +3575,8 @@ export default function NetFloorApp() {
             onAutoRoute={handleAutoRoute}
             sites={sites}
             activeSiteId={activeSiteId}
+            selectedRackDeviceId={selectedRackDeviceId}
+            onSelectRackDeviceId={setSelectedRackDeviceId}
           />
         </div>
       </div>

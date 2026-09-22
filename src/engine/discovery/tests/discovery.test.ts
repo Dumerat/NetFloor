@@ -724,6 +724,65 @@ describe("Discovery Pipeline & Topology Engine", () => {
       const sw52 = await crawlSwitchLldpCdp("10.0.0.52", { subnetCidr: "10.0.0.0/24" });
       expect(sw52?.ports.length).toBe(52);
       spy.mockRestore();
+
+      // Onduleur (UPS APC)
+      sessionMock = {
+        close: vi.fn(),
+        get: (_oids: string[], cb: any) =>
+          cb(null, [
+            { oid: "1.3.6.1.2.1.1.5.0", value: "UPS-SALLE-SERVEUR" },
+            { oid: "1.3.6.1.2.1.1.1.0", value: "APC Smart-UPS 1500 Onduleur" },
+            { oid: "1.3.6.1.2.1.1.2.0", value: "1.3.6.1.4.1.318.1.3.7" },
+            { oid: "1.3.6.1.2.1.1.3.0", value: 1000 },
+          ]),
+        subtree: (_oid: string, _feed: any, done: any) => done(),
+      };
+      spy = vi.spyOn(snmp, "createSession").mockReturnValue(sessionMock as any);
+      const ups = await crawlSwitchLldpCdp("10.0.0.100", { subnetCidr: "10.0.0.0/24" });
+      expect(ups?.uSize).toBe(2);
+      expect(ups?.ports.length).toBe(1);
+      expect(ups?.ports[0]?.portName).toBe("mgmt0");
+      expect(ups?.sysName).toBe("UPS-SALLE-SERVEUR");
+      spy.mockRestore();
+
+      // Caméra de surveillance Hikvision
+      sessionMock = {
+        close: vi.fn(),
+        get: (_oids: string[], cb: any) =>
+          cb(null, [
+            { oid: "1.3.6.1.2.1.1.5.0", value: "CAM-ENTREE-NORD" },
+            { oid: "1.3.6.1.2.1.1.1.0", value: "Hikvision IP Camera Surveillance Dome" },
+            { oid: "1.3.6.1.2.1.1.2.0", value: "1.3.6.1.4.1.39165.1.1" },
+            { oid: "1.3.6.1.2.1.1.3.0", value: 1000 },
+          ]),
+        subtree: (_oid: string, _feed: any, done: any) => done(),
+      };
+      spy = vi.spyOn(snmp, "createSession").mockReturnValue(sessionMock as any);
+      const cam = await crawlSwitchLldpCdp("10.0.0.101", { subnetCidr: "10.0.0.0/24" });
+      expect(cam?.uSize).toBe(0);
+      expect(cam?.ports.length).toBe(1);
+      expect(cam?.ports[0]?.portName).toBe("eth0");
+      spy.mockRestore();
+
+      // Workstation client
+      sessionMock = {
+        close: vi.fn(),
+        get: (_oids: string[], cb: any) =>
+          cb(null, [
+            { oid: "1.3.6.1.2.1.1.5.0", value: "PC-FINANCE-01" },
+            { oid: "1.3.6.1.2.1.1.1.0", value: "Dell OptiPlex 7090 Workstation" },
+            { oid: "1.3.6.1.2.1.1.2.0", value: "1.3.6.1.4.1.674.10892.5" },
+            { oid: "1.3.6.1.2.1.1.3.0", value: 1000 },
+          ]),
+        subtree: (_oid: string, _feed: any, done: any) => done(),
+      };
+      spy = vi.spyOn(snmp, "createSession").mockReturnValue(sessionMock as any);
+      const pc = await crawlSwitchLldpCdp("10.0.0.102", { subnetCidr: "10.0.0.0/24" });
+      expect(pc?.deviceType).toBe("WORKSTATION");
+      expect(pc?.uSize).toBe(0);
+      expect(pc?.ports.length).toBe(1);
+      expect(pc?.ports[0]?.portName).toBe("eth0");
+      spy.mockRestore();
     });
 
     it("crawlSwitchLldpCdp retourne null en cas d'erreur de session SNMP", async () => {

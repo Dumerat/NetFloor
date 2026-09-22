@@ -205,6 +205,11 @@ interface EquipmentLayerProps {
   onExtractPortFromBlock?:
     ((blockId: string, portIndex: number, worldPos: { x: number; y: number }) => void) | undefined;
   isMarqueeJustEnded?: (() => boolean) | undefined;
+  onRackDblClick?: ((rack: RackDisplay) => void) | undefined;
+  onSelectRackDevice?: ((rack: RackDisplay, device: RackDeviceItem) => void) | undefined;
+  onMoveRackDeviceSlot?:
+    ((rackId: string, deviceId: string, targetSlotU: number) => void) | undefined;
+  selectedRackDeviceId?: string | null | undefined;
 }
 
 const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
@@ -226,7 +231,19 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
   onRackDragMove,
   onExtractPortFromBlock,
   isMarqueeJustEnded,
+  onRackDblClick,
+  onSelectRackDevice,
+  onMoveRackDeviceSlot,
+  selectedRackDeviceId,
 }) => {
+  const [draggedRackDeviceId, setDraggedRackDeviceId] = useState<string | null>(null);
+  const [dragGhostSlotU, setDragGhostSlotU] = useState<{
+    rackId: string;
+    slotU: number;
+    uSize: number;
+    isValid: boolean;
+  } | null>(null);
+
   const isNodeSelected = (id: string) => {
     if (selectedNodeIds && selectedNodeIds.length > 0) {
       return selectedNodeIds.includes(id);
@@ -827,9 +844,9 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
         racks.map((rack) => {
           const isSelected = isNodeSelected(rack.id);
           const totalU = rack.uHeight || 42;
-          const rWidth = rack.widthMm ?? 800;
+          const rWidth = Math.max(rack.widthMm ?? 800, 960);
           // Hauteur proportionnelle garantissant une hauteur minimale par U pour une excellente lisibilité
-          const minDepthForU = 320 + totalU * 36;
+          const minDepthForU = 340 + totalU * 58;
           const rDepth = Math.max(rack.depthMm ?? 1000, minDepthForU);
 
           const rackNodeDisplay: NodeDisplay = {
@@ -854,12 +871,20 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
               id={rack.id}
               x={rack.xMm}
               y={rack.yMm}
-              draggable
+              draggable={!draggedRackDeviceId}
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
               onDragStart={(e) => handleRackDragStart(rack.id, e)}
               onDragMove={(e) => handleRackDragMove(rack.id, e)}
               onDragEnd={(e) => handleRackDragEnd(rack.id, e)}
+              onDblClick={(e) => {
+                e.cancelBubble = true;
+                onRackDblClick?.(rack);
+              }}
+              onDblTap={(e) => {
+                e.cancelBubble = true;
+                onRackDblClick?.(rack);
+              }}
               onClick={(e) => {
                 e.cancelBubble = true;
                 if (isMarqueeJustEnded?.()) return;
@@ -1020,35 +1045,48 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                     {uMarks}
                     {devList.map((dev: any, devIndex: number) => {
                       const uSize = Number(dev.uSize) || 1;
-                      // Support à la fois slotU et uPosition, borné de manière sécurisée entre 1 et totalU
                       const rawSlot = dev.slotU ?? dev.uPosition ?? totalU - devIndex;
                       const safeSlot = Math.min(totalU, Math.max(1, Number(rawSlot) || 1));
                       const rawDevY = usableTop + (totalU - safeSlot) * uStep;
                       const devY = Number.isFinite(rawDevY) ? rawDevY : usableTop;
-                      const devH = Math.max(32, uStep * uSize - 4);
+                      const devH = Math.max(48, uStep * uSize - 4);
 
                       const rawType = String(dev.deviceType || dev.type || "").toUpperCase();
                       const isSw = rawType === "SWITCH";
                       const isPp = rawType === "PATCH_PANEL";
-                      const isFw = rawType === "FIREWALL";
+                      const isFw = rawType === "FIREWALL" || rawType === "ROUTER";
                       const isSrv = rawType === "SERVER";
                       const isPdu = rawType === "PDU";
 
                       const devId = String(dev.id || `dev-${rack.id}-${devIndex}`);
                       const devName = String(dev.name || `${rawType || "Équipement"} U${safeSlot}`);
-                      const portsCount = Number(dev.portsCount ?? dev.portCount) || 0;
+                      const portsCount =
+                        Number(dev.portsCount ?? dev.portCount) || (isSw ? 24 : isPp ? 24 : 1);
+                      const brandName = String(dev.brand || "GENERIC").toUpperCase();
+
+                      const isUps =
+                        isPdu &&
+                        (devName.toLowerCase().includes("ups") ||
+                          devName.toLowerCase().includes("onduleur") ||
+                          String(dev.model || "")
+                            .toLowerCase()
+                            .includes("ups") ||
+                          String(dev.model || "")
+                            .toLowerCase()
+                            .includes("onduleur") ||
+                          uSize >= 2);
 
                       const devFill = isSw
-                        ? "#172554"
+                        ? "#090d16"
                         : isPp
-                          ? "#1e293b"
+                          ? "#18181b"
                           : isFw
-                            ? "#450a0a"
+                            ? "#1c0609"
                             : isSrv
                               ? "#09090b"
-                              : isPdu
-                                ? "#422006"
-                                : "#1e293b";
+                              : isUps
+                                ? "#141416"
+                                : "#1c1917";
 
                       const devStroke = isSw
                         ? "#3b82f6"
@@ -1057,10 +1095,10 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                           : isFw
                             ? "#ef4444"
                             : isSrv
-                              ? "#a1a1aa"
-                              : isPdu
+                              ? "#38bdf8"
+                              : isUps
                                 ? "#f59e0b"
-                                : "#475569";
+                                : "#eab308";
 
                       const typeBadge = isSw
                         ? "SW"
@@ -1070,54 +1108,227 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                             ? "FW"
                             : isSrv
                               ? "SRV"
-                              : isPdu
-                                ? "PDU"
-                                : "DEV";
+                              : isUps
+                                ? "UPS"
+                                : "PDU";
+
+                      const devW = rWidth - 190;
+                      const earW = 14;
+                      const bodyX = 95 + earW;
+                      const bodyW = devW - 2 * earW;
+                      const badgeW = 135;
+
+                      const isSelectedDev = selectedRackDeviceId === devId;
 
                       return (
-                        <Group key={devId}>
+                        <Group
+                          key={devId}
+                          draggable
+                          onMouseEnter={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "grab";
+                          }}
+                          onMouseLeave={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "default";
+                          }}
+                          onDragStart={(e) => {
+                            e.cancelBubble = true;
+                            setDraggedRackDeviceId(devId);
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "grabbing";
+                          }}
+                          onDragMove={(e) => {
+                            e.cancelBubble = true;
+                            e.target.x(0);
+                            const currentY = devY + e.target.y();
+                            const candidateSlotU = Math.min(
+                              totalU,
+                              Math.max(uSize, totalU - Math.round((currentY - usableTop) / uStep))
+                            );
+                            const isOccupied = devList.some((other: any) => {
+                              const otherId = String(other.id || "");
+                              if (otherId === devId) return false;
+                              const otherSize = Number(other.uSize) || 1;
+                              const otherRawSlot = other.slotU ?? other.uPosition ?? 1;
+                              const otherSafeSlot = Math.min(
+                                totalU,
+                                Math.max(1, Number(otherRawSlot) || 1)
+                              );
+                              const otherMin = otherSafeSlot - otherSize + 1;
+                              const otherMax = otherSafeSlot;
+                              const candMin = candidateSlotU - uSize + 1;
+                              const candMax = candidateSlotU;
+                              return !(candMax < otherMin || candMin > otherMax);
+                            });
+                            setDragGhostSlotU({
+                              rackId: rack.id,
+                              slotU: candidateSlotU,
+                              uSize,
+                              isValid: !isOccupied,
+                            });
+                          }}
+                          onDragEnd={(e) => {
+                            e.cancelBubble = true;
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "default";
+                            const currentY = devY + e.target.y();
+                            const candidateSlotU = Math.min(
+                              totalU,
+                              Math.max(uSize, totalU - Math.round((currentY - usableTop) / uStep))
+                            );
+                            const isOccupied = devList.some((other: any) => {
+                              const otherId = String(other.id || "");
+                              if (otherId === devId) return false;
+                              const otherSize = Number(other.uSize) || 1;
+                              const otherRawSlot = other.slotU ?? other.uPosition ?? 1;
+                              const otherSafeSlot = Math.min(
+                                totalU,
+                                Math.max(1, Number(otherRawSlot) || 1)
+                              );
+                              const otherMin = otherSafeSlot - otherSize + 1;
+                              const otherMax = otherSafeSlot;
+                              const candMin = candidateSlotU - uSize + 1;
+                              const candMax = candidateSlotU;
+                              return !(candMax < otherMin || candMin > otherMax);
+                            });
+                            e.target.position({ x: 0, y: 0 });
+                            setDraggedRackDeviceId(null);
+                            setDragGhostSlotU(null);
+                            if (!isOccupied && candidateSlotU !== safeSlot) {
+                              onMoveRackDeviceSlot?.(rack.id, devId, candidateSlotU);
+                            }
+                          }}
+                          onClick={(e) => {
+                            e.cancelBubble = true;
+                            if (isMarqueeJustEnded?.()) return;
+                            onSelectRackDevice?.(rack, dev);
+                          }}
+                          onTap={(e) => {
+                            e.cancelBubble = true;
+                            if (isMarqueeJustEnded?.()) return;
+                            onSelectRackDevice?.(rack, dev);
+                          }}
+                        >
+                          {/* Oreille de fixation gauche avec vis */}
                           <Rect
                             x={95}
                             y={devY}
-                            width={rWidth - 190}
+                            width={earW}
                             height={devH}
-                            fill={devFill}
-                            stroke={devStroke}
-                            strokeWidth={6}
-                            cornerRadius={8}
+                            fill="#334155"
+                            stroke="#1e293b"
+                            strokeWidth={1}
+                            cornerRadius={[4, 0, 0, 4]}
                             listening={false}
                           />
-                          {/* Badge de Type & Emplacement U */}
+                          <Circle
+                            x={95 + 7}
+                            y={devY + 10}
+                            radius={4}
+                            fill="#0f172a"
+                            stroke="#94a3b8"
+                            strokeWidth={1.5}
+                            listening={false}
+                          />
+                          {devH > 55 && (
+                            <Circle
+                              x={95 + 7}
+                              y={devY + devH - 10}
+                              radius={4}
+                              fill="#0f172a"
+                              stroke="#94a3b8"
+                              strokeWidth={1.5}
+                              listening={false}
+                            />
+                          )}
+
+                          {/* Oreille de fixation droite avec vis */}
                           <Rect
-                            x={105}
-                            y={devY + Math.max(4, (devH - 28) / 2)}
-                            width={75}
-                            height={Math.min(28, devH - 8)}
-                            fill="rgba(2, 6, 23, 0.75)"
+                            x={95 + devW - earW}
+                            y={devY}
+                            width={earW}
+                            height={devH}
+                            fill="#334155"
+                            stroke="#1e293b"
+                            strokeWidth={1}
+                            cornerRadius={[0, 4, 4, 0]}
+                            listening={false}
+                          />
+                          <Circle
+                            x={95 + devW - 7}
+                            y={devY + 10}
+                            radius={4}
+                            fill="#0f172a"
+                            stroke="#94a3b8"
+                            strokeWidth={1.5}
+                            listening={false}
+                          />
+                          {devH > 55 && (
+                            <Circle
+                              x={95 + devW - 7}
+                              y={devY + devH - 10}
+                              radius={4}
+                              fill="#0f172a"
+                              stroke="#94a3b8"
+                              strokeWidth={1.5}
+                              listening={false}
+                            />
+                          )}
+
+                          {/* Châssis principal de l'équipement */}
+                          <Rect
+                            x={bodyX}
+                            y={devY}
+                            width={bodyW}
+                            height={devH}
+                            fill={devFill}
+                            stroke={isSelectedDev ? "#38bdf8" : devStroke}
+                            strokeWidth={isSelectedDev ? 4 : 2}
+                            {...(isSelectedDev ? { shadowColor: "#38bdf8", shadowBlur: 12 } : {})}
+                            cornerRadius={3}
+                            listening={false}
+                          />
+                          {/* Ligne métallique de biseautage supérieur */}
+                          <Line
+                            points={[bodyX + 2, devY + 1, bodyX + bodyW - 2, devY + 1]}
+                            stroke={isSelectedDev ? "#38bdf8" : devStroke}
+                            strokeWidth={1}
+                            opacity={0.5}
+                            listening={false}
+                          />
+
+                          {/* Bloc d'identification gauche (U, Type, Nom, Status LEDs) */}
+                          <Rect
+                            x={bodyX + 6}
+                            y={devY + 4}
+                            width={badgeW}
+                            height={devH - 8}
+                            fill="rgba(2, 6, 23, 0.85)"
                             stroke={devStroke}
-                            strokeWidth={2}
+                            strokeWidth={1}
                             cornerRadius={4}
                             listening={false}
                           />
                           <Text
-                            x={107}
-                            y={devY + Math.max(8, (devH - 20) / 2)}
-                            width={71}
-                            text={`U${safeSlot} ${typeBadge}`}
-                            fontSize={Math.min(18, Math.max(13, devH * 0.35))}
+                            x={bodyX + 10}
+                            y={devY + 7}
+                            width={badgeW - 16}
+                            text={`U${safeSlot} ${typeBadge} • ${brandName}`}
+                            fontSize={10}
                             fontFamily="monospace"
                             fontStyle="bold"
-                            fill="#38bdf8"
-                            align="center"
+                            fill={devStroke}
+                            wrap="none"
+                            ellipsis={true}
                             listening={false}
                           />
-                          {/* Nom de l'équipement avec excellente lisibilité */}
                           <Text
-                            x={190}
-                            y={devY + Math.max(6, (devH - 26) / 2)}
-                            width={rWidth - 300}
+                            x={bodyX + 10}
+                            y={devY + 20}
+                            width={badgeW - 16}
                             text={devName}
-                            fontSize={Math.min(32, Math.max(18, devH * 0.42))}
+                            fontSize={11}
                             fontFamily="monospace"
                             fontStyle="bold"
                             fill="#f8fafc"
@@ -1125,28 +1336,937 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                             ellipsis={true}
                             listening={false}
                           />
-                          {/* Représentation des ports RJ45 / LEDs */}
-                          {portsCount > 0 && devH >= 54 && (
-                            <Group y={devY + devH - 24}>
-                              {Array.from({
-                                length: Math.min(12, Math.ceil(portsCount / 2)),
-                              }).map((_, pIdx) => (
-                                <Rect
-                                  key={`dev-port-${devId}-${pIdx}`}
-                                  x={190 + pIdx * ((rWidth - 320) / 12)}
-                                  y={0}
-                                  width={18}
-                                  height={14}
-                                  fill={pIdx < 7 ? (isSw ? "#22c55e" : "#38bdf8") : "#334155"}
-                                  cornerRadius={3}
-                                  listening={false}
-                                />
-                              ))}
-                            </Group>
-                          )}
+                          {/* LEDs de diagnostic châssis */}
+                          <Group y={devY + Math.min(35, devH - 12)}>
+                            <Circle
+                              x={bodyX + 14}
+                              y={0}
+                              radius={2.5}
+                              fill="#22c55e"
+                              listening={false}
+                            />
+                            <Text
+                              x={bodyX + 19}
+                              y={-4}
+                              text="PWR"
+                              fontSize={7}
+                              fill="#94a3b8"
+                              fontFamily="monospace"
+                              listening={false}
+                            />
+
+                            <Circle
+                              x={bodyX + 46}
+                              y={0}
+                              radius={2.5}
+                              fill={isFw ? "#ef4444" : "#38bdf8"}
+                              listening={false}
+                            />
+                            <Text
+                              x={bodyX + 51}
+                              y={-4}
+                              text={isFw ? "ALM" : "SYS"}
+                              fontSize={7}
+                              fill="#94a3b8"
+                              fontFamily="monospace"
+                              listening={false}
+                            />
+
+                            <Circle
+                              x={bodyX + 78}
+                              y={0}
+                              radius={2.5}
+                              fill="#f59e0b"
+                              listening={false}
+                            />
+                            <Text
+                              x={bodyX + 83}
+                              y={-4}
+                              text={isSw ? "POE" : isSrv ? "UID" : isUps ? "BAT" : "ACT"}
+                              fontSize={7}
+                              fill="#94a3b8"
+                              fontFamily="monospace"
+                              listening={false}
+                            />
+                          </Group>
+
+                          {/* ================= 1. RENDU SPÉCIFIQUE COMMUTATEUR (SWITCH) ================= */}
+                          {isSw &&
+                            (() => {
+                              const startX = bodyX + badgeW + 12;
+                              const totalP = Math.max(8, portsCount || 24);
+                              const cols = Math.min(24, Math.ceil(totalP / 2));
+                              const availW = Math.max(280, bodyW - (badgeW + 12) - 100);
+                              const colW = Math.min(26, Math.max(12, availW / cols));
+                              const portW = Math.max(10, colW - 3);
+                              const portH = Math.min(13, Math.max(10, (devH - 22) / 2));
+                              const row1Y = devY + 7;
+                              const row2Y = row1Y + portH + 6;
+
+                              return (
+                                <Group>
+                                  {/* Blocs de ports RJ45 étagés avec LEDs allumées */}
+                                  {Array.from({ length: cols }).map((_, c) => {
+                                    const p1 = c * 2 + 1;
+                                    const p2 = c * 2 + 2;
+                                    const isAct1 = c < Math.ceil(cols * 0.75);
+                                    const isAct2 = c < Math.ceil(cols * 0.65);
+                                    const isUplink1 = c >= cols - 2;
+                                    const isUplink2 = c >= cols - 2;
+                                    const led1Color = isAct1
+                                      ? isUplink1
+                                        ? "#f59e0b"
+                                        : "#22c55e"
+                                      : "#334155";
+                                    const led2Color = isAct2
+                                      ? isUplink2
+                                        ? "#f59e0b"
+                                        : "#22c55e"
+                                      : "#334155";
+                                    const colX = startX + c * colW;
+
+                                    return (
+                                      <Group key={`sw-col-${devId}-${c}`}>
+                                        {/* Port du haut (Impair) */}
+                                        {/* LED allumée port haut */}
+                                        <Circle
+                                          x={colX + portW / 2}
+                                          y={row1Y - 3}
+                                          radius={2.5}
+                                          fill={led1Color}
+                                          stroke={
+                                            isAct1
+                                              ? isUplink1
+                                                ? "rgba(245,158,11,0.5)"
+                                                : "rgba(34,197,94,0.5)"
+                                              : "transparent"
+                                          }
+                                          strokeWidth={1.5}
+                                          listening={false}
+                                        />
+                                        {/* Cavité RJ45 */}
+                                        <Rect
+                                          x={colX}
+                                          y={row1Y}
+                                          width={portW}
+                                          height={portH}
+                                          fill="#020617"
+                                          stroke="#475569"
+                                          strokeWidth={1}
+                                          cornerRadius={2}
+                                          listening={false}
+                                        />
+                                        {/* Broches dorées RJ45 */}
+                                        <Line
+                                          points={[
+                                            colX + 2,
+                                            row1Y + 2,
+                                            colX + portW - 2,
+                                            row1Y + 2,
+                                          ]}
+                                          stroke="#eab308"
+                                          strokeWidth={1}
+                                          listening={false}
+                                        />
+                                        {colW >= 18 && (
+                                          <Text
+                                            x={colX}
+                                            y={row1Y + 2}
+                                            width={portW}
+                                            text={`${p1}`}
+                                            fontSize={7}
+                                            fontFamily="monospace"
+                                            fill="#94a3b8"
+                                            align="center"
+                                            listening={false}
+                                          />
+                                        )}
+
+                                        {/* Port du bas (Pair) */}
+                                        <Rect
+                                          x={colX}
+                                          y={row2Y}
+                                          width={portW}
+                                          height={portH}
+                                          fill="#020617"
+                                          stroke="#475569"
+                                          strokeWidth={1}
+                                          cornerRadius={2}
+                                          listening={false}
+                                        />
+                                        {/* Broches dorées bas */}
+                                        <Line
+                                          points={[
+                                            colX + 2,
+                                            row2Y + portH - 2,
+                                            colX + portW - 2,
+                                            row2Y + portH - 2,
+                                          ]}
+                                          stroke="#eab308"
+                                          strokeWidth={1}
+                                          listening={false}
+                                        />
+                                        {colW >= 18 && (
+                                          <Text
+                                            x={colX}
+                                            y={row2Y + 2}
+                                            width={portW}
+                                            text={`${p2}`}
+                                            fontSize={7}
+                                            fontFamily="monospace"
+                                            fill="#94a3b8"
+                                            align="center"
+                                            listening={false}
+                                          />
+                                        )}
+                                        {/* LED allumée port bas */}
+                                        <Circle
+                                          x={colX + portW / 2}
+                                          y={row2Y + portH + 3}
+                                          radius={2.5}
+                                          fill={led2Color}
+                                          stroke={isAct2 ? "rgba(34,197,94,0.5)" : "transparent"}
+                                          strokeWidth={1.5}
+                                          listening={false}
+                                        />
+                                      </Group>
+                                    );
+                                  })}
+
+                                  {/* Cages SFP / SFP+ Uplinks à droite */}
+                                  {(() => {
+                                    const sfpX = startX + cols * colW + 8;
+                                    const sfpCount = totalP >= 24 ? 4 : 2;
+                                    return (
+                                      <Group x={sfpX}>
+                                        {Array.from({ length: sfpCount }).map((_, sIdx) => (
+                                          <Group key={`sfp-${sIdx}`} x={sIdx * 16}>
+                                            <Circle
+                                              x={7}
+                                              y={row1Y - 3}
+                                              radius={2.2}
+                                              fill="#38bdf8"
+                                              stroke="rgba(56,189,248,0.5)"
+                                              strokeWidth={1.5}
+                                              listening={false}
+                                            />
+                                            <Rect
+                                              x={0}
+                                              y={row1Y}
+                                              width={14}
+                                              height={row2Y + portH - row1Y}
+                                              fill="#1e293b"
+                                              stroke="#64748b"
+                                              strokeWidth={1}
+                                              cornerRadius={2}
+                                              listening={false}
+                                            />
+                                            <Line
+                                              points={[2, row1Y + 4, 12, row1Y + 4]}
+                                              stroke="#94a3b8"
+                                              strokeWidth={1}
+                                              listening={false}
+                                            />
+                                          </Group>
+                                        ))}
+                                        <Text
+                                          x={0}
+                                          y={row2Y + portH + 1}
+                                          text="SFP+ 10G"
+                                          fontSize={6.5}
+                                          fontFamily="monospace"
+                                          fill="#38bdf8"
+                                          listening={false}
+                                        />
+                                      </Group>
+                                    );
+                                  })()}
+                                </Group>
+                              );
+                            })()}
+
+                          {/* ================= 2. RENDU SPÉCIFIQUE PANNEAU DE BRASSAGE (PATCH PANEL) ================= */}
+                          {isPp &&
+                            (() => {
+                              const startX = bodyX + badgeW + 12;
+                              const blockW = Math.min(115, (bodyW - (badgeW + 12) - 100) / 4);
+                              return (
+                                <Group>
+                                  {Array.from({ length: 4 }).map((_, b) => {
+                                    const bX = startX + b * (blockW + 8);
+                                    const portW = (blockW - 14) / 6;
+                                    return (
+                                      <Group key={`pp-block-${b}`} x={bX} y={devY + 6}>
+                                        {/* Châssis du bloc */}
+                                        <Rect
+                                          x={0}
+                                          y={0}
+                                          width={blockW}
+                                          height={devH - 12}
+                                          fill="#111827"
+                                          stroke="#374151"
+                                          strokeWidth={1}
+                                          cornerRadius={3}
+                                          listening={false}
+                                        />
+                                        {/* Bandeau d'écriture blanc/crème */}
+                                        <Rect
+                                          x={4}
+                                          y={3}
+                                          width={blockW - 8}
+                                          height={8}
+                                          fill="#f8fafc"
+                                          cornerRadius={1}
+                                          opacity={0.9}
+                                          listening={false}
+                                        />
+                                        {/* 6 ports Keystone RJ45 */}
+                                        {Array.from({ length: 6 }).map((_, p) => {
+                                          const pNum = b * 6 + p + 1;
+                                          const px = 7 + p * portW;
+                                          return (
+                                            <Group key={`keystone-${p}`} x={px}>
+                                              <Text
+                                                x={0}
+                                                y={4}
+                                                width={portW - 2}
+                                                text={`${pNum}`}
+                                                fontSize={6.5}
+                                                fontFamily="monospace"
+                                                fontStyle="bold"
+                                                fill="#0f172a"
+                                                align="center"
+                                                listening={false}
+                                              />
+                                              <Rect
+                                                x={1}
+                                                y={14}
+                                                width={portW - 2}
+                                                height={Math.max(12, devH - 34)}
+                                                fill="#09090b"
+                                                stroke="#64748b"
+                                                strokeWidth={1}
+                                                cornerRadius={2}
+                                                listening={false}
+                                              />
+                                            </Group>
+                                          );
+                                        })}
+                                      </Group>
+                                    );
+                                  })}
+                                  {/* Badge de catégorie sur la droite */}
+                                  <Group x={bodyX + bodyW - 88} y={devY + (devH - 22) / 2}>
+                                    <Rect
+                                      x={0}
+                                      y={0}
+                                      width={78}
+                                      height={22}
+                                      fill="#1e293b"
+                                      stroke="#3b82f6"
+                                      strokeWidth={1}
+                                      cornerRadius={4}
+                                      listening={false}
+                                    />
+                                    <Text
+                                      x={0}
+                                      y={6}
+                                      width={78}
+                                      text="CAT.6A STP"
+                                      fontSize={8.5}
+                                      fontFamily="monospace"
+                                      fontStyle="bold"
+                                      fill="#60a5fa"
+                                      align="center"
+                                      listening={false}
+                                    />
+                                  </Group>
+                                </Group>
+                              );
+                            })()}
+
+                          {/* ================= 3. RENDU SPÉCIFIQUE SERVEUR RACK ================= */}
+                          {isSrv &&
+                            (() => {
+                              const startX = bodyX + badgeW + 12;
+                              const baysCount = uSize >= 2 ? 8 : 4;
+                              const availW = bodyW - (badgeW + 12) - 180;
+                              const bayW = Math.min(65, availW / baysCount);
+                              const bayH = devH - 12;
+
+                              return (
+                                <Group>
+                                  {/* Caddies disques extractibles avec leviers et LEDs */}
+                                  {Array.from({ length: baysCount }).map((_, b) => {
+                                    const bx = startX + b * bayW;
+                                    const by = devY + 6;
+                                    const isDiskActive = b % 2 === 0;
+
+                                    return (
+                                      <Group key={`srv-bay-${b}`}>
+                                        <Rect
+                                          x={bx}
+                                          y={by}
+                                          width={bayW - 4}
+                                          height={bayH}
+                                          fill="#18181b"
+                                          stroke="#3f3f46"
+                                          strokeWidth={1}
+                                          cornerRadius={3}
+                                          listening={false}
+                                        />
+                                        {/* Levier d'extraction */}
+                                        <Rect
+                                          x={bx + 2}
+                                          y={by + 2}
+                                          width={8}
+                                          height={bayH - 4}
+                                          fill="#27272a"
+                                          stroke="#52525b"
+                                          strokeWidth={1}
+                                          cornerRadius={1}
+                                          listening={false}
+                                        />
+                                        {/* Loquet de verrouillage rouge */}
+                                        <Rect
+                                          x={bx + 3}
+                                          y={by + bayH / 2 - 3}
+                                          width={6}
+                                          height={6}
+                                          fill="#b91c1c"
+                                          cornerRadius={1}
+                                          listening={false}
+                                        />
+                                        {/* Perforations de ventilation */}
+                                        <Line
+                                          points={[bx + 14, by + 8, bx + bayW - 8, by + 8]}
+                                          stroke="#3f3f46"
+                                          strokeWidth={1}
+                                          listening={false}
+                                        />
+                                        <Line
+                                          points={[bx + 14, by + 14, bx + bayW - 8, by + 14]}
+                                          stroke="#3f3f46"
+                                          strokeWidth={1}
+                                          listening={false}
+                                        />
+                                        {/* LED Status Disque (Verte) et Activité (Ambre) */}
+                                        <Circle
+                                          x={bx + bayW - 9}
+                                          y={by + 8}
+                                          radius={2}
+                                          fill="#22c55e"
+                                          listening={false}
+                                        />
+                                        <Circle
+                                          x={bx + bayW - 9}
+                                          y={by + 16}
+                                          radius={2}
+                                          fill={isDiskActive ? "#f59e0b" : "#334155"}
+                                          listening={false}
+                                        />
+                                        <Text
+                                          x={bx + 12}
+                                          y={by + bayH - 12}
+                                          text={`BAY ${b}`}
+                                          fontSize={6.5}
+                                          fontFamily="monospace"
+                                          fill="#71717a"
+                                          listening={false}
+                                        />
+                                      </Group>
+                                    );
+                                  })}
+
+                                  {/* Écran LCD iDRAC de supervision */}
+                                  {(() => {
+                                    const lcdX = startX + baysCount * bayW + 8;
+                                    const lcdW = 100;
+                                    const lcdH = devH - 14;
+                                    return (
+                                      <Group x={lcdX} y={devY + 7}>
+                                        <Rect
+                                          x={0}
+                                          y={0}
+                                          width={lcdW}
+                                          height={lcdH}
+                                          fill="#042f2e"
+                                          stroke="#06b6d4"
+                                          strokeWidth={1.5}
+                                          cornerRadius={3}
+                                          listening={false}
+                                        />
+                                        <Text
+                                          x={4}
+                                          y={4}
+                                          width={lcdW - 8}
+                                          text="iDRAC: 10.42.0.20"
+                                          fontSize={7.5}
+                                          fontFamily="monospace"
+                                          fontStyle="bold"
+                                          fill="#67e8f9"
+                                          listening={false}
+                                        />
+                                        <Text
+                                          x={4}
+                                          y={16}
+                                          width={lcdW - 8}
+                                          text="HEALTHY • 24°C"
+                                          fontSize={7.5}
+                                          fontFamily="monospace"
+                                          fill="#22c55e"
+                                          listening={false}
+                                        />
+                                      </Group>
+                                    );
+                                  })()}
+
+                                  {/* Boutons d'alimentation et UID */}
+                                  {(() => {
+                                    const ctrlX = bodyX + bodyW - 55;
+                                    return (
+                                      <Group x={ctrlX} y={devY + devH / 2}>
+                                        <Circle
+                                          x={0}
+                                          y={0}
+                                          radius={7}
+                                          fill="#14532d"
+                                          stroke="#22c55e"
+                                          strokeWidth={1.5}
+                                          listening={false}
+                                        />
+                                        <Circle
+                                          x={20}
+                                          y={0}
+                                          radius={5}
+                                          fill="#1d4ed8"
+                                          stroke="#38bdf8"
+                                          strokeWidth={1.5}
+                                          listening={false}
+                                        />
+                                      </Group>
+                                    );
+                                  })()}
+                                </Group>
+                              );
+                            })()}
+
+                          {/* ================= 4. RENDU SPÉCIFIQUE FIREWALL / ROUTEUR ================= */}
+                          {isFw &&
+                            (() => {
+                              const startX = bodyX + badgeW + 12;
+
+                              return (
+                                <Group y={devY + 6}>
+                                  {/* Bloc WAN (Ports Internet dédiés) */}
+                                  <Group x={startX}>
+                                    <Rect
+                                      x={0}
+                                      y={0}
+                                      width={64}
+                                      height={devH - 12}
+                                      fill="#450a0a"
+                                      stroke="#f97316"
+                                      strokeWidth={1}
+                                      cornerRadius={3}
+                                      listening={false}
+                                    />
+                                    <Text
+                                      x={0}
+                                      y={3}
+                                      width={64}
+                                      text="WAN 1/2"
+                                      fontSize={6.5}
+                                      fontFamily="monospace"
+                                      fontStyle="bold"
+                                      fill="#fb923c"
+                                      align="center"
+                                      listening={false}
+                                    />
+                                    <Circle
+                                      x={20}
+                                      y={15}
+                                      radius={2.5}
+                                      fill="#f97316"
+                                      listening={false}
+                                    />
+                                    <Rect
+                                      x={12}
+                                      y={18}
+                                      width={16}
+                                      height={12}
+                                      fill="#020617"
+                                      stroke="#ea580c"
+                                      strokeWidth={1}
+                                      cornerRadius={2}
+                                      listening={false}
+                                    />
+                                    <Circle
+                                      x={44}
+                                      y={15}
+                                      radius={2.5}
+                                      fill="#f97316"
+                                      listening={false}
+                                    />
+                                    <Rect
+                                      x={36}
+                                      y={18}
+                                      width={16}
+                                      height={12}
+                                      fill="#020617"
+                                      stroke="#ea580c"
+                                      strokeWidth={1}
+                                      cornerRadius={2}
+                                      listening={false}
+                                    />
+                                  </Group>
+
+                                  {/* Bloc DMZ */}
+                                  <Group x={startX + 70}>
+                                    <Rect
+                                      x={0}
+                                      y={0}
+                                      width={36}
+                                      height={devH - 12}
+                                      fill="#3b1d06"
+                                      stroke="#eab308"
+                                      strokeWidth={1}
+                                      cornerRadius={3}
+                                      listening={false}
+                                    />
+                                    <Text
+                                      x={0}
+                                      y={3}
+                                      width={36}
+                                      text="DMZ"
+                                      fontSize={6.5}
+                                      fontFamily="monospace"
+                                      fontStyle="bold"
+                                      fill="#fde047"
+                                      align="center"
+                                      listening={false}
+                                    />
+                                    <Circle
+                                      x={18}
+                                      y={15}
+                                      radius={2.5}
+                                      fill="#eab308"
+                                      listening={false}
+                                    />
+                                    <Rect
+                                      x={10}
+                                      y={18}
+                                      width={16}
+                                      height={12}
+                                      fill="#020617"
+                                      stroke="#ca8a04"
+                                      strokeWidth={1}
+                                      cornerRadius={2}
+                                      listening={false}
+                                    />
+                                  </Group>
+
+                                  {/* Bloc LAN interne Gigabit */}
+                                  <Group x={startX + 112}>
+                                    <Rect
+                                      x={0}
+                                      y={0}
+                                      width={150}
+                                      height={devH - 12}
+                                      fill="#022c22"
+                                      stroke="#10b981"
+                                      strokeWidth={1}
+                                      cornerRadius={3}
+                                      listening={false}
+                                    />
+                                    <Text
+                                      x={0}
+                                      y={3}
+                                      width={150}
+                                      text="INTERNAL LAN 1-8"
+                                      fontSize={6.5}
+                                      fontFamily="monospace"
+                                      fontStyle="bold"
+                                      fill="#6ee7b7"
+                                      align="center"
+                                      listening={false}
+                                    />
+                                    {Array.from({ length: 8 }).map((_, lp) => (
+                                      <Group key={`lan-${lp}`} x={8 + lp * 17} y={14}>
+                                        <Circle
+                                          x={7}
+                                          y={1}
+                                          radius={2}
+                                          fill="#22c55e"
+                                          listening={false}
+                                        />
+                                        <Rect
+                                          x={0}
+                                          y={4}
+                                          width={14}
+                                          height={11}
+                                          fill="#020617"
+                                          stroke="#059669"
+                                          strokeWidth={1}
+                                          cornerRadius={1}
+                                          listening={false}
+                                        />
+                                      </Group>
+                                    ))}
+                                  </Group>
+
+                                  {/* Emblème Sécurité UTM à droite */}
+                                  <Group x={bodyX + bodyW - 110} y={6}>
+                                    <Rect
+                                      x={0}
+                                      y={0}
+                                      width={98}
+                                      height={devH - 24}
+                                      fill="#27070a"
+                                      stroke="#dc2626"
+                                      strokeWidth={1}
+                                      cornerRadius={4}
+                                      listening={false}
+                                    />
+                                    <Text
+                                      x={0}
+                                      y={6}
+                                      width={98}
+                                      text="🛡️ UTM FIREWALL"
+                                      fontSize={7.5}
+                                      fontFamily="monospace"
+                                      fontStyle="bold"
+                                      fill="#f87171"
+                                      align="center"
+                                      listening={false}
+                                    />
+                                  </Group>
+                                </Group>
+                              );
+                            })()}
+
+                          {/* ================= 5. RENDU SPÉCIFIQUE PDU & ONDULEUR (UPS) ================= */}
+                          {isPdu &&
+                            (() => {
+                              const startX = bodyX + badgeW + 12;
+
+                              if (isUps) {
+                                // ONDULEUR (UPS)
+                                const doorW = Math.min(220, (bodyW - badgeW - 30) * 0.45);
+                                const lcdX = startX + doorW + 10;
+                                const lcdW = 145;
+
+                                return (
+                                  <Group y={devY + 6}>
+                                    {/* Porte du pack batteries avec fentes d'aération */}
+                                    <Rect
+                                      x={startX}
+                                      y={0}
+                                      width={doorW}
+                                      height={devH - 12}
+                                      fill="#1c1917"
+                                      stroke="#44403c"
+                                      strokeWidth={1}
+                                      cornerRadius={3}
+                                      listening={false}
+                                    />
+                                    {Array.from({ length: 8 }).map((_, s) => (
+                                      <Line
+                                        key={`slat-${s}`}
+                                        points={[
+                                          startX + 14 + s * ((doorW - 28) / 7),
+                                          6,
+                                          startX + 14 + s * ((doorW - 28) / 7),
+                                          devH - 24,
+                                        ]}
+                                        stroke="#0c0a09"
+                                        strokeWidth={3}
+                                        listening={false}
+                                      />
+                                    ))}
+                                    <Text
+                                      x={startX + 6}
+                                      y={devH - 20}
+                                      width={doorW - 12}
+                                      text="⚡ SMART-UPS LI-ION"
+                                      fontSize={7}
+                                      fontFamily="monospace"
+                                      fontStyle="bold"
+                                      fill="#f59e0b"
+                                      align="center"
+                                      listening={false}
+                                    />
+
+                                    {/* Écran graphique LCD de charge & autonomie */}
+                                    <Rect
+                                      x={lcdX}
+                                      y={1}
+                                      width={lcdW}
+                                      height={devH - 14}
+                                      fill="#042f2e"
+                                      stroke="#14b8a6"
+                                      strokeWidth={1.5}
+                                      cornerRadius={4}
+                                      listening={false}
+                                    />
+                                    <Text
+                                      x={lcdX + 6}
+                                      y={5}
+                                      width={lcdW - 12}
+                                      text="OUT: 230V • 50Hz"
+                                      fontSize={7.5}
+                                      fontFamily="monospace"
+                                      fontStyle="bold"
+                                      fill="#2dd4bf"
+                                      listening={false}
+                                    />
+                                    <Text
+                                      x={lcdX + 6}
+                                      y={17}
+                                      width={lcdW - 12}
+                                      text="BATT: [███████░] 88%"
+                                      fontSize={7.5}
+                                      fontFamily="monospace"
+                                      fill="#34d399"
+                                      listening={false}
+                                    />
+                                    <Text
+                                      x={lcdX + 6}
+                                      y={29}
+                                      width={lcdW - 12}
+                                      text="LOAD: 54% (45 min)"
+                                      fontSize={7.5}
+                                      fontFamily="monospace"
+                                      fill="#fde047"
+                                      listening={false}
+                                    />
+
+                                    {/* Interrupteur général disjoncteur */}
+                                    <Group x={bodyX + bodyW - 60} y={devH / 2 - 12}>
+                                      <Rect
+                                        x={0}
+                                        y={0}
+                                        width={20}
+                                        height={18}
+                                        fill="#7f1d1d"
+                                        stroke="#ef4444"
+                                        strokeWidth={1}
+                                        cornerRadius={2}
+                                        listening={false}
+                                      />
+                                      <Circle
+                                        x={32}
+                                        y={9}
+                                        radius={3}
+                                        fill="#22c55e"
+                                        listening={false}
+                                      />
+                                    </Group>
+                                  </Group>
+                                );
+                              }
+
+                              // BANDEAU DE PRISES (PDU)
+                              return (
+                                <Group y={devY + 6}>
+                                  {/* Afficheur Ampèremètre 7 segments */}
+                                  <Rect
+                                    x={startX}
+                                    y={2}
+                                    width={65}
+                                    height={devH - 16}
+                                    fill="#09090b"
+                                    stroke="#f59e0b"
+                                    strokeWidth={1}
+                                    cornerRadius={3}
+                                    listening={false}
+                                  />
+                                  <Text
+                                    x={startX}
+                                    y={6}
+                                    width={65}
+                                    text="16.2 A"
+                                    fontSize={9}
+                                    fontFamily="monospace"
+                                    fontStyle="bold"
+                                    fill="#ef4444"
+                                    align="center"
+                                    listening={false}
+                                  />
+                                  <Text
+                                    x={startX}
+                                    y={18}
+                                    width={65}
+                                    text="230 VAC"
+                                    fontSize={7}
+                                    fontFamily="monospace"
+                                    fill="#f59e0b"
+                                    align="center"
+                                    listening={false}
+                                  />
+
+                                  {/* 8 Prises IEC C13 avec anneau vert */}
+                                  {Array.from({ length: 8 }).map((_, o) => {
+                                    const ox = startX + 75 + o * 32;
+                                    return (
+                                      <Group key={`pdu-out-${o}`} x={ox} y={4}>
+                                        <Circle
+                                          x={10}
+                                          y={1}
+                                          radius={2}
+                                          fill="#22c55e"
+                                          listening={false}
+                                        />
+                                        <Rect
+                                          x={0}
+                                          y={5}
+                                          width={20}
+                                          height={devH - 24}
+                                          fill="#09090b"
+                                          stroke="#22c55e"
+                                          strokeWidth={1.5}
+                                          cornerRadius={2}
+                                          listening={false}
+                                        />
+                                      </Group>
+                                    );
+                                  })}
+                                </Group>
+                              );
+                            })()}
                         </Group>
                       );
                     })}
+
+                    {/* Prévisualisation fantôme du slot cible lors du glisser-déposer */}
+                    {dragGhostSlotU && dragGhostSlotU.rackId === rack.id && (
+                      <Group listening={false}>
+                        <Rect
+                          x={95}
+                          y={usableTop + (totalU - dragGhostSlotU.slotU) * uStep}
+                          width={rWidth - 190}
+                          height={Math.max(48, uStep * dragGhostSlotU.uSize - 4)}
+                          fill={
+                            dragGhostSlotU.isValid
+                              ? "rgba(56, 189, 248, 0.25)"
+                              : "rgba(239, 68, 68, 0.25)"
+                          }
+                          stroke={dragGhostSlotU.isValid ? "#38bdf8" : "#ef4444"}
+                          strokeWidth={3}
+                          dash={[8, 4]}
+                          cornerRadius={4}
+                        />
+                        <Text
+                          x={110}
+                          y={usableTop + (totalU - dragGhostSlotU.slotU) * uStep + 8}
+                          text={`Déplacer vers U${dragGhostSlotU.slotU} (${dragGhostSlotU.uSize}U) ${dragGhostSlotU.isValid ? "✓ Libre" : "⚠️ Conflit"}`}
+                          fontSize={12}
+                          fontFamily="monospace"
+                          fontStyle="bold"
+                          fill={dragGhostSlotU.isValid ? "#38bdf8" : "#ef4444"}
+                        />
+                      </Group>
+                    )}
                   </Group>
                 );
               })()}

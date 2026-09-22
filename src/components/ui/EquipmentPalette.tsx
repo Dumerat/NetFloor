@@ -71,7 +71,9 @@ export type ScannedDeviceType =
   | "PDU"
   | "ACCESS_POINT"
   | "PRINTER"
-  | "WORKSTATION";
+  | "WORKSTATION"
+  | "CAMERA"
+  | "PHONE_VOIP";
 
 export interface ScannedDeviceItem {
   id: string;
@@ -126,7 +128,69 @@ export function inferScannedDeviceProfile(d: {
     };
   }
 
-  // 2. Imprimante / Copieur
+  // 2. Caméra IP de vidéosurveillance
+  if (
+    rawType === "CAMERA" ||
+    combined.includes("camera") ||
+    combined.includes("caméra") ||
+    combined.includes("cam-") ||
+    combined.includes("hikvision") ||
+    combined.includes("dahua") ||
+    combined.includes("axis") ||
+    combined.includes("surveillance") ||
+    combined.includes("nvr") ||
+    (d.hostname || "").toLowerCase().startsWith("cam-") ||
+    (d.hostname || "").toLowerCase().startsWith("cam_")
+  ) {
+    return {
+      deviceType: "CAMERA",
+      portsCount: d.metadata?.portsCount || 1,
+      uSize: 0,
+      isRackable: false,
+    };
+  }
+
+  // 3. Postes de travail / PC client / Workstations
+  if (
+    rawType === "WORKSTATION" ||
+    combined.includes("workstation") ||
+    combined.includes("optiplex") ||
+    combined.includes("thinkcentre") ||
+    combined.includes("latitude") ||
+    combined.includes("elitebook") ||
+    combined.includes("macbook") ||
+    combined.includes("desktop") ||
+    combined.includes("laptop") ||
+    (d.hostname || "").toLowerCase().startsWith("pc-") ||
+    (d.hostname || "").toLowerCase().startsWith("pc_") ||
+    (d.name || "").toLowerCase().startsWith("pc-") ||
+    (d.name || "").toLowerCase().startsWith("pc_")
+  ) {
+    return {
+      deviceType: "WORKSTATION",
+      portsCount: d.metadata?.portsCount || 1,
+      uSize: 0,
+      isRackable: false,
+    };
+  }
+
+  // 4. Téléphonie VoIP
+  if (
+    rawType === "PHONE_VOIP" ||
+    combined.includes("phone") ||
+    combined.includes("voip") ||
+    combined.includes("sip") ||
+    combined.includes("yealink")
+  ) {
+    return {
+      deviceType: "PHONE_VOIP",
+      portsCount: d.metadata?.portsCount || 1,
+      uSize: 0,
+      isRackable: false,
+    };
+  }
+
+  // 5. Imprimante / Copieur
   if (
     rawType === "PRINTER" ||
     combined.includes("printer") ||
@@ -141,7 +205,7 @@ export function inferScannedDeviceProfile(d: {
     };
   }
 
-  // 3. Serveur
+  // 6. Serveur
   if (
     rawType === "SERVER" ||
     combined.includes("poweredge") ||
@@ -160,7 +224,7 @@ export function inferScannedDeviceProfile(d: {
     };
   }
 
-  // 4. Firewall / Routeur
+  // 7. Firewall / Routeur
   if (
     rawType === "FIREWALL" ||
     rawType === "ROUTER" ||
@@ -179,7 +243,7 @@ export function inferScannedDeviceProfile(d: {
     };
   }
 
-  // 5. Panneau de Brassage
+  // 8. Panneau de Brassage
   if (rawType === "PATCH_PANEL" || combined.includes("panneau") || combined.includes("brassage")) {
     return {
       deviceType: "PATCH_PANEL",
@@ -189,12 +253,24 @@ export function inferScannedDeviceProfile(d: {
     };
   }
 
-  // 6. PDU
-  if (rawType === "PDU" || combined.includes("pdu") || combined.includes("onduleur")) {
+  // 9. Onduleur (UPS) & PDU
+  const isUpsDevice =
+    combined.includes("ups") ||
+    combined.includes("onduleur") ||
+    combined.includes("smart-ups") ||
+    combined.includes("eaton") ||
+    combined.includes("apc") ||
+    combined.includes("riello") ||
+    combined.includes("socomec") ||
+    combined.includes("vertiv") ||
+    combined.includes("liebert");
+
+  if (rawType === "PDU" || rawType === "UPS" || combined.includes("pdu") || isUpsDevice) {
+    const isOnduleur = isUpsDevice && !combined.includes("rack pdu");
     return {
       deviceType: "PDU",
-      portsCount: d.metadata?.portsCount || 8,
-      uSize: 1,
+      portsCount: isOnduleur ? 1 : d.metadata?.portsCount || 8,
+      uSize: d.metadata?.uSize && d.metadata.uSize > 0 ? d.metadata.uSize : isOnduleur ? 2 : 1,
       isRackable: true,
     };
   }
@@ -638,9 +714,19 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.success && Array.isArray(data.devices) && data.devices.length > 0) {
-          const apiDevices: ScannedDeviceItem[] = data.devices.map((d: any) => {
+          const seenKeys = new Set<string>();
+          const dedupedApiDevices: ScannedDeviceItem[] = [];
+
+          for (const d of data.devices) {
+            const normMac = d.macAddress ? d.macAddress.trim().toLowerCase() : "";
+            const normIp = d.ipAddress ? d.ipAddress.trim() : "";
+            const normName = (d.hostname || d.name || "").trim().toLowerCase();
+            const key = normMac || (normIp ? `ip:${normIp}` : `name:${normName || d.id}`);
+            if (seenKeys.has(key)) continue;
+            seenKeys.add(key);
+
             const profile = inferScannedDeviceProfile(d);
-            return {
+            dedupedApiDevices.push({
               id: `disc-${d.id}`,
               name: d.hostname || d.model || `Équipement ${d.ipAddress}`,
               ip: d.ipAddress,
@@ -651,11 +737,24 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
               portsCount: profile.portsCount,
               uSize: profile.uSize,
               status: "ONLINE",
-            };
-          });
-          const existingIps = new Set(apiDevices.map((d) => d.ip));
-          const complementary = DEFAULT_SCANNED_DEVICES.filter((d) => !existingIps.has(d.ip));
-          setScannedDevices([...apiDevices, ...complementary]);
+            });
+          }
+
+          const existingIps = new Set(dedupedApiDevices.map((d) => d.ip).filter(Boolean));
+          const existingMacs = new Set(
+            dedupedApiDevices.map((d) => d.mac?.toLowerCase()).filter(Boolean)
+          );
+          const existingNames = new Set(
+            dedupedApiDevices.map((d) => d.name.toLowerCase()).filter(Boolean)
+          );
+
+          const complementary = DEFAULT_SCANNED_DEVICES.filter(
+            (d) =>
+              !existingIps.has(d.ip) &&
+              !existingMacs.has(d.mac.toLowerCase()) &&
+              !existingNames.has(d.name.toLowerCase())
+          );
+          setScannedDevices([...dedupedApiDevices, ...complementary]);
         }
       })
       .catch(() => {});
@@ -700,12 +799,14 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
 
   const filteredScannedDevices = useMemo(() => {
     return scannedDevices.filter((dev) => {
-      // Filtrer les équipements non rackables (bornes Wi-Fi, imprimantes, postes)
+      // Filtrer les équipements non rackables (bornes Wi-Fi, imprimantes, postes, caméras, voip)
       if (
         dev.uSize === 0 ||
         dev.deviceType === "ACCESS_POINT" ||
         dev.deviceType === "PRINTER" ||
-        dev.deviceType === "WORKSTATION"
+        dev.deviceType === "WORKSTATION" ||
+        dev.deviceType === "CAMERA" ||
+        dev.deviceType === "PHONE_VOIP"
       ) {
         return false;
       }
@@ -734,7 +835,13 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
 
   const iotScannedDevices = useMemo(() => {
     return scannedDevices.filter(
-      (dev) => dev.deviceType === "ACCESS_POINT" || dev.deviceType === "PRINTER" || dev.uSize === 0
+      (dev) =>
+        dev.deviceType === "ACCESS_POINT" ||
+        dev.deviceType === "PRINTER" ||
+        dev.deviceType === "CAMERA" ||
+        dev.deviceType === "WORKSTATION" ||
+        dev.deviceType === "PHONE_VOIP" ||
+        dev.uSize === 0
     );
   }, [scannedDevices]);
 
@@ -999,8 +1106,19 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
     ghost.style.border = "2px solid #f59e0b";
     ghost.style.borderRadius = "6px";
     ghost.style.boxShadow = "0 10px 25px rgba(0,0,0,0.8), 0 0 15px rgba(245, 158, 11, 0.4)";
+    const emote =
+      dev.deviceType === "ACCESS_POINT"
+        ? "📶"
+        : dev.deviceType === "CAMERA"
+          ? "🎥"
+          : dev.deviceType === "WORKSTATION"
+            ? "💻"
+            : dev.deviceType === "PHONE_VOIP"
+              ? "📞"
+              : "🖨️";
+
     ghost.innerHTML = `
-      <span style="font-size:16px;">${dev.deviceType === "ACCESS_POINT" ? "📶" : "🖨️"}</span>
+      <span style="font-size:16px;">${emote}</span>
       <div style="display:flex;flex-direction:column;">
         <span style="font-size:10px;font-weight:bold;color:#f8fafc;font-family:monospace;white-space:nowrap;">${dev.name}</span>
         <span style="font-size:8px;color:#fbbf24;font-family:monospace;">${dev.ip} • ${dev.manufacturer || dev.model}</span>
@@ -1521,6 +1639,28 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                               {iotScannedDevices.map((dev) => {
                                 const placement = getDevicePlacement(dev);
                                 const isAp = dev.deviceType === "ACCESS_POINT";
+                                const isCam = dev.deviceType === "CAMERA";
+                                const isPc = dev.deviceType === "WORKSTATION";
+                                const isPhone = dev.deviceType === "PHONE_VOIP";
+
+                                const emote = isAp
+                                  ? "📶"
+                                  : isCam
+                                    ? "🎥"
+                                    : isPc
+                                      ? "💻"
+                                      : isPhone
+                                        ? "📞"
+                                        : "🖨️";
+                                const badgeLabel = isAp
+                                  ? "Wi-Fi AP"
+                                  : isCam
+                                    ? "Caméra IP"
+                                    : isPc
+                                      ? "Poste Client"
+                                      : isPhone
+                                        ? "VoIP"
+                                        : "Imprimante";
 
                                 return (
                                   <div
@@ -1533,7 +1673,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                                       <div className="flex items-center gap-2">
                                         <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition flex-shrink-0" />
                                         <div className="w-7 h-7 rounded-md bg-slate-850 flex items-center justify-center text-slate-300 group-hover:text-amber-400 transition">
-                                          <span className="text-sm">{isAp ? "📶" : "🖨️"}</span>
+                                          <span className="text-sm">{emote}</span>
                                         </div>
                                         <div>
                                           <div className="text-xs font-semibold text-slate-200 group-hover:text-white">
@@ -1546,7 +1686,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                                       </div>
                                       <div className="flex flex-col items-end gap-1">
                                         <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border bg-amber-500/20 text-amber-300 border-amber-500/30">
-                                          {isAp ? "Wi-Fi AP" : "Imprimante"}
+                                          {badgeLabel}
                                         </span>
                                         {placement && (
                                           <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">

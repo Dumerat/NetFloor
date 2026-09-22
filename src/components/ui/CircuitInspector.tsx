@@ -61,6 +61,8 @@ import {
   PlusCircle,
   Boxes,
   ExternalLink,
+  Settings,
+  Copy,
 } from "lucide-react";
 import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
@@ -118,6 +120,8 @@ export interface CircuitInspectorProps {
     | undefined;
   sites?: FloorSite[] | undefined;
   activeSiteId?: string | undefined;
+  selectedRackDeviceId?: string | null | undefined;
+  onSelectRackDeviceId?: ((deviceId: string | null) => void) | undefined;
 }
 
 const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
@@ -149,6 +153,8 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   onAutoRoute,
   sites,
   activeSiteId,
+  selectedRackDeviceId,
+  onSelectRackDeviceId,
 }) => {
   // Mode de travail : Consultation (Rapide / Lecture seule) vs Modification (Formulaires d'édition)
   const [inspectorMode, setInspectorMode] = useState<"VIEW" | "EDIT">("VIEW");
@@ -316,6 +322,25 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [editingDeviceUSize, setEditingDeviceUSize] = useState(1);
   const [addDeviceError, setAddDeviceError] = useState<string | null>(null);
   const [editDeviceError, setEditDeviceError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedRackDeviceId) {
+      setSelectedSwitchId(selectedRackDeviceId);
+      setEditingDeviceId(selectedRackDeviceId);
+      const devs = selectedNode?.devices ?? [];
+      const found = devs.find((d) => d.id === selectedRackDeviceId);
+      if (found) {
+        setEditingDeviceName(found.name);
+        setEditingDeviceSlotU(found.slotU);
+        setEditingDeviceUSize(found.uSize ?? 1);
+        if (found.deviceType === "SWITCH") {
+          setRackTab("SWITCHES");
+        } else {
+          setRackTab("EQUIPMENT");
+        }
+      }
+    }
+  }, [selectedRackDeviceId, selectedNode?.devices]);
 
   // État pour le renommage et dimensions de la baie
   const [isEditingRackName, setIsEditingRackName] = useState(false);
@@ -3315,7 +3340,6 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const switchDevices = sortedRackDevices.filter((d) => d.deviceType === "SWITCH");
 
     // Vérifie si un équipement chevauche un slot U déjà occupé
-    // Un équipement de position slotU et taille uSize occupe les slots [slotU - uSize + 1, slotU]
     const findSlotCollision = (
       candidateSlot: number,
       candidateSize: number,
@@ -3323,6 +3347,19 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     ): RackDeviceItem | null => {
       const candMin = candidateSlot - candidateSize + 1;
       const candMax = candidateSlot;
+
+      if (candMin < 1 || candMax > totalU) {
+        return {
+          id: "__out_of_bounds__",
+          name: "Limites de la baie dépassées",
+          slotU: candidateSlot,
+          uSize: candidateSize,
+          deviceType: "SWITCH",
+          portsCount: 0,
+          brand: "GENERIC",
+          status: "ONLINE",
+        };
+      }
 
       for (const dev of rackDevices) {
         if (ignoreDeviceId && dev.id === ignoreDeviceId) continue;
@@ -3384,6 +3421,34 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const handleDeleteRackDevice = (devId: string) => {
       const updated = rackDevices.filter((d) => d.id !== devId);
       onUpdateNodeProperties?.(selectedNode.id, { devices: updated });
+    };
+
+    const handleMoveDeviceUp = (dev: RackDeviceItem) => {
+      const targetSlot = dev.slotU + 1;
+      const size = dev.uSize ?? 1;
+      const collision = findSlotCollision(targetSlot, size, dev.id);
+      if (collision) {
+        setEditDeviceError(
+          `Impossible de monter : conflit avec "${collision.name}" (U${collision.slotU}).`
+        );
+        return;
+      }
+      setEditDeviceError(null);
+      handleUpdateRackDevice(dev.id, { slotU: targetSlot });
+    };
+
+    const handleMoveDeviceDown = (dev: RackDeviceItem) => {
+      const targetSlot = dev.slotU - 1;
+      const size = dev.uSize ?? 1;
+      const collision = findSlotCollision(targetSlot, size, dev.id);
+      if (collision) {
+        setEditDeviceError(
+          `Impossible de descendre : conflit avec "${collision.name}" (U${collision.slotU}).`
+        );
+        return;
+      }
+      setEditDeviceError(null);
+      handleUpdateRackDevice(dev.id, { slotU: targetSlot });
     };
 
     const filteredPatches = rackPatches.filter((p) => {
@@ -4553,12 +4618,44 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                                 </div>
                               )}
 
-                              <div className="flex items-center justify-between text-[10px] text-slate-400">
-                                <span className="truncate">{dev.model}</span>
-                                <span className="font-mono text-[9px] text-slate-500 flex-shrink-0 ml-1">
-                                  {dev.ipAddress ? dev.ipAddress : dev.deviceType}
-                                  {dev.portsCount ? ` • ${dev.portsCount}P` : ""}
-                                </span>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 border-t border-slate-800/60">
+                                <span className="truncate">{dev.model || dev.name}</span>
+                                <div className="flex items-center gap-1">
+                                  {dev.deviceType === "SWITCH" ? (
+                                    <button
+                                      onClick={() => {
+                                        setSelectedSwitchId(dev.id);
+                                        onSelectRackDeviceId?.(dev.id);
+                                        setRackTab("SWITCHES");
+                                      }}
+                                      className="text-[9px] font-mono text-purple-300 hover:text-purple-100 bg-purple-950/60 hover:bg-purple-900/80 border border-purple-800/60 px-1.5 py-0.5 rounded flex items-center gap-1 transition"
+                                      title="Visualiser et configurer ce commutateur"
+                                    >
+                                      <Activity className="w-2.5 h-2.5 text-purple-400" />
+                                      <span>Face Avant</span>
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    onClick={() => handleMoveDeviceUp(dev)}
+                                    disabled={dev.slotU >= totalU}
+                                    className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 border border-slate-800"
+                                    title="Monter de 1U"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    onClick={() => handleMoveDeviceDown(dev)}
+                                    disabled={dev.slotU <= 1}
+                                    className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 border border-slate-800"
+                                    title="Descendre de 1U"
+                                  >
+                                    ▼
+                                  </button>
+                                  <span className="font-mono text-[9px] text-slate-500 flex-shrink-0 ml-1">
+                                    {dev.ipAddress ? dev.ipAddress : dev.deviceType}
+                                    {dev.portsCount ? ` • ${dev.portsCount}P` : ""}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           );
@@ -4606,7 +4703,10 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                               return (
                                 <button
                                   key={sw.id}
-                                  onClick={() => setSelectedSwitchId(sw.id)}
+                                  onClick={() => {
+                                    setSelectedSwitchId(sw.id);
+                                    onSelectRackDeviceId?.(sw.id);
+                                  }}
                                   className={`px-2 py-1 rounded text-[10px] font-mono transition flex items-center gap-1.5 border ${
                                     isActive
                                       ? "bg-purple-600/30 text-purple-200 border-purple-500 font-bold"
@@ -4637,7 +4737,228 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                           ) ?? fallbackSwitch;
 
                         return (
-                          <SwitchPortVisualizer device={activeSwitch} rackPatches={rackPatches} />
+                          <div className="space-y-3">
+                            <SwitchPortVisualizer
+                              device={activeSwitch}
+                              rackPatches={rackPatches}
+                              onUpdatePatch={(patchId, updates) => {
+                                const updated = rackPatches.map((p) =>
+                                  p.id === patchId ? { ...p, ...updates } : p
+                                );
+                                setRackPatches(updated);
+                                onUpdateNodeProperties?.(selectedNode.id, { patches: updated });
+                              }}
+                              onRemovePatch={(patchId) => {
+                                const updated = rackPatches.filter((p) => p.id !== patchId);
+                                setRackPatches(updated);
+                                onUpdateNodeProperties?.(selectedNode.id, { patches: updated });
+                              }}
+                              onConnectPort={(portId) => {
+                                setNewPatchTargetPort(portId);
+                                setIsAddingPatch(true);
+                                setRackTab("PATCHING");
+                              }}
+                            />
+
+                            {/* Panneau de configuration et modification rapide du commutateur sélectionné */}
+                            <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3 font-sans">
+                              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                                <div className="flex items-center gap-1.5">
+                                  <Settings className="w-3.5 h-3.5 text-purple-400" />
+                                  <span className="text-xs font-bold text-slate-200">
+                                    Modifier le commutateur : {activeSwitch.name}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleMoveDeviceUp(activeSwitch)}
+                                    disabled={activeSwitch.slotU >= totalU}
+                                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-purple-300 text-[10px] font-mono font-bold flex items-center gap-1 transition"
+                                    title="Monter de 1U dans la baie"
+                                  >
+                                    ▲ Monter (+1U)
+                                  </button>
+                                  <button
+                                    onClick={() => handleMoveDeviceDown(activeSwitch)}
+                                    disabled={activeSwitch.slotU <= 1}
+                                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-purple-300 text-[10px] font-mono font-bold flex items-center gap-1 transition"
+                                    title="Descendre de 1U dans la baie"
+                                  >
+                                    ▼ Descendre (-1U)
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                <div>
+                                  <label className="text-slate-400 block mb-0.5 font-mono text-[9px]">
+                                    Nom du commutateur
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={activeSwitch.name}
+                                    onChange={(e) =>
+                                      handleUpdateRackDevice(activeSwitch.id, {
+                                        name: e.target.value,
+                                      })
+                                    }
+                                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-100 font-mono text-[10px] focus:outline-none focus:border-purple-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-slate-400 block mb-0.5 font-mono text-[9px]">
+                                    Emplacement U (1 - {totalU})
+                                  </label>
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={totalU}
+                                      value={activeSwitch.slotU}
+                                      onChange={(e) =>
+                                        handleUpdateRackDevice(activeSwitch.id, {
+                                          slotU: Number(e.target.value),
+                                        })
+                                      }
+                                      className="w-20 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-purple-300 font-mono text-[10px] focus:outline-none focus:border-purple-500 font-bold"
+                                    />
+                                    <span className="text-slate-500 text-[9px] font-mono font-normal">
+                                      Hauteur : {activeSwitch.uSize ?? 1}U
+                                    </span>
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-slate-400 block mb-0.5 font-mono text-[9px]">
+                                    Marque / Écosystème
+                                  </label>
+                                  <select
+                                    value={activeSwitch.brand}
+                                    onChange={(e) =>
+                                      handleUpdateRackDevice(activeSwitch.id, {
+                                        brand: e.target.value as RackDeviceBrand,
+                                      })
+                                    }
+                                    className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px] focus:outline-none focus:border-purple-500"
+                                  >
+                                    <option value="ARUBA">Aruba / HPE</option>
+                                    <option value="ZYXEL">Zyxel Nebula</option>
+                                    <option value="CISCO">Cisco Catalyst</option>
+                                    <option value="UBIQUITI">Ubiquiti UniFi</option>
+                                    <option value="FORTINET">Fortinet FortiSwitch</option>
+                                    <option value="GENERIC">Générique / Autre</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-slate-400 block mb-0.5 font-mono text-[9px]">
+                                    Modèle / Référence
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={activeSwitch.model ?? ""}
+                                    placeholder="Ex: 2930F 24G PoE+"
+                                    onChange={(e) =>
+                                      handleUpdateRackDevice(activeSwitch.id, {
+                                        model: e.target.value,
+                                      })
+                                    }
+                                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-100 text-[10px] focus:outline-none focus:border-purple-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-slate-400 block mb-0.5 font-mono text-[9px]">
+                                    IP Management
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={activeSwitch.ipAddress ?? ""}
+                                    placeholder="10.42.0.1"
+                                    onChange={(e) =>
+                                      handleUpdateRackDevice(activeSwitch.id, {
+                                        ipAddress: e.target.value,
+                                      })
+                                    }
+                                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-100 font-mono text-[10px] focus:outline-none focus:border-purple-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-slate-400 block mb-0.5 font-mono text-[9px]">
+                                    Nb Ports & PoE Budget
+                                  </label>
+                                  <div className="flex items-center gap-1">
+                                    <select
+                                      value={activeSwitch.portsCount ?? 24}
+                                      onChange={(e) =>
+                                        handleUpdateRackDevice(activeSwitch.id, {
+                                          portsCount: Number(e.target.value),
+                                        })
+                                      }
+                                      className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px] focus:outline-none focus:border-purple-500"
+                                    >
+                                      <option value={8}>8 Ports</option>
+                                      <option value={16}>16 Ports</option>
+                                      <option value={24}>24 Ports</option>
+                                      <option value={48}>48 Ports</option>
+                                    </select>
+                                    <input
+                                      type="number"
+                                      placeholder="Budget W"
+                                      value={activeSwitch.poeBudgetW ?? 370}
+                                      onChange={(e) =>
+                                        handleUpdateRackDevice(activeSwitch.id, {
+                                          poeBudgetW: Number(e.target.value),
+                                        })
+                                      }
+                                      className="w-20 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-amber-300 font-mono text-[10px] focus:outline-none focus:border-purple-500"
+                                      title="Budget PoE total en Watts"
+                                    />
+                                    <span className="text-[9px] text-amber-400 font-mono">W</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {editDeviceError && (
+                                <div className="p-2 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-mono">
+                                  ⚠️ {editDeviceError}
+                                </div>
+                              )}
+
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                                <button
+                                  onClick={() => {
+                                    const freeSlot = findNextFreeSlot(activeSwitch.uSize ?? 1);
+                                    const copy: RackDeviceItem = {
+                                      ...activeSwitch,
+                                      id: `dev-${Date.now()}`,
+                                      name: `${activeSwitch.name}-COPY`,
+                                      slotU: freeSlot,
+                                    };
+                                    handleAddRackDevice(copy);
+                                    setSelectedSwitchId(copy.id);
+                                  }}
+                                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-medium flex items-center gap-1 transition"
+                                  title="Dupliquer ce switch dans la baie"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                  <span>Dupliquer</span>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (
+                                      confirm(
+                                        `Confirmez-vous le retrait de ${activeSwitch.name} de la baie ?`
+                                      )
+                                    ) {
+                                      handleDeleteRackDevice(activeSwitch.id);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 rounded bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 text-[10px] font-medium flex items-center gap-1 transition"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Supprimer de la baie</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         );
                       })()}
                     </div>

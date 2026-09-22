@@ -9,11 +9,17 @@ import { DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 interface SwitchPortVisualizerProps {
   device: RackDeviceItem;
   rackPatches: InternalRackPatch[];
+  onUpdatePatch?: (patchId: string, updates: Partial<InternalRackPatch>) => void;
+  onRemovePatch?: (patchId: string) => void;
+  onConnectPort?: (portId: string) => void;
 }
 
 export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
   device,
   rackPatches,
+  onUpdatePatch,
+  onRemovePatch,
+  onConnectPort,
 }) => {
   const [selectedPortNum, setSelectedPortNum] = useState<number | null>(null);
 
@@ -208,16 +214,17 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
           </div>
 
           {selectedPatch ? (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex items-center justify-between text-slate-300 font-mono text-[10px]">
                 <span>
                   Service : <strong>{selectedPatch.serviceName}</strong>
                 </span>
-                <span className="text-emerald-400 font-semibold">
+                <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   {selectedPatch.speedGbps} Gbps • UP
                 </span>
               </div>
-              <div className="p-1.5 bg-slate-950 rounded border border-slate-850 flex items-center justify-between font-mono text-[10px]">
+              <div className="p-1.5 bg-slate-950 rounded border border-slate-800 flex items-center justify-between font-mono text-[10px]">
                 <div>
                   <div className="text-[9px] text-slate-500">Origine (Switch)</div>
                   <div className="text-sky-300 font-bold">{selectedPatch.targetPort}</div>
@@ -230,21 +237,71 @@ export const SwitchPortVisualizer: React.FC<SwitchPortVisualizerProps> = ({
                   </div>
                 </div>
               </div>
-              <div className="text-[10px] text-slate-400 flex items-center gap-2 font-mono">
+              <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono">
                 <span>
                   Câble : {selectedPatch.cableType} ({selectedPatch.lengthM}m)
                 </span>
                 {selectedPatch.vlanId === 99 && (
                   <span className="text-rose-400 flex items-center gap-1">
-                    <Shield className="w-3 h-3" /> Trunk 802.1Q Inter-Switch
+                    <Shield className="w-3 h-3" /> Trunk 802.1Q
                   </span>
                 )}
               </div>
+
+              {/* Changement rapide de VLAN pour ce port */}
+              <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between gap-1">
+                <span className="text-[9px] text-slate-400 font-mono">Assigner VLAN :</span>
+                <div className="flex items-center gap-1">
+                  {[20, 30, 50, 99].map((vid) => {
+                    const isCur = selectedPatch.vlanId === vid;
+                    const vStyle = DEFAULT_VLAN_STYLES[vid];
+                    return (
+                      <button
+                        key={vid}
+                        onClick={() => onUpdatePatch?.(selectedPatch.id, { vlanId: vid })}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-mono border transition ${
+                          isCur
+                            ? "font-bold shadow-sm"
+                            : "opacity-60 hover:opacity-100 hover:border-slate-600 bg-slate-950"
+                        }`}
+                        style={{
+                          color: vStyle?.color ?? "#38bdf8",
+                          borderColor: isCur ? (vStyle?.color ?? "#38bdf8") : "#334155",
+                          backgroundColor: isCur ? `${vStyle?.color ?? "#38bdf8"}25` : undefined,
+                        }}
+                      >
+                        V{vid}
+                      </button>
+                    );
+                  })}
+                  {onRemovePatch && (
+                    <button
+                      onClick={() => onRemovePatch(selectedPatch.id)}
+                      className="px-1.5 py-0.5 rounded text-[9px] font-mono text-rose-400 hover:text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 transition ml-1"
+                      title="Déconnecter ce cordon de brassage"
+                    >
+                      Déconnecter
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="text-[10px] text-slate-400 flex items-center justify-between">
-              <span>Port libre disponible pour brassage ou liaison Uplink.</span>
-              <span className="text-slate-500 font-mono">1000BASE-T RJ45</span>
+            <div className="space-y-1.5">
+              <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                <span>Port libre disponible pour brassage ou liaison Uplink.</span>
+                <span className="text-slate-500 font-mono">1000BASE-T RJ45</span>
+              </div>
+              {onConnectPort && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => onConnectPort(`Gi1/0/${selectedPortNum}`)}
+                    className="px-2 py-0.5 rounded bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border border-sky-500/50 text-[10px] font-medium transition"
+                  >
+                    + Raccorder ce port
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

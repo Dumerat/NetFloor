@@ -111,7 +111,51 @@ export async function crawlSwitchLldpCdp(
     let defaultPortsCount = 24;
     let uSize = 1;
 
-    if (
+    const isUps =
+      dLower.includes("ups") ||
+      dLower.includes("onduleur") ||
+      dLower.includes("smart-ups") ||
+      dLower.includes("eaton") ||
+      dLower.includes("apc") ||
+      dLower.includes("riello") ||
+      dLower.includes("socomec") ||
+      dLower.includes("vertiv") ||
+      dLower.includes("liebert") ||
+      sLower.includes("ups") ||
+      sLower.includes("onduleur");
+    const isCam =
+      dLower.includes("camera") ||
+      dLower.includes("caméra") ||
+      dLower.includes("cam-") ||
+      dLower.includes("hikvision") ||
+      dLower.includes("dahua") ||
+      dLower.includes("axis") ||
+      dLower.includes("surveillance") ||
+      dLower.includes("nvr") ||
+      sLower.includes("cam-") ||
+      sLower.startsWith("cam");
+    const isPc =
+      dLower.includes("workstation") ||
+      dLower.includes("optiplex") ||
+      dLower.includes("thinkcentre") ||
+      dLower.includes("latitude") ||
+      dLower.includes("elitebook") ||
+      sLower.includes("pc-") ||
+      sLower.startsWith("pc");
+
+    if (isUps) {
+      deviceType = "UNKNOWN";
+      defaultPortsCount = 1;
+      uSize = 2;
+    } else if (isCam) {
+      deviceType = "UNKNOWN";
+      defaultPortsCount = 1;
+      uSize = 0;
+    } else if (isPc) {
+      deviceType = "WORKSTATION";
+      defaultPortsCount = 1;
+      uSize = 0;
+    } else if (
       dLower.includes("access point") ||
       dLower.includes("ap-") ||
       dLower.includes("arubaap") ||
@@ -178,7 +222,17 @@ export async function crawlSwitchLldpCdp(
     }
 
     const namePrefix =
-      deviceType === "ACCESS_POINT" ? "AP-" : deviceType === "SERVER" ? "SRV-" : "SW-";
+      deviceType === "ACCESS_POINT"
+        ? "AP-"
+        : deviceType === "SERVER"
+          ? "SRV-"
+          : isUps
+            ? "UPS-"
+            : isCam
+              ? "CAM-"
+              : isPc
+                ? "PC-"
+                : "SW-";
     const sysName = rawSysName || `${namePrefix}${host.replace(/\./g, "-")}`;
     const model =
       rawSysDescr.split("\n")[0]?.split(",")[0] ||
@@ -186,7 +240,13 @@ export async function crawlSwitchLldpCdp(
         ? `${vendor} Access Point`
         : deviceType === "SERVER"
           ? `${vendor} Server`
-          : `${vendor} Switch`);
+          : isUps
+            ? `${vendor} Onduleur / UPS`
+            : isCam
+              ? `${vendor} Caméra IP`
+              : isPc
+                ? `${vendor} Workstation`
+                : `${vendor} Switch`);
 
     // 2. Interfaces physiques du commutateur (IF-MIB RFC 2863)
     const portsMap = new Map<number, SwitchPortInfo>();
@@ -247,7 +307,15 @@ export async function crawlSwitchLldpCdp(
         portsMap.set(i, {
           ifIndex: i,
           portName:
-            deviceType === "ACCESS_POINT" ? (i === 1 ? "eth0" : `eth${i - 1}`) : `Gi1/0/${i}`,
+            deviceType === "ACCESS_POINT"
+              ? i === 1
+                ? "eth0"
+                : `eth${i - 1}`
+              : isUps
+                ? "mgmt0"
+                : isCam || isPc
+                  ? "eth0"
+                  : `Gi1/0/${i}`,
           speedMbps: 1000,
           isUp: true,
           isUplink: false,
@@ -351,7 +419,7 @@ export async function crawlSwitchLldpCdp(
       `00:81:C4:00:${hostParts[2]?.toString(16).padStart(2, "0")}:${hostParts[3]?.toString(16).padStart(2, "0")}`.toUpperCase();
 
     return {
-      id: `${deviceType === "ACCESS_POINT" ? "ap" : deviceType === "SERVER" ? "srv" : "sw"}-${host.replace(/\./g, "-")}`,
+      id: `${deviceType === "ACCESS_POINT" ? "ap" : deviceType === "SERVER" ? "srv" : isUps ? "ups" : isCam ? "cam" : isPc ? "pc" : "sw"}-${host.replace(/\./g, "-")}`,
       ip: host,
       mac,
       sysName,

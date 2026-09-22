@@ -237,6 +237,12 @@ async function runSpatialTests() {
   const v2 = useCameraStore.getState().viewport;
   assert(v2.scale > 0, "Échelle calculée strictement positive");
 
+  // Test cadrage boîte englobante / baie (fitBounds)
+  cameraStore.fitBounds({ minX: 10000, minY: 15000, maxX: 10960, maxY: 17776 }, 1920, 1080, 50);
+  const vBounds = useCameraStore.getState().viewport;
+  assert(vBounds.scale > 0.025, "Échelle zoomée sur la baie");
+  assert(Number.isFinite(vBounds.panX) && Number.isFinite(vBounds.panY), "Pan valides");
+
   // Test reset
   cameraStore.resetCamera();
   const v3 = useCameraStore.getState().viewport;

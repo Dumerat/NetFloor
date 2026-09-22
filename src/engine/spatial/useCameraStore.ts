@@ -24,6 +24,19 @@ export interface CameraState {
     screenHeight: number,
     paddingPx?: number
   ) => void;
+  readonly fitBounds: (
+    bounds: {
+      minX: number;
+      minY: number;
+      maxX: number;
+      maxY: number;
+      width?: number;
+      height?: number;
+    },
+    screenWidth: number,
+    screenHeight: number,
+    paddingPx?: number
+  ) => void;
   readonly resetCamera: () => void;
   readonly setIsPanning: (isPanning: boolean) => void;
   readonly setGridConfig: (config: Partial<GridConfig>) => void;
@@ -107,6 +120,32 @@ export const useCameraStore = create<CameraState>()((set, get) => ({
     };
     const fittedViewport = fitToBounds(
       floorBounds,
+      screenWidth,
+      screenHeight,
+      paddingPx,
+      minScale,
+      maxScale
+    );
+    set({
+      viewport: fittedViewport,
+      pixelsPerMeter: fittedViewport.scale * 1000,
+    });
+  },
+
+  fitBounds: (bounds, screenWidth, screenHeight, paddingPx = 40) => {
+    const { minScale, maxScale } = get();
+    const w = bounds.width ?? Math.max(10, bounds.maxX - bounds.minX);
+    const h = bounds.height ?? Math.max(10, bounds.maxY - bounds.minY);
+    const normalizedBounds = {
+      minX: bounds.minX,
+      minY: bounds.minY,
+      maxX: bounds.minX + w,
+      maxY: bounds.minY + h,
+      width: w,
+      height: h,
+    };
+    const fittedViewport = fitToBounds(
+      normalizedBounds,
       screenWidth,
       screenHeight,
       paddingPx,

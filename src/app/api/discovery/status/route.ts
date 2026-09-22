@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
     const db = await getDb();
 
-    // 0. Récupérer l'ensemble des équipements découverts pour le catalogue d'infrastructure
+    // 0. Récupérer l'ensemble des équipements découverts pour le catalogue d'infrastructure (dédupliqués et assainis)
     if (searchParams.get("allDevices") === "true") {
       const allDevs = await db
         .select()
@@ -25,9 +25,72 @@ export async function GET(req: Request) {
         .orderBy(desc(discoveredDevices.lastSeenAt))
         .limit(100);
 
+      // Déduplication par MAC (ou IP / Nom) en conservant le plus récent
+      const seen = new Set<string>();
+      const dedupedDevs = [];
+
+      for (const dev of allDevs) {
+        const normMac = dev.macAddress ? dev.macAddress.trim().toUpperCase() : "";
+        const normIp = dev.ipAddress ? dev.ipAddress.trim() : "";
+        const normName = dev.hostname ? dev.hostname.trim().toUpperCase() : "";
+        const key = normMac || (normIp ? `IP:${normIp}` : `NAME:${normName || dev.id}`);
+
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        // Assainissement des anciens enregistrements en base
+        const combined =
+          `${dev.hostname || ""} ${dev.model || ""} ${dev.sysDescr || ""} ${dev.manufacturer || ""}`.toLowerCase();
+        const isUps =
+          combined.includes("ups") ||
+          combined.includes("onduleur") ||
+          combined.includes("smart-ups") ||
+          combined.includes("eaton") ||
+          combined.includes("apc") ||
+          combined.includes("riello") ||
+          combined.includes("socomec") ||
+          combined.includes("vertiv") ||
+          combined.includes("liebert");
+        const isCam =
+          combined.includes("camera") ||
+          combined.includes("caméra") ||
+          combined.includes("cam-") ||
+          combined.includes("hikvision") ||
+          combined.includes("dahua") ||
+          combined.includes("axis") ||
+          combined.includes("surveillance") ||
+          combined.includes("nvr");
+        const isPc =
+          combined.includes("pc-") ||
+          combined.includes("laptop") ||
+          combined.includes("desktop") ||
+          combined.includes("workstation") ||
+          combined.includes("optiplex") ||
+          combined.includes("thinkcentre") ||
+          combined.includes("latitude") ||
+          combined.includes("elitebook");
+
+        const meta = { ...((dev.metadata as Record<string, unknown>) || {}) };
+        if (isUps) {
+          meta.portsCount = 1;
+          meta.uSize = typeof meta.uSize === "number" && meta.uSize > 0 ? meta.uSize : 2;
+          meta.isRackable = true;
+          meta.category = "UPS";
+        } else if (isCam || isPc) {
+          meta.portsCount = 1;
+          meta.uSize = 0;
+          meta.isRackable = false;
+        }
+
+        dedupedDevs.push({
+          ...dev,
+          metadata: meta,
+        });
+      }
+
       return NextResponse.json({
         success: true,
-        devices: allDevs,
+        devices: dedupedDevs,
       });
     }
 
