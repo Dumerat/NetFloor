@@ -118,6 +118,11 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
   const [discoveredDevices, setDiscoveredDevices] = useState<DeviceTelemetry[]>([]);
 
+  // États pour le dialogue de réinitialisation (Reset)
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [isResettingFull, setIsResettingFull] = useState(false);
+  const [resetConfirmInput, setResetConfirmInput] = useState("");
+
   // États pour les Utilisateurs Personnalisés / Hors Domaine (CUSTOM)
   const [customUsers, setCustomUsers] = useState<DirectoryUser[]>([]);
   const [customSearch, setCustomSearch] = useState("");
@@ -665,11 +670,6 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     showToast("💾 Paramètres DSI enregistrés avec succès dans le navigateur");
     onClose();
   };
-
-  // État et logique de réinitialisation (Reset config vs Reset complet)
-  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
-  const [isResettingFull, setIsResettingFull] = useState(false);
-  const [resetConfirmInput, setResetConfirmInput] = useState("");
 
   // 1. Réinitialisation des paramètres DSI (Configuration uniquement)
   const handleResetConfigOnly = () => {
