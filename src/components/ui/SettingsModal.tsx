@@ -60,6 +60,7 @@ import {
   saveStoredSettings,
   resetStoredSettings,
 } from "@/data/settingsStore";
+import { clearAllBackgroundPlans, clearAllSites } from "@/engine/storage/planStorage";
 import { VlanStyleCustomizer } from "./VlanStyleCustomizer";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 
@@ -72,6 +73,7 @@ interface SettingsModalProps {
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
   onResetVlanStyles?: (() => void) | undefined;
+  onFullSystemReset?: (() => Promise<void> | void) | undefined;
 }
 
 type TabType = "sso" | "snmp" | "ipam" | "integrations" | "portals";
@@ -109,6 +111,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   vlanStyles,
   onUpdateVlanStyle,
   onResetVlanStyles,
+  onFullSystemReset,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("sso");
   const [dsiMode, setDsiMode] = useState<"SUPERVISION" | "CONFIGURATION">("SUPERVISION");
@@ -663,12 +666,71 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     onClose();
   };
 
-  // Réinitialisation aux valeurs d'usine
-  const handleResetSettings = () => {
-    if (confirm("Réinitialiser tous les paramètres DSI aux valeurs d'origine ?")) {
-      const def = resetStoredSettings();
-      setSettings(def);
-      showToast("🔄 Paramètres réinitialisés aux valeurs par défaut");
+  // État et logique de réinitialisation (Reset config vs Reset complet)
+  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+  const [isResettingFull, setIsResettingFull] = useState(false);
+  const [resetConfirmInput, setResetConfirmInput] = useState("");
+
+  // 1. Réinitialisation des paramètres DSI (Configuration uniquement)
+  const handleResetConfigOnly = () => {
+    const def = resetStoredSettings();
+    setSettings(def);
+    onResetVlanStyles?.();
+    showToast("🔄 Paramètres de configuration DSI réinitialisés aux valeurs d'origine");
+    setIsResetDialogOpen(false);
+  };
+
+  // 2. Réinitialisation complète du système, des objets et de la base de données
+  const handleResetFullSystem = async () => {
+    setIsResettingFull(true);
+    try {
+      // 1. Supprimer tous les objets en base de données PostgreSQL / PGLite
+      await fetch("/api/topology", { method: "DELETE" }).catch(() => null);
+
+      // 2. Supprimer les plans d'étages et sites dans IndexedDB & localStorage
+      await clearAllBackgroundPlans().catch(() => null);
+      await clearAllSites().catch(() => null);
+
+      // 3. Vider les clés de stockage locales NetFloor
+      if (typeof window !== "undefined") {
+        try {
+          const keysToRemove = [
+            "netfloor_custom_pivots",
+            "netfloor_canvas_view_mode",
+            "netfloor_active_site_id",
+            "netfloor_floor_sites_v2",
+            "netfloor_background_plans",
+            "netfloor_sites_v1",
+          ];
+          for (const k of keysToRemove) {
+            localStorage.removeItem(k);
+          }
+        } catch {}
+      }
+
+      // 4. Restaurer les paramètres DSI et styles VLAN par défaut
+      resetStoredSettings();
+      onResetVlanStyles?.();
+
+      // 5. Exécuter le reset côté parent
+      if (onFullSystemReset) {
+        await onFullSystemReset();
+      }
+
+      showToast("💥 Système et base de données entièrement réinitialisés");
+      setIsResetDialogOpen(false);
+
+      // Recharger l'application pour garantir un démarrage sur page blanche
+      setTimeout(() => {
+        if (typeof window !== "undefined") {
+          window.location.reload();
+        }
+      }, 500);
+    } catch (e) {
+      console.error("Erreur lors de la remise à zéro totale :", e);
+      showToast("❌ Erreur lors de la réinitialisation complète");
+    } finally {
+      setIsResettingFull(false);
     }
   };
 
@@ -5007,15 +5069,18 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
           )}
         </div>
 
-        {/* 4. Pied de page du Modal avec Réinitialisation usine et Sauvegarde localStorage */}
+        {/* 4. Pied de page du Modal avec Réinitialisation (Reset) et Sauvegarde localStorage */}
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between flex-shrink-0">
           <button
-            onClick={handleResetSettings}
-            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-medium border border-slate-800 flex items-center gap-1.5 transition"
-            title="Restaurer la configuration d'origine"
+            onClick={() => {
+              setResetConfirmInput("");
+              setIsResetDialogOpen(true);
+            }}
+            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-amber-300 rounded-lg text-xs font-medium border border-slate-800 flex items-center gap-1.5 transition"
+            title="Options de réinitialisation de l'application"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Valeurs d'usine
+            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+            <span>Reset...</span>
           </button>
 
           <div className="flex gap-3">
@@ -5034,6 +5099,143 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* 5. Boîte de Dialogue Modale pour les Options de Reset */}
+        {isResetDialogOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+            <div className="bg-slate-950 border border-slate-800 rounded-xl w-[560px] max-w-[95vw] shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                    <RotateCcw className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-100">
+                      Options de Réinitialisation (Reset)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Choisissez le niveau de remise à zéro souhaité pour NetFloor Architect.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsResetDialogOpen(false)}
+                  disabled={isResettingFull}
+                  className="text-slate-400 hover:text-slate-200 p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Option 1: Reset Configuration */}
+              <div className="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-2 hover:border-sky-500/40 transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4" />
+                    Reset Configuration (Paramètres DSI)
+                  </span>
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                    Sûr • Plans & BDD préservés
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Restaure les paramètres par défaut : règles de découverte réseau, intégration
+                  Active Directory / SSO, sous-réseaux IPAM et styles de câblage VLAN.
+                  <br />
+                  <strong className="text-slate-200">
+                    Vos équipements, baies de brassage, câbles, fonds de plans et la base de données
+                    restent intacts.
+                  </strong>
+                </p>
+                <div className="pt-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleResetConfigOnly}
+                    disabled={isResettingFull}
+                    className="px-3 py-1.5 bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border border-sky-500/40 rounded text-xs font-semibold flex items-center gap-1.5 transition"
+                  >
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>Réinitialiser la configuration</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 2: Reset Complet */}
+              <div className="p-3.5 rounded-lg bg-red-950/20 border border-red-900/40 space-y-2 hover:border-red-500/50 transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                    Reset Complet (Système, Objets & BDD)
+                  </span>
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
+                    Destructif • Remise à zéro totale
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Supprime définitivement{" "}
+                  <strong className="text-red-300">l&apos;intégralité des équipements</strong>{" "}
+                  (bureaux, prises, boîtes de sol, caméras, imprimantes, Wi-Fi), les baies de
+                  brassage, les câbles physiques, les fonds de plans, les sites ainsi que{" "}
+                  <strong className="text-red-300">toutes les tables en base de données</strong>.
+                  L&apos;application repartira d&apos;une page blanche.
+                </p>
+
+                <div className="pt-2 border-t border-red-900/30 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>
+                      Pour confirmer, tapez{" "}
+                      <code className="text-red-400 font-bold bg-slate-950 px-1 py-0.5 rounded">
+                        RESET
+                      </code>{" "}
+                      :
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={resetConfirmInput}
+                      onChange={(e) => setResetConfirmInput(e.target.value)}
+                      placeholder="Tapez RESET pour débloquer"
+                      className="flex-1 bg-slate-950 border border-slate-800 focus:border-red-500 rounded px-2 py-1 text-xs text-slate-200 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleResetFullSystem}
+                      disabled={
+                        resetConfirmInput.trim().toUpperCase() !== "RESET" || isResettingFull
+                      }
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded text-xs font-semibold flex items-center gap-1.5 transition shadow"
+                    >
+                      {isResettingFull ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Nettoyage en cours...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Wiper & Réinitialiser tout</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsResetDialogOpen(false)}
+                  disabled={isResettingFull}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

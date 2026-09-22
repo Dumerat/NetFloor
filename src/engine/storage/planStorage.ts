@@ -189,6 +189,13 @@ export async function deleteBackgroundPlan(planId?: string): Promise<void> {
   }
 }
 
+/**
+ * Supprime l'intégralité des fonds de plans enregistrés (IndexedDB)
+ */
+export async function clearAllBackgroundPlans(): Promise<void> {
+  return deleteBackgroundPlan();
+}
+
 // ============================================================================
 // 2. GESTION DES SITES GÉOGRAPHIQUES ET CAMPUS (IndexedDB + Fallback)
 // ============================================================================

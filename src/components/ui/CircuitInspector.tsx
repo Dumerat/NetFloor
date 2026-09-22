@@ -369,54 +369,45 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
 
   const handleFetchPrinterTelemetry = async () => {
     if (!selectedNode) return;
+
+    if (!selectedNode.ipAddress?.trim()) {
+      setPrinterSyncFeedback(
+        "⚠️ Veuillez renseigner l'adresse IP de l'imprimante dans ses propriétés réseau pour interroger le périphérique réel (SNMP / IPP)."
+      );
+      setTimeout(() => setPrinterSyncFeedback(null), 6000);
+      return;
+    }
+
     setIsSyncingPrinter(true);
     setPrinterSyncFeedback(null);
     try {
-      const res = await fetch("/api/discovery/status?allDevices=true").catch(() => null);
-      const data = res && res.ok ? await res.json().catch(() => null) : null;
-      let foundDiscovered: any = null;
+      const res = await fetch(
+        `/api/printer/telemetry?ip=${encodeURIComponent(selectedNode.ipAddress.trim())}`
+      );
+      const data = await res.json().catch(() => null);
 
-      if (data?.success && Array.isArray(data.devices)) {
-        const matchIp = selectedNode.ipAddress?.trim();
-        const matchMac = selectedNode.macAddress?.trim().toLowerCase();
-        const matchName = selectedNode.name?.trim().toLowerCase();
-        foundDiscovered = data.devices.find(
-          (d: any) =>
-            (matchIp && d.ipAddress === matchIp) ||
-            (matchMac && d.macAddress?.toLowerCase() === matchMac) ||
-            (matchName &&
-              (d.hostname?.toLowerCase().includes("print") ||
-                d.name?.toLowerCase().includes("print") ||
-                d.model?.toLowerCase().includes("print") ||
-                d.model?.toLowerCase().includes("copieur")))
+      if (!res.ok || !data?.success) {
+        setPrinterSyncFeedback(
+          data?.error ||
+            `❌ Impossible de joindre l'imprimante (${selectedNode.ipAddress}). Vérifiez qu'elle est allumée et accessible sur le réseau.`
         );
+        setTimeout(() => setPrinterSyncFeedback(null), 6000);
+        return;
       }
-
-      const model =
-        foundDiscovered?.model ||
-        foundDiscovered?.sysDescr?.slice(0, 50) ||
-        (selectedNode.name.toLowerCase().includes("canon")
-          ? "Canon imageRUNNER ADVANCE DX C5850i"
-          : selectedNode.name.toLowerCase().includes("hp")
-            ? "HP Color LaserJet Enterprise MFP M578"
-            : selectedNode.name.toLowerCase().includes("ricoh")
-              ? "Ricoh IM C3500 Multifonction"
-              : selectedNode.name.toLowerCase().includes("xerox")
-                ? "Xerox VersaLink C405"
-                : "Multifonction Réseau A3/A4 Entreprise");
 
       const newIot: IotCustomProperties = {
         ...(selectedNode.iotProperties ?? {}),
         deviceCategory: "PRINTER",
-        printerModel: model,
-        protocol: "IPP_IPPS",
-        tonerCyan: Math.floor(65 + Math.random() * 30),
-        tonerMagenta: Math.floor(60 + Math.random() * 35),
-        tonerYellow: Math.floor(55 + Math.random() * 40),
-        tonerBlack: Math.floor(70 + Math.random() * 25),
-        paperTrayStatus: "OK",
-        totalPagesPrinted: Math.floor(12500 + Math.random() * 25000),
-        colorPrintingAllowed: true,
+        ...(data.printerModel ? { printerModel: data.printerModel } : {}),
+        ...(data.protocol ? { protocol: data.protocol } : {}),
+        ...(data.paperTrayStatus ? { paperTrayStatus: data.paperTrayStatus } : {}),
+        ...(data.totalPagesPrinted !== undefined
+          ? { totalPagesPrinted: data.totalPagesPrinted }
+          : {}),
+        ...(data.tonerCyan !== undefined ? { tonerCyan: data.tonerCyan } : {}),
+        ...(data.tonerMagenta !== undefined ? { tonerMagenta: data.tonerMagenta } : {}),
+        ...(data.tonerYellow !== undefined ? { tonerYellow: data.tonerYellow } : {}),
+        ...(data.tonerBlack !== undefined ? { tonerBlack: data.tonerBlack } : {}),
       };
 
       onUpdateNodeProperties?.(selectedNode.id, {
@@ -424,21 +415,22 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
         subType: "PRINTER_STATION",
         outletRole: "PRINTER",
         iotProperties: newIot,
-        ...(foundDiscovered?.ipAddress && !selectedNode.ipAddress
-          ? { ipAddress: foundDiscovered.ipAddress }
-          : {}),
-        ...(foundDiscovered?.macAddress && !selectedNode.macAddress
-          ? { macAddress: foundDiscovered.macAddress }
-          : {}),
       });
 
+      const detailMsg = data.printerModel
+        ? ` (${data.printerModel})`
+        : ` (${selectedNode.ipAddress})`;
       setPrinterSyncFeedback(
-        "✅ Télémétrie récupérée avec succès depuis le portail d'impression (IPP/SNMP) !"
+        data.message
+          ? `ℹ️ ${data.message}`
+          : `✅ Télémétrie réelle récupérée avec succès depuis l'imprimante${detailMsg} !`
       );
-      setTimeout(() => setPrinterSyncFeedback(null), 4500);
+      setTimeout(() => setPrinterSyncFeedback(null), 5000);
     } catch {
-      setPrinterSyncFeedback("⚠️ Erreur lors de la synchronisation au portail.");
-      setTimeout(() => setPrinterSyncFeedback(null), 4500);
+      setPrinterSyncFeedback(
+        `❌ Erreur réseau lors de la communication avec l'imprimante (${selectedNode.ipAddress}).`
+      );
+      setTimeout(() => setPrinterSyncFeedback(null), 5000);
     } finally {
       setIsSyncingPrinter(false);
     }
@@ -3236,14 +3228,10 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                         vlanId: 40,
                         iotProperties: {
                           deviceCategory: "PRINTER",
-                          printerModel: "Multifonction Réseau A3/A4",
-                          protocol: "IPP_IPPS",
-                          tonerCyan: 75,
-                          tonerMagenta: 80,
-                          tonerYellow: 65,
-                          tonerBlack: 90,
-                          paperTrayStatus: "OK",
-                          totalPagesPrinted: 14250,
+                          printerModel:
+                            selectedNode.iotProperties?.printerModel || "Imprimante Réseau",
+                          protocol: selectedNode.iotProperties?.protocol || "IPP_IPPS",
+                          paperTrayStatus: selectedNode.iotProperties?.paperTrayStatus || "OK",
                           colorPrintingAllowed: true,
                           ...(selectedNode.iotProperties ?? {}),
                         },

@@ -2398,6 +2398,32 @@ export default function NetFloorApp() {
     }
   };
 
+  // Remise à zéro complète du système (appelée par SettingsModal)
+  const handleFullSystemReset = useCallback(async () => {
+    setNodes([]);
+    setRacks([]);
+    setZones([]);
+    setCustomPivots({});
+    setSelectedNodeId(null);
+    setSelectedNodeIds([]);
+    setFloorData({ widthMm: 60000, heightMm: 35000 });
+    setUnpositionedNodes([]);
+    setAllBackgroundPlans([]);
+    setSites([DEFAULT_SITE]);
+    setActiveSiteId(DEFAULT_SITE_ID);
+    setBackgroundPlan({
+      imageUrl: null,
+      name: "",
+      opacity: 0.6,
+      isLocked: false,
+      xMm: 0,
+      yMm: 0,
+      scale: 1.0,
+      visible: true,
+    });
+    setDbSyncStatus("SAVED");
+  }, []);
+
   // Export du plan complet au format JSON
   const handleExportJsonConfig = () => {
     setIsFileMenuOpen(false);
@@ -3760,6 +3786,7 @@ export default function NetFloorApp() {
         vlanStyles={vlanStyles}
         onUpdateVlanStyle={handleUpdateVlanStyle}
         onResetVlanStyles={handleResetVlanStyles}
+        onFullSystemReset={handleFullSystemReset}
       />
 
       {/* 5. Modal Dédié Personnalisation Styles & Tracés des Câbles par VLAN */}

@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/db/index";
-import { floors, racks, nodes, vlans } from "@/db/schema/index";
+import {
+  floors,
+  racks,
+  nodes,
+  vlans,
+  ports,
+  portVlans,
+  cables,
+  discoveryJobs,
+  discoveredDevices,
+  discoveredConnections,
+  discoveryLogs,
+} from "@/db/schema/index";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 
@@ -324,11 +336,25 @@ export async function DELETE() {
   try {
     const database = await getDb();
     const allFloors = await database.select().from(floors);
-    if (allFloors.length > 0) {
-      const floorId = allFloors[0]!.id;
-      await database.transaction(async (tx) => {
-        await tx.delete(nodes).where(eq(nodes.floorId, floorId));
-        await tx.delete(racks).where(eq(racks.floorId, floorId));
+    await database.transaction(async (tx) => {
+      // 1. Supprimer les liaisons physiques et tables dépendantes
+      await tx.delete(cables);
+      await tx.delete(portVlans);
+      await tx.delete(ports);
+
+      // 2. Supprimer les équipements et les baies
+      await tx.delete(nodes);
+      await tx.delete(racks);
+
+      // 3. Vider l'historique et les tables de découverte réseau
+      await tx.delete(discoveryLogs);
+      await tx.delete(discoveredConnections);
+      await tx.delete(discoveredDevices);
+      await tx.delete(discoveryJobs);
+
+      // 4. Réinitialiser les métadonnées de plateau
+      if (allFloors.length > 0) {
+        const floorId = allFloors[0]!.id;
         await tx
           .update(floors)
           .set({
@@ -340,15 +366,16 @@ export async function DELETE() {
             updatedAt: new Date(),
           })
           .where(eq(floors.id, floorId));
-      });
-    }
+      }
+    });
 
     return NextResponse.json({
       success: true,
-      message: "Le plateau a été entièrement vidé en base de données.",
+      message:
+        "L'ensemble des équipements, baies, câbles et données a été réinitialisé en base de données.",
     });
   } catch (err: unknown) {
-    console.error("Erreur lors de la réinitialisation :", err);
+    console.error("Erreur lors de la réinitialisation de la BDD :", err);
     const message = err instanceof Error ? err.message : "Erreur de réinitialisation";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
