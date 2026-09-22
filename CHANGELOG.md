@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.5.0...netfloor-architect-v0.6.0) (2026-09-22)
+
+
+### ✨ Nouvelles fonctionnalités
+
+* **ingestion,iot:** resolve workstation desk creation and add IoT category with custom properties ([204acfb](https://github.com/Dumerat/NetFloor/commit/204acfb12a35e8ae8b38a806769f5212b058e82c))
+* **rack:** realistic visuals with illuminated ports, double-click zoom, switch visualizer modifier & internal drag-drop ([2b73812](https://github.com/Dumerat/NetFloor/commit/2b738129e9542f43afd5d21534730261975fa5b6))
+
+
+### 💄 Style / Formatage
+
+* enforce prettier formatting and add husky pre-commit hook ([31d745f](https://github.com/Dumerat/NetFloor/commit/31d745f36f0f8d8a33aa06e2d33e91e51cf4773a))
+
 ## [0.5.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.4.2...netfloor-architect-v0.5.0) (2026-09-20)
 
 
