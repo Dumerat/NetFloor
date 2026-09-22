@@ -9,6 +9,10 @@ import {
   ChevronUp,
   ChevronDown,
   Trash2,
+  Wifi,
+  Camera,
+  Printer,
+  Radio,
 } from "lucide-react";
 import { NodeDisplay } from "@/components/canvas/EquipmentLayer";
 
@@ -27,8 +31,16 @@ export const UnpositionedElementsDrawer: FC<UnpositionedElementsDrawerProps> = (
 
   if (unpositionedNodes.length === 0) return null;
 
+  const isIotNode = (n: NodeDisplay) =>
+    n.category === "IOT" ||
+    n.subType === "WIFI_AP" ||
+    n.subType === "PRINTER_STATION" ||
+    n.subType === "CAMERA_IP" ||
+    Boolean(n.iotProperties);
+
   const desks = unpositionedNodes.filter((n) => n.type === "DESK");
-  const outlets = unpositionedNodes.filter((n) => n.type === "WALL_OUTLET");
+  const iots = unpositionedNodes.filter((n) => n.type !== "DESK" && isIotNode(n));
+  const outlets = unpositionedNodes.filter((n) => n.type === "WALL_OUTLET" && !isIotNode(n));
 
   const handleDragStart = (e: React.DragEvent, node: NodeDisplay) => {
     e.dataTransfer.setData(
@@ -53,7 +65,8 @@ export const UnpositionedElementsDrawer: FC<UnpositionedElementsDrawerProps> = (
             <span className="font-semibold text-slate-100">Éléments Non Positionnés</span>
             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold border border-amber-500/30">
               {desks.length > 0 ? `${desks.length}B ` : ""}
-              {outlets.length > 0 ? `${outlets.length}P` : ""}
+              {outlets.length > 0 ? `${outlets.length}P ` : ""}
+              {iots.length > 0 ? `${iots.length}IoT` : ""}
             </span>
           </div>
         </div>
@@ -88,6 +101,47 @@ export const UnpositionedElementsDrawer: FC<UnpositionedElementsDrawerProps> = (
           <div className="space-y-1.5">
             {unpositionedNodes.map((node) => {
               const isDesk = node.type === "DESK";
+              const isIot = isIotNode(node);
+
+              const getIconAndStyle = () => {
+                if (isDesk) {
+                  return {
+                    icon: <Monitor className="w-3 h-3" />,
+                    style: "bg-blue-600/20 text-blue-400 border-blue-500/30",
+                  };
+                }
+                if (node.subType === "WIFI_AP" || node.iotProperties?.deviceCategory === "WIFI_AP") {
+                  return {
+                    icon: <Wifi className="w-3 h-3" />,
+                    style: "bg-amber-600/20 text-amber-400 border-amber-500/30",
+                  };
+                }
+                if (node.subType === "CAMERA_IP" || node.iotProperties?.deviceCategory === "CAMERA") {
+                  return {
+                    icon: <Camera className="w-3 h-3" />,
+                    style: "bg-rose-600/20 text-rose-400 border-rose-500/30",
+                  };
+                }
+                if (node.subType === "PRINTER_STATION" || node.iotProperties?.deviceCategory === "PRINTER") {
+                  return {
+                    icon: <Printer className="w-3 h-3" />,
+                    style: "bg-cyan-600/20 text-cyan-400 border-cyan-500/30",
+                  };
+                }
+                if (isIot) {
+                  return {
+                    icon: <Radio className="w-3 h-3" />,
+                    style: "bg-purple-600/20 text-purple-400 border-purple-500/30",
+                  };
+                }
+                return {
+                  icon: <Plug className="w-3 h-3" />,
+                  style: "bg-emerald-600/20 text-emerald-400 border-emerald-500/30",
+                };
+              };
+
+              const { icon, style: iconStyle } = getIconAndStyle();
+
               return (
                 <div
                   key={node.id}
@@ -98,16 +152,19 @@ export const UnpositionedElementsDrawer: FC<UnpositionedElementsDrawerProps> = (
                   <div className="flex items-center gap-2.5 min-w-0">
                     <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0" />
                     <div
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 border ${
-                        isDesk
-                          ? "bg-blue-600/20 text-blue-400 border-blue-500/30"
-                          : "bg-emerald-600/20 text-emerald-400 border-emerald-500/30"
-                      }`}
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 border ${iconStyle}`}
                     >
-                      {isDesk ? <Monitor className="w-3 h-3" /> : <Plug className="w-3 h-3" />}
+                      {icon}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-semibold text-slate-200 truncate">{node.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-slate-200 truncate">{node.name}</span>
+                        {isIot && (
+                          <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            IOT
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-slate-400 flex items-center gap-2 font-mono">
                         {node.assignedPerson && (
                           <span className="flex items-center gap-1 text-slate-300">

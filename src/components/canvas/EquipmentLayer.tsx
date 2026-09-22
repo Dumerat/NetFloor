@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useMemo, memo, type FC } from "react";
-import { Group, Rect, Text, Line, Circle } from "react-konva";
+import { Group, Rect, Text, Line, Circle, Wedge } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 import { getNodeAABB, getRackAABB } from "./FloorCanvas";
@@ -122,9 +122,69 @@ export interface StackedPortItem {
   connectedSwitchPort?: string | undefined;
 }
 
+export interface IotCustomProperties {
+  deviceCategory?: "WIFI_AP" | "PRINTER" | "CAMERA" | "IOT_SENSOR" | "GENERIC_IOT" | undefined;
+  vendor?: string | undefined;
+  firmwareVersion?: string | undefined;
+  installationHeightM?: number | undefined;
+
+  // Wi-Fi AP
+  ssid?: string | undefined;
+  secondarySsid?: string | undefined;
+  wifiStandard?:
+    | "Wi-Fi 5 (802.11ac)"
+    | "Wi-Fi 6 (802.11ax)"
+    | "Wi-Fi 6E"
+    | "Wi-Fi 7 (802.11be)"
+    | undefined;
+  frequencyBand?: "2.4GHz" | "5GHz" | "6GHz" | "DUAL_BAND" | "TRI_BAND" | undefined;
+  channel?: number | undefined;
+  txPowerDbm?: number | undefined;
+  coverageRadiusM?: number | undefined;
+  activeClientsCount?: number | undefined;
+  maxClients?: number | undefined;
+
+  // Imprimante
+  printerModel?: string | undefined;
+  protocol?: "RAW_9100" | "IPP_IPPS" | "LPR_LPD" | "SMB" | undefined;
+  tonerCyan?: number | undefined;
+  tonerMagenta?: number | undefined;
+  tonerYellow?: number | undefined;
+  tonerBlack?: number | undefined;
+  paperTrayStatus?: "OK" | "LOW" | "EMPTY" | "JAM" | undefined;
+  totalPagesPrinted?: number | undefined;
+  colorPrintingAllowed?: boolean | undefined;
+
+  // Caméra de surveillance
+  cameraModel?: string | undefined;
+  resolution?: "1080p Full HD" | "2K Quad HD" | "4K Ultra HD" | undefined;
+  rtspStreamUrl?: string | undefined;
+  codec?: "H.264" | "H.265" | "MJPEG" | undefined;
+  fovDegrees?: number | undefined;
+  orientationDeg?: number | undefined;
+  nightVisionEnabled?: boolean | undefined;
+  recordingMode?: "CONTINUOUS" | "MOTION_DETECTED" | "SCHEDULED" | "OFF" | undefined;
+  fps?: number | undefined;
+
+  // Autre IoT / Capteur
+  sensorType?:
+    | "TEMPERATURE"
+    | "HUMIDITY"
+    | "CO2"
+    | "PRESENCE"
+    | "BADGE_READER"
+    | "SMOKE"
+    | undefined;
+  batteryLevelPercent?: number | undefined;
+  transmissionIntervalSec?: number | undefined;
+  protocolType?: "MQTT" | "HTTP_REST" | "COAP" | "ZIGBEE" | "BLE" | "LORAWAN" | undefined;
+  lastTelemetryValue?: string | undefined;
+}
+
 export interface NodeDisplay {
   id: string;
   type: "WALL_OUTLET" | "PATCH_PANEL" | "SWITCH" | "DESK";
+  category?: "FURNITURE" | "CONNECTIVITY" | "IOT" | "INFRASTRUCTURE" | undefined;
   name: string;
   xMm: number;
   yMm: number;
@@ -161,6 +221,7 @@ export interface NodeDisplay {
   patches?: any[] | undefined;
   uHeight?: number | undefined;
   siteId?: string | undefined;
+  iotProperties?: IotCustomProperties | undefined;
 }
 
 export function getLabelCoordinates(
@@ -3552,6 +3613,30 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                 y={outlet.yMm}
                 {...interactiveProps}
               >
+                {/* Halo de couverture radio Wi-Fi étendu (visible si sélectionné ou en mode NETWORK/TECH) */}
+                {(isSelected ||
+                  hoveredNodeId === outlet.id ||
+                  activeViewMode === "NETWORK" ||
+                  activeViewMode === "TECH") && (
+                  <Group listening={false}>
+                    <Circle
+                      radius={(outlet.iotProperties?.coverageRadiusM ?? 15) * 1000}
+                      fill="rgba(99, 102, 241, 0.08)"
+                      stroke={vlan50Color}
+                      strokeWidth={12}
+                      dash={[50, 30]}
+                      opacity={isSelected ? 0.95 : 0.6}
+                    />
+                    <Circle
+                      radius={(outlet.iotProperties?.coverageRadiusM ?? 15) * 500}
+                      stroke={vlan50Color}
+                      strokeWidth={6}
+                      dash={[30, 20]}
+                      opacity={0.35}
+                    />
+                  </Group>
+                )}
+
                 {/* Onde radio Wi-Fi externe */}
                 <Circle
                   radius={180}
@@ -3603,7 +3688,7 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                           x={18}
                           y={(badgeHeight - textFontSize) / 2}
                           width={badgeWidth - 36}
-                          text="📡 Wi-Fi 6 • Plafonnier"
+                          text={`📡 ${outlet.iotProperties?.ssid ?? "Wi-Fi 6"} • Plafonnier`}
                           fontSize={textFontSize}
                           fontFamily="sans-serif"
                           fontStyle="bold"
@@ -3666,6 +3751,15 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                   cornerRadius={6}
                   listening={false}
                 />
+                {/* Mini jauges de niveau de toner CMJN si renseignées */}
+                {outlet.iotProperties && (
+                  <Group x={-140} y={15} listening={false}>
+                    <Rect x={0} y={0} width={60} height={10} fill="#06b6d4" opacity={0.85} cornerRadius={2} />
+                    <Rect x={70} y={0} width={60} height={10} fill="#ec4899" opacity={0.85} cornerRadius={2} />
+                    <Rect x={140} y={0} width={60} height={10} fill="#eab308" opacity={0.85} cornerRadius={2} />
+                    <Rect x={210} y={0} width={60} height={10} fill="#0f172a" stroke="#64748b" strokeWidth={1} opacity={0.9} cornerRadius={2} />
+                  </Group>
+                )}
                 {/* Voyant LED de statut vert ou rouge */}
                 <Circle x={140} y={-115} radius={14} fill={statusColor} listening={false} />
 
@@ -3706,6 +3800,146 @@ const EquipmentLayerComponent: FC<EquipmentLayerProps> = ({
                           fontFamily="sans-serif"
                           fontStyle="bold"
                           fill={isSelected ? "#ffffff" : "#fbbf24"}
+                          wrap="none"
+                          ellipsis={true}
+                        />
+                      </Group>
+                    );
+                  })()}
+              </Group>
+            );
+          }
+
+          // Rendu Caméra IP de Vidéosurveillance Dôme / Bullet
+          const isCamera = outlet.subType === "CAMERA_IP" || outlet.outletRole === "CAMERA";
+          if (isCamera) {
+            const vlan50Color =
+              vlanStyles?.[50]?.color ?? DEFAULT_VLAN_STYLES[50]?.color ?? "#38bdf8";
+            const isConnected =
+              outlet.isPatched !== undefined ? outlet.isPatched : outlet.pingStatus === "ONLINE";
+            const statusColor = isConnected ? "#22c55e" : "#ef4444";
+            const fovDeg = outlet.iotProperties?.fovDegrees ?? 110;
+            const orientationDeg =
+              outlet.iotProperties?.orientationDeg ?? (outlet.rotationDeg ?? 90);
+            const fovRadiusMm = 8000;
+            const showFov =
+              isSelected ||
+              hoveredNodeId === outlet.id ||
+              activeViewMode === "TECH" ||
+              activeViewMode === "NETWORK";
+
+            return (
+              <Group
+                key={outlet.id}
+                id={outlet.id}
+                x={outlet.xMm}
+                y={outlet.yMm}
+                {...interactiveProps}
+              >
+                {/* Cône de vision FOV interactif (champ de surveillance) */}
+                {showFov && (
+                  <Group listening={false}>
+                    <Wedge
+                      radius={fovRadiusMm}
+                      angle={fovDeg}
+                      rotation={orientationDeg - fovDeg / 2}
+                      fill="rgba(56, 189, 248, 0.08)"
+                      stroke={isSelected ? "#38bdf8" : "rgba(56, 189, 248, 0.4)"}
+                      strokeWidth={isSelected ? 10 : 6}
+                      dash={[40, 25]}
+                      opacity={isSelected ? 0.95 : 0.65}
+                    />
+                  </Group>
+                )}
+
+                {/* Base murale / plafonnier de fixation */}
+                <Circle
+                  radius={120}
+                  fill={isSelected ? "#0c4a6e" : "#0f172a"}
+                  stroke={isSelected ? "#7dd3fc" : vlan50Color}
+                  strokeWidth={isSelected ? 20 : 12}
+                />
+
+                {/* Boîtier tourelle / dôme */}
+                <Circle
+                  radius={85}
+                  fill="#1e293b"
+                  stroke="#334155"
+                  strokeWidth={8}
+                  listening={false}
+                />
+
+                {/* Lentille optique centrale orientée */}
+                <Group rotation={orientationDeg} listening={false}>
+                  <Rect
+                    x={-25}
+                    y={-45}
+                    width={50}
+                    height={55}
+                    fill="#0284c7"
+                    cornerRadius={8}
+                  />
+                  <Circle
+                    x={0}
+                    y={-25}
+                    radius={28}
+                    fill="#030712"
+                    stroke="#38bdf8"
+                    strokeWidth={5}
+                  />
+                  <Circle x={-8} y={-32} radius={6} fill="#ffffff" opacity={0.7} />
+                  <Circle x={-18} y={-25} radius={3.5} fill="#ef4444" opacity={0.8} />
+                  <Circle x={18} y={-25} radius={3.5} fill="#ef4444" opacity={0.8} />
+                </Group>
+
+                {/* Voyant LED de statut réseau / enregistrement */}
+                <Circle
+                  x={75}
+                  y={-75}
+                  radius={14}
+                  fill={statusColor}
+                  stroke="#0f172a"
+                  strokeWidth={3}
+                  listening={false}
+                />
+
+                {/* Libellé Caméra (au survol / sélection / global) */}
+                {shouldShowOutletLabel &&
+                  (() => {
+                    const badgeHeight = 88;
+                    const textFontSize = 50;
+                    const badgeWidth = 480;
+                    const labelPos = outlet.labelPosition || "RIGHT";
+                    const { x: groupX, y: groupY } = getLabelCoordinates(
+                      labelPos,
+                      260,
+                      260,
+                      badgeWidth,
+                      badgeHeight,
+                      20
+                    );
+
+                    return (
+                      <Group x={groupX} y={groupY} listening={false}>
+                        <Rect
+                          x={0}
+                          y={0}
+                          width={badgeWidth}
+                          height={badgeHeight}
+                          fill="rgba(15, 23, 42, 0.96)"
+                          stroke={isSelected ? "#ffffff" : "#0284c7"}
+                          strokeWidth={isSelected ? 6 : 4}
+                          cornerRadius={14}
+                        />
+                        <Text
+                          x={18}
+                          y={(badgeHeight - textFontSize) / 2}
+                          width={badgeWidth - 36}
+                          text={`🎥 Caméra IP • ${outlet.iotProperties?.resolution ?? "4K HD"}`}
+                          fontSize={textFontSize}
+                          fontFamily="sans-serif"
+                          fontStyle="bold"
+                          fill={isSelected ? "#ffffff" : "#7dd3fc"}
                           wrap="none"
                           ellipsis={true}
                         />

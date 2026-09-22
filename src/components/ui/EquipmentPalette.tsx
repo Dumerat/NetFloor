@@ -21,6 +21,7 @@ import {
   GripVertical,
   Network,
   Camera,
+  Radio,
   Boxes,
   Building2,
   Shield,
@@ -34,6 +35,7 @@ import {
   PoeMode,
   RackDisplay,
   NodeDisplay,
+  IotCustomProperties,
 } from "@/components/canvas/EquipmentLayer";
 import type { VlanStyle } from "@/data/vlanStyles";
 
@@ -60,6 +62,7 @@ export interface PaletteItem {
   customPoeMode?: PoeMode | undefined;
   customVlanId?: number | undefined;
   customUHeight?: number | undefined;
+  iotProperties?: IotCustomProperties | undefined;
 }
 
 export type ScannedDeviceType =
@@ -163,8 +166,13 @@ export function inferScannedDeviceProfile(d: {
     combined.includes("laptop") ||
     (d.hostname || "").toLowerCase().startsWith("pc-") ||
     (d.hostname || "").toLowerCase().startsWith("pc_") ||
+    (d.hostname || "").toLowerCase().startsWith("pc ") ||
     (d.name || "").toLowerCase().startsWith("pc-") ||
-    (d.name || "").toLowerCase().startsWith("pc_")
+    (d.name || "").toLowerCase().startsWith("pc_") ||
+    (d.name || "").toLowerCase().startsWith("pc ") ||
+    combined.includes("pc dir") ||
+    combined.includes("direction") ||
+    combined.includes("poste ")
   ) {
     return {
       deviceType: "WORKSTATION",
@@ -587,7 +595,7 @@ export const PALETTE_CATALOG: PaletteItem[] = [
     poeMode: "NONE",
   },
 
-  // 3. Objets Connectés & Terminaux IOT (Sécurité, Impression, Wi-Fi)
+  // 3. Objets Connectés & Terminaux IOT (Sécurité, Impression, Wi-Fi, Capteurs)
   {
     id: "iot-wifi-ap",
     category: "IOT",
@@ -597,13 +605,25 @@ export const PALETTE_CATALOG: PaletteItem[] = [
     outletRole: "WIFI",
     widthMm: 350,
     heightMm: 350,
-    description: "Point d'accès plafonnier PoE+ (VLAN 50 Wi-Fi)",
+    description: "Point d'accès plafonnier PoE+ (VLAN 50 Wi-Fi, Halo radio)",
     personaTag: "DSI",
     iconName: "Wifi",
     portCount: 1,
     poeMode: "POE_PLUS",
     vlanId: 50,
     customEmote: "📶",
+    iotProperties: {
+      deviceCategory: "WIFI_AP",
+      ssid: "NetFloor-Corp-WiFi",
+      secondarySsid: "NetFloor-Guests",
+      wifiStandard: "Wi-Fi 6 (802.11ax)",
+      frequencyBand: "DUAL_BAND",
+      channel: 36,
+      txPowerDbm: 20,
+      coverageRadiusM: 15,
+      activeClientsCount: 8,
+      maxClients: 64,
+    },
   },
   {
     id: "iot-printer-station",
@@ -614,13 +634,25 @@ export const PALETTE_CATALOG: PaletteItem[] = [
     outletRole: "PRINTER",
     widthMm: 800,
     heightMm: 700,
-    description: "Station d'impression d'étage sécurisée Badge/IP (VLAN 40)",
+    description: "Station d'impression d'étage sécurisée Badge/IP (VLAN 40, Toners CMJN)",
     personaTag: "DSI",
     iconName: "Printer",
     portCount: 1,
     poeMode: "NONE",
     vlanId: 40,
     customEmote: "🖨️",
+    iotProperties: {
+      deviceCategory: "PRINTER",
+      printerModel: "Multifonction Réseau A3/A4",
+      protocol: "IPP_IPPS",
+      tonerCyan: 75,
+      tonerMagenta: 80,
+      tonerYellow: 65,
+      tonerBlack: 90,
+      paperTrayStatus: "OK",
+      totalPagesPrinted: 14250,
+      colorPrintingAllowed: true,
+    },
   },
   {
     id: "iot-camera-ip",
@@ -631,13 +663,48 @@ export const PALETTE_CATALOG: PaletteItem[] = [
     outletRole: "CAMERA",
     widthMm: 300,
     heightMm: 300,
-    description: "Caméra de surveillance dôme HD PoE (VLAN 50 Sécurité / Wi-Fi)",
+    description: "Caméra de surveillance dôme 4K PoE (Cône FOV directionnel, IR)",
     personaTag: "DSI",
     iconName: "Camera",
     portCount: 1,
     poeMode: "POE",
     vlanId: 50,
     customEmote: "🎥",
+    iotProperties: {
+      deviceCategory: "CAMERA",
+      cameraModel: "Dôme IP Sécurité 4K",
+      resolution: "4K Ultra HD",
+      fps: 30,
+      codec: "H.265",
+      fovDegrees: 110,
+      orientationDeg: 90,
+      nightVisionEnabled: true,
+      recordingMode: "CONTINUOUS",
+    },
+  },
+  {
+    id: "iot-sensor-env",
+    category: "IOT",
+    name: "Capteur IOT Climat & Présence",
+    subType: "GENERIC_PORT",
+    targetType: "WALL_OUTLET",
+    outletRole: "GENERIC",
+    widthMm: 200,
+    heightMm: 200,
+    description: "Capteur environnemental IoT autonome (Température, PIR, CO2, MQTT)",
+    personaTag: "DSI",
+    iconName: "Radio",
+    portCount: 1,
+    poeMode: "NONE",
+    vlanId: 20,
+    customEmote: "⚡",
+    iotProperties: {
+      deviceCategory: "IOT_SENSOR",
+      sensorType: "PRESENCE",
+      batteryLevelPercent: 95,
+      protocolType: "MQTT",
+      lastTelemetryValue: "21.5°C / 48% HR",
+    },
   },
 ];
 
@@ -867,6 +934,8 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
         return <Printer className={className} />;
       case "Camera":
         return <Camera className={className} />;
+      case "Radio":
+        return <Radio className={className} />;
       default:
         return <Layers className={className} />;
     }

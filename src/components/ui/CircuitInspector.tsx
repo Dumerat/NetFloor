@@ -29,6 +29,10 @@ import {
   Phone,
   Laptop,
   Printer,
+  Camera,
+  Radio,
+  Sliders,
+  Sparkles,
   Plug,
   Plus,
   ArrowRight,
@@ -1215,9 +1219,19 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
     const isStacked = Boolean(selectedNode.stackedPorts && selectedNode.stackedPorts.length > 0);
 
     const isVoip = selectedNode.outletRole === "VOIP";
-    const isPrinter = selectedNode.outletRole === "PRINTER";
-    const isWifi = selectedNode.outletRole === "WIFI";
+    const isPrinter =
+      selectedNode.outletRole === "PRINTER" || selectedNode.subType === "PRINTER_STATION";
+    const isWifi = selectedNode.outletRole === "WIFI" || selectedNode.subType === "WIFI_AP";
+    const isCamera =
+      selectedNode.outletRole === "CAMERA" || selectedNode.subType === "CAMERA_IP";
     const isFloorBox = selectedNode.subType === "FLOOR_BOX";
+    const isIot =
+      selectedNode.category === "IOT" ||
+      isWifi ||
+      isPrinter ||
+      isCamera ||
+      selectedNode.subType === "GENERIC_PORT" ||
+      Boolean(selectedNode.iotProperties);
 
     const deltaX = linkedDesk ? Math.round(selectedNode.xMm - linkedDesk.xMm) : 0;
     const deltaY = linkedDesk ? Math.round(selectedNode.yMm - linkedDesk.yMm) : 0;
@@ -2408,6 +2422,205 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               );
             })()}
 
+            {/* Spécifications & Télémétrie IOT (Affiché pour les terminaux IoT, Wi-Fi, Caméras, Imprimantes) */}
+            {isIot && (
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                    {isWifi ? (
+                      <Wifi className="w-3.5 h-3.5 text-indigo-400" />
+                    ) : isCamera ? (
+                      <Camera className="w-3.5 h-3.5 text-sky-400" />
+                    ) : isPrinter ? (
+                      <Printer className="w-3.5 h-3.5 text-amber-400" />
+                    ) : (
+                      <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span>
+                      {isWifi
+                        ? "Paramètres Wi-Fi 6 & Couverture Radio"
+                        : isCamera
+                          ? "Paramètres Vidéosurveillance & Champ FOV"
+                          : isPrinter
+                            ? "Télémétrie Impression & Niveaux de Toner"
+                            : "Télémétrie Capteur / Objet Connecté"}
+                    </span>
+                  </span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    IOT DSI
+                  </span>
+                </div>
+
+                {isWifi && (
+                  <div className="space-y-1.5 text-[10px] font-mono">
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">SSID Principal :</span>
+                      <span className="text-indigo-300 font-bold">
+                        {selectedNode.iotProperties?.ssid ?? "NetFloor-Corp-WiFi"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Réseau Invité :</span>
+                      <span className="text-slate-300">
+                        {selectedNode.iotProperties?.secondarySsid ?? "NetFloor-Guests"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                        <span className="text-slate-400 block text-[9px]">Norme :</span>
+                        <span className="text-slate-200 font-semibold">
+                          {selectedNode.iotProperties?.wifiStandard ?? "Wi-Fi 6 (802.11ax)"}
+                        </span>
+                      </div>
+                      <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                        <span className="text-slate-400 block text-[9px]">Canal / Bande :</span>
+                        <span className="text-slate-200 font-semibold">
+                          CH {selectedNode.iotProperties?.channel ?? 36} (
+                          {selectedNode.iotProperties?.frequencyBand ?? "5GHz"})
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center bg-indigo-950/30 p-1.5 rounded border border-indigo-500/30 text-indigo-200">
+                      <span>Halo de couverture radio :</span>
+                      <span className="font-bold text-indigo-300">
+                        {selectedNode.iotProperties?.coverageRadiusM ?? 15} mètres (visible sur le plan)
+                      </span>
+                    </div>
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Clients connectés :</span>
+                      <span className="text-emerald-400 font-bold">
+                        {selectedNode.iotProperties?.activeClientsCount ?? 8} /{" "}
+                        {selectedNode.iotProperties?.maxClients ?? 64}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {isCamera && (
+                  <div className="space-y-1.5 text-[10px] font-mono">
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Modèle & Résolution :</span>
+                      <span className="text-sky-300 font-bold">
+                        {selectedNode.iotProperties?.resolution ?? "4K Ultra HD"} (
+                        {selectedNode.iotProperties?.fps ?? 30} fps)
+                      </span>
+                    </div>
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Flux RTSP :</span>
+                      <span className="text-slate-300 truncate max-w-[180px]">
+                        {selectedNode.iotProperties?.rtspStreamUrl ??
+                          `rtsp://${selectedNode.ipAddress ?? "10.42.50.X"}/live/ch0`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center bg-sky-950/30 p-1.5 rounded border border-sky-500/30 text-sky-200">
+                      <span>Champ de vision (FOV) :</span>
+                      <span className="font-bold text-sky-300">
+                        {selectedNode.iotProperties?.fovDegrees ?? 110}° (Cône directionnel {selectedNode.iotProperties?.orientationDeg ?? 90}°)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                        <span className="text-slate-400 block text-[9px]">Vision Nocturne IR :</span>
+                        <span className="text-emerald-400 font-semibold">
+                          {selectedNode.iotProperties?.nightVisionEnabled !== false ? "Active" : "Désactivée"}
+                        </span>
+                      </div>
+                      <div className="bg-slate-950 p-1.5 rounded border border-slate-850">
+                        <span className="text-slate-400 block text-[9px]">Enregistrement NVR :</span>
+                        <span className="text-purple-300 font-semibold">
+                          {selectedNode.iotProperties?.recordingMode ?? "CONTINU"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isPrinter && (
+                  <div className="space-y-1.5 text-[10px] font-mono">
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Modèle & Protocole :</span>
+                      <span className="text-amber-300 font-bold">
+                        {selectedNode.iotProperties?.printerModel ?? "Multifonction A3/A4"} (
+                        {selectedNode.iotProperties?.protocol ?? "IPP"})
+                      </span>
+                    </div>
+                    <div className="bg-slate-950 p-2 rounded border border-slate-850 space-y-1">
+                      <span className="text-slate-400 block text-[9px]">Niveaux de toner :</span>
+                      <div className="grid grid-cols-4 gap-1.5 text-center text-[9px]">
+                        <div>
+                          <div className="text-cyan-400 font-bold">C: {selectedNode.iotProperties?.tonerCyan ?? 75}%</div>
+                          <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden mt-0.5">
+                            <div className="bg-cyan-400 h-full" style={{ width: `${selectedNode.iotProperties?.tonerCyan ?? 75}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-pink-400 font-bold">M: {selectedNode.iotProperties?.tonerMagenta ?? 80}%</div>
+                          <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden mt-0.5">
+                            <div className="bg-pink-400 h-full" style={{ width: `${selectedNode.iotProperties?.tonerMagenta ?? 80}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-yellow-400 font-bold">J: {selectedNode.iotProperties?.tonerYellow ?? 65}%</div>
+                          <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden mt-0.5">
+                            <div className="bg-yellow-400 h-full" style={{ width: `${selectedNode.iotProperties?.tonerYellow ?? 65}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-slate-300 font-bold">K: {selectedNode.iotProperties?.tonerBlack ?? 90}%</div>
+                          <div className="w-full bg-slate-800 h-1.5 rounded overflow-hidden mt-0.5">
+                            <div className="bg-slate-300 h-full" style={{ width: `${selectedNode.iotProperties?.tonerBlack ?? 90}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className="bg-slate-950 p-1.5 rounded border border-slate-850 flex justify-between">
+                        <span className="text-slate-400">Bac papier :</span>
+                        <span className="text-emerald-400 font-bold">
+                          {selectedNode.iotProperties?.paperTrayStatus ?? "OK"}
+                        </span>
+                      </div>
+                      <div className="bg-slate-950 p-1.5 rounded border border-slate-850 flex justify-between">
+                        <span className="text-slate-400">Pages :</span>
+                        <span className="text-slate-200 font-bold">
+                          {selectedNode.iotProperties?.totalPagesPrinted ?? 14250}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isWifi && !isCamera && !isPrinter && (
+                  <div className="space-y-1.5 text-[10px] font-mono">
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Capteur :</span>
+                      <span className="text-emerald-300 font-bold">
+                        {selectedNode.iotProperties?.sensorType ?? "Détecteur de Présence / PIR"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Protocole :</span>
+                      <span className="text-slate-200">
+                        {selectedNode.iotProperties?.protocolType ?? "MQTT"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Batterie :</span>
+                      <span className="text-emerald-400 font-bold">
+                        🔋 {selectedNode.iotProperties?.batteryLevelPercent ?? 95}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between bg-slate-950 p-1.5 rounded border border-slate-850">
+                      <span className="text-slate-400">Dernière mesure :</span>
+                      <span className="text-sky-300">
+                        {selectedNode.iotProperties?.lastTelemetryValue ?? "21.5°C / 48% HR"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Traçage CTE vers Switch & Rack */}
             {traceResult && (
               <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1.5 font-mono text-[10px]">
@@ -2597,10 +2810,14 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     <Box className="w-4 h-4 text-sky-400 flex-shrink-0" />
                   ) : isWifi ? (
                     <Wifi className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                  ) : isVoip ? (
-                    <Phone className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                  ) : isCamera ? (
+                    <Camera className="w-4 h-4 text-sky-400 flex-shrink-0" />
                   ) : isPrinter ? (
                     <Printer className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  ) : isVoip ? (
+                    <Phone className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                  ) : isIot ? (
+                    <Radio className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                   ) : (
                     <Laptop className="w-4 h-4 text-blue-400 flex-shrink-0" />
                   )}
@@ -2611,20 +2828,32 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                     className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                       isFloorBox
                         ? "bg-sky-500/20 text-sky-400 border-sky-500/30"
-                        : isVoip
-                          ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
-                          : isPrinter
-                            ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                            : "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                        : isWifi
+                          ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/30"
+                          : isCamera
+                            ? "bg-sky-500/20 text-sky-400 border-sky-500/30"
+                            : isPrinter
+                              ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                              : isVoip
+                                ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                                : isIot
+                                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                  : "bg-blue-500/20 text-blue-400 border-blue-500/30"
                     }`}
                   >
                     {isFloorBox
                       ? "BOÎTE DE SOL"
-                      : isVoip
-                        ? "VOIP / PHONE"
-                        : isPrinter
-                          ? "IMPRIMANTE"
-                          : "DATA / PC"}
+                      : isWifi
+                        ? "WI-FI AP"
+                        : isCamera
+                          ? "CAMÉRA IP"
+                          : isPrinter
+                            ? "IMPRIMANTE"
+                            : isVoip
+                              ? "VOIP / PHONE"
+                              : isIot
+                                ? "IOT SENSOR"
+                                : "DATA / PC"}
                   </span>
                   <span
                     className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
@@ -2639,11 +2868,772 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               </div>
 
               <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between font-mono">
-                <span>{isFloorBox ? "Trappe encastrée inox 4x RJ45" : "Plastron RJ45 Cat6A"}</span>
+                <span>
+                  {isFloorBox
+                    ? "Trappe encastrée inox 4x RJ45"
+                    : isWifi
+                      ? "Borne Wi-Fi 6 Plafonnier PoE+"
+                      : isCamera
+                        ? "Caméra IP Sécurité Dôme 4K PoE"
+                        : isPrinter
+                          ? "Copieur / Imprimante Réseau d'étage"
+                          : isIot
+                            ? "Capteur IOT & Télémétrie"
+                            : "Plastron RJ45 Cat6A"}
+                </span>
                 <span className="text-slate-500">
                   {(selectedNode.xMm / 1000).toFixed(1)}m, {(selectedNode.yMm / 1000).toFixed(1)}m
                 </span>
               </div>
+
+              {/* Sélecteur de Catégorie & Rôle Métier */}
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1.5 mt-2">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                  <span className="flex items-center gap-1">
+                    <Sliders className="w-3 h-3 text-amber-400" />
+                    Catégorie d'équipement :
+                  </span>
+                  <span className="text-amber-300 font-mono font-bold">
+                    {isWifi
+                      ? "Borne Wi-Fi 6"
+                      : isCamera
+                        ? "Caméra IP"
+                        : isPrinter
+                          ? "Imprimante"
+                          : isVoip
+                            ? "Téléphonie VoIP"
+                            : isIot
+                              ? "Capteur IOT"
+                              : "Prise DATA"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 text-[9px] font-mono">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        category: "CONNECTIVITY",
+                        subType: "WALL_OUTLET",
+                        outletRole: "DATA",
+                        customEmote: "💻",
+                        vlanId: 20,
+                      })
+                    }
+                    className={`p-1.5 rounded border transition flex flex-col items-center gap-0.5 ${
+                      !isIot && !isVoip
+                        ? "bg-blue-600/30 text-blue-300 border-blue-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Laptop className="w-3.5 h-3.5" />
+                    <span>DATA / PC</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        category: "CONNECTIVITY",
+                        subType: "WALL_OUTLET",
+                        outletRole: "VOIP",
+                        customEmote: "📞",
+                        vlanId: 30,
+                      })
+                    }
+                    className={`p-1.5 rounded border transition flex flex-col items-center gap-0.5 ${
+                      isVoip
+                        ? "bg-purple-600/30 text-purple-300 border-purple-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>VOIP / TEL</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        category: "IOT",
+                        subType: "WIFI_AP",
+                        outletRole: "WIFI",
+                        customEmote: "📶",
+                        vlanId: 50,
+                        iotProperties: {
+                          deviceCategory: "WIFI_AP",
+                          ssid: "NetFloor-Corp-WiFi",
+                          secondarySsid: "NetFloor-Guests",
+                          wifiStandard: "Wi-Fi 6 (802.11ax)",
+                          frequencyBand: "DUAL_BAND",
+                          channel: 36,
+                          txPowerDbm: 20,
+                          coverageRadiusM: 15,
+                          activeClientsCount: 8,
+                          maxClients: 64,
+                          ...(selectedNode.iotProperties ?? {}),
+                        },
+                      })
+                    }
+                    className={`p-1.5 rounded border transition flex flex-col items-center gap-0.5 ${
+                      isWifi
+                        ? "bg-indigo-600/30 text-indigo-300 border-indigo-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Wifi className="w-3.5 h-3.5" />
+                    <span>Wi-Fi 6 AP</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        category: "IOT",
+                        subType: "CAMERA_IP",
+                        outletRole: "CAMERA",
+                        customEmote: "🎥",
+                        vlanId: 50,
+                        iotProperties: {
+                          deviceCategory: "CAMERA",
+                          cameraModel: "Dôme IP Sécurité 4K",
+                          resolution: "4K Ultra HD",
+                          fps: 30,
+                          codec: "H.265",
+                          fovDegrees: 110,
+                          orientationDeg: 90,
+                          nightVisionEnabled: true,
+                          recordingMode: "CONTINUOUS",
+                          ...(selectedNode.iotProperties ?? {}),
+                        },
+                      })
+                    }
+                    className={`p-1.5 rounded border transition flex flex-col items-center gap-0.5 ${
+                      isCamera
+                        ? "bg-sky-600/30 text-sky-300 border-sky-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Caméra IP</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        category: "IOT",
+                        subType: "PRINTER_STATION",
+                        outletRole: "PRINTER",
+                        customEmote: "🖨️",
+                        vlanId: 40,
+                        iotProperties: {
+                          deviceCategory: "PRINTER",
+                          printerModel: "Multifonction Réseau A3/A4",
+                          protocol: "IPP_IPPS",
+                          tonerCyan: 75,
+                          tonerMagenta: 80,
+                          tonerYellow: 65,
+                          tonerBlack: 90,
+                          paperTrayStatus: "OK",
+                          totalPagesPrinted: 14250,
+                          colorPrintingAllowed: true,
+                          ...(selectedNode.iotProperties ?? {}),
+                        },
+                      })
+                    }
+                    className={`p-1.5 rounded border transition flex flex-col items-center gap-0.5 ${
+                      isPrinter
+                        ? "bg-amber-600/30 text-amber-300 border-amber-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Imprimante</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateNodeProperties?.(selectedNode.id, {
+                        category: "IOT",
+                        subType: "GENERIC_PORT",
+                        outletRole: "GENERIC",
+                        customEmote: "⚡",
+                        iotProperties: {
+                          deviceCategory: "IOT_SENSOR",
+                          sensorType: "PRESENCE",
+                          batteryLevelPercent: 95,
+                          protocolType: "MQTT",
+                          lastTelemetryValue: "21.5°C / 48% HR",
+                          ...(selectedNode.iotProperties ?? {}),
+                        },
+                      })
+                    }
+                    className={`p-1.5 rounded border transition flex flex-col items-center gap-0.5 ${
+                      isIot && !isWifi && !isCamera && !isPrinter
+                        ? "bg-emerald-600/30 text-emerald-300 border-emerald-500 font-bold"
+                        : "bg-slate-950 text-slate-400 border-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>Capteur IOT</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Carte : Personnalisation Avancée IOT */}
+              {isIot && (
+                <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-3 mt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-amber-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Personnalisation des Propriétés IOT
+                    </span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Sur-mesure
+                    </span>
+                  </div>
+
+                  {/* 1. Propriétés Wi-Fi AP */}
+                  {isWifi && (
+                    <div className="space-y-2 text-[10px] font-mono">
+                      <div>
+                        <label className="text-slate-400 block mb-0.5">SSID Principal :</label>
+                        <input
+                          type="text"
+                          value={selectedNode.iotProperties?.ssid ?? "NetFloor-Corp-WiFi"}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                ssid: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400 block mb-0.5">Réseau Invité (Secondary SSID) :</label>
+                        <input
+                          type="text"
+                          value={selectedNode.iotProperties?.secondarySsid ?? "NetFloor-Guests"}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                secondarySsid: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Norme Wi-Fi :</label>
+                          <select
+                            value={selectedNode.iotProperties?.wifiStandard ?? "Wi-Fi 6 (802.11ax)"}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  wifiStandard: e.target.value as any,
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                          >
+                            <option value="Wi-Fi 6 (802.11ax)">Wi-Fi 6 (802.11ax)</option>
+                            <option value="Wi-Fi 6E">Wi-Fi 6E (6 GHz)</option>
+                            <option value="Wi-Fi 7 (802.11be)">Wi-Fi 7 (802.11be)</option>
+                            <option value="Wi-Fi 5 (802.11ac)">Wi-Fi 5 (802.11ac)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Bande :</label>
+                          <select
+                            value={selectedNode.iotProperties?.frequencyBand ?? "DUAL_BAND"}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  frequencyBand: e.target.value as any,
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                          >
+                            <option value="DUAL_BAND">Dual-Band (2.4 + 5G)</option>
+                            <option value="TRI_BAND">Tri-Band (2.4 + 5 + 6G)</option>
+                            <option value="5GHz">5 GHz Uniquement</option>
+                            <option value="2.4GHz">2.4 GHz Uniquement</option>
+                          </select>
+                        </div>
+                      </div>
+                      {/* Slider Rayon de Couverture */}
+                      <div className="bg-indigo-950/30 p-2 rounded border border-indigo-500/30 space-y-1">
+                        <div className="flex justify-between text-indigo-200">
+                          <span>Rayon du Halo de Couverture :</span>
+                          <span className="font-bold text-indigo-300">
+                            {selectedNode.iotProperties?.coverageRadiusM ?? 15} mètres
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={5}
+                          max={35}
+                          step={1}
+                          value={selectedNode.iotProperties?.coverageRadiusM ?? 15}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                coverageRadiusM: Number(e.target.value),
+                              },
+                            })
+                          }
+                          className="w-full accent-indigo-500 cursor-pointer"
+                        />
+                        <span className="text-[9px] text-indigo-300/70 block">
+                          Ajuste en temps réel le cercle de couverture Wi-Fi sur le plan 2D.
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Canal Radio :</label>
+                          <input
+                            type="number"
+                            value={selectedNode.iotProperties?.channel ?? 36}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  channel: Number(e.target.value),
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Puissance TX (dBm) :</label>
+                          <input
+                            type="number"
+                            value={selectedNode.iotProperties?.txPowerDbm ?? 20}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  txPowerDbm: Number(e.target.value),
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 2. Propriétés Caméra IP */}
+                  {isCamera && (
+                    <div className="space-y-2 text-[10px] font-mono">
+                      <div>
+                        <label className="text-slate-400 block mb-0.5">Modèle Caméra :</label>
+                        <input
+                          type="text"
+                          value={selectedNode.iotProperties?.cameraModel ?? "Dôme IP Sécurité 4K"}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                cameraModel: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Résolution Capteur :</label>
+                          <select
+                            value={selectedNode.iotProperties?.resolution ?? "4K Ultra HD"}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  resolution: e.target.value as any,
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                          >
+                            <option value="4K Ultra HD">4K Ultra HD (2160p)</option>
+                            <option value="2K Quad HD">2K Quad HD (1440p)</option>
+                            <option value="1080p Full HD">1080p Full HD</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Codec Vidéo :</label>
+                          <select
+                            value={selectedNode.iotProperties?.codec ?? "H.265"}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  codec: e.target.value as any,
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                          >
+                            <option value="H.265">H.265 (HEVC)</option>
+                            <option value="H.264">H.264 (AVC)</option>
+                            <option value="MJPEG">MJPEG</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-slate-400 block mb-0.5">URL Flux RTSP :</label>
+                        <input
+                          type="text"
+                          value={
+                            selectedNode.iotProperties?.rtspStreamUrl ??
+                            `rtsp://${selectedNode.ipAddress ?? "10.42.50.10"}/live/ch0`
+                          }
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                rtspStreamUrl: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs"
+                        />
+                      </div>
+                      {/* Slider Angle FOV */}
+                      <div className="bg-sky-950/30 p-2 rounded border border-sky-500/30 space-y-1">
+                        <div className="flex justify-between text-sky-200">
+                          <span>Champ de vision (FOV) :</span>
+                          <span className="font-bold text-sky-300">
+                            {selectedNode.iotProperties?.fovDegrees ?? 110}° (Cône directionnel)
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={50}
+                          max={140}
+                          step={5}
+                          value={selectedNode.iotProperties?.fovDegrees ?? 110}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                fovDegrees: Number(e.target.value),
+                              },
+                            })
+                          }
+                          className="w-full accent-sky-500 cursor-pointer"
+                        />
+                      </div>
+                      {/* Slider Orientation */}
+                      <div className="bg-slate-950 p-2 rounded border border-slate-850 space-y-1">
+                        <div className="flex justify-between text-slate-300">
+                          <span>Orientation de la caméra :</span>
+                          <span className="font-bold text-sky-300">
+                            {selectedNode.iotProperties?.orientationDeg ?? 90}°
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={360}
+                          step={5}
+                          value={selectedNode.iotProperties?.orientationDeg ?? 90}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                orientationDeg: Number(e.target.value),
+                              },
+                            })
+                          }
+                          className="w-full accent-cyan-500 cursor-pointer"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between bg-slate-950 p-2 rounded border border-slate-850">
+                        <span className="text-slate-300">Vision Nocturne Infrarouge (IR) :</span>
+                        <input
+                          type="checkbox"
+                          checked={selectedNode.iotProperties?.nightVisionEnabled !== false}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                nightVisionEnabled: e.target.checked,
+                              },
+                            })
+                          }
+                          className="w-4 h-4 accent-sky-500 cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Propriétés Imprimante */}
+                  {isPrinter && (
+                    <div className="space-y-2 text-[10px] font-mono">
+                      <div>
+                        <label className="text-slate-400 block mb-0.5">Modèle d'Imprimante :</label>
+                        <input
+                          type="text"
+                          value={selectedNode.iotProperties?.printerModel ?? "Multifonction Réseau A3/A4"}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                printerModel: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Protocole Impression :</label>
+                          <select
+                            value={selectedNode.iotProperties?.protocol ?? "IPP_IPPS"}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  protocol: e.target.value as any,
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                          >
+                            <option value="IPP_IPPS">IPP / IPPS (Sécurisé)</option>
+                            <option value="RAW_9100">RAW Port 9100</option>
+                            <option value="LPR_LPD">LPR / LPD</option>
+                            <option value="SMB">Partage Windows SMB</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Bac Papier :</label>
+                          <select
+                            value={selectedNode.iotProperties?.paperTrayStatus ?? "OK"}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  paperTrayStatus: e.target.value as any,
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                          >
+                            <option value="OK">✅ Niveau OK</option>
+                            <option value="LOW">⚠️ Niveau Bas</option>
+                            <option value="EMPTY">❌ Bac Vide</option>
+                            <option value="JAM">⛔ Bourrage Papier</option>
+                          </select>
+                        </div>
+                      </div>
+                      {/* Jauges Toners interactives */}
+                      <div className="bg-slate-950 p-2 rounded border border-slate-850 space-y-2">
+                        <label className="text-slate-400 block text-[9px] font-semibold">
+                          Ajuster les Niveaux de Toner (%) :
+                        </label>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-16 text-cyan-400 font-bold">
+                              Cyan ({selectedNode.iotProperties?.tonerCyan ?? 75}%)
+                            </span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={selectedNode.iotProperties?.tonerCyan ?? 75}
+                              onChange={(e) =>
+                                onUpdateNodeProperties?.(selectedNode.id, {
+                                  iotProperties: {
+                                    ...(selectedNode.iotProperties ?? {}),
+                                    tonerCyan: Number(e.target.value),
+                                  },
+                                })
+                              }
+                              className="flex-1 accent-cyan-400"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-16 text-pink-400 font-bold">
+                              Mag ({selectedNode.iotProperties?.tonerMagenta ?? 80}%)
+                            </span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={selectedNode.iotProperties?.tonerMagenta ?? 80}
+                              onChange={(e) =>
+                                onUpdateNodeProperties?.(selectedNode.id, {
+                                  iotProperties: {
+                                    ...(selectedNode.iotProperties ?? {}),
+                                    tonerMagenta: Number(e.target.value),
+                                  },
+                                })
+                              }
+                              className="flex-1 accent-pink-400"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-16 text-yellow-400 font-bold">
+                              Jaune ({selectedNode.iotProperties?.tonerYellow ?? 65}%)
+                            </span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={selectedNode.iotProperties?.tonerYellow ?? 65}
+                              onChange={(e) =>
+                                onUpdateNodeProperties?.(selectedNode.id, {
+                                  iotProperties: {
+                                    ...(selectedNode.iotProperties ?? {}),
+                                    tonerYellow: Number(e.target.value),
+                                  },
+                                })
+                              }
+                              className="flex-1 accent-yellow-400"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-16 text-slate-300 font-bold">
+                              Noir ({selectedNode.iotProperties?.tonerBlack ?? 90}%)
+                            </span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={selectedNode.iotProperties?.tonerBlack ?? 90}
+                              onChange={(e) =>
+                                onUpdateNodeProperties?.(selectedNode.id, {
+                                  iotProperties: {
+                                    ...(selectedNode.iotProperties ?? {}),
+                                    tonerBlack: Number(e.target.value),
+                                  },
+                                })
+                              }
+                              className="flex-1 accent-slate-400"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-400">Total Pages Imprimées :</label>
+                        <input
+                          type="number"
+                          value={selectedNode.iotProperties?.totalPagesPrinted ?? 14250}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                totalPagesPrinted: Number(e.target.value),
+                              },
+                            })
+                          }
+                          className="w-28 bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-slate-200 text-xs text-right"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 4. Propriétés Capteur IoT */}
+                  {!isWifi && !isCamera && !isPrinter && (
+                    <div className="space-y-2 text-[10px] font-mono">
+                      <div>
+                        <label className="text-slate-400 block mb-0.5">Type de Capteur :</label>
+                        <select
+                          value={selectedNode.iotProperties?.sensorType ?? "PRESENCE"}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                sensorType: e.target.value as any,
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs"
+                        >
+                          <option value="PRESENCE">🚶 Détecteur de Présence / PIR</option>
+                          <option value="TEMPERATURE">🌡️ Température & Climat</option>
+                          <option value="HUMIDITY">💧 Humidité & Hygrométrie</option>
+                          <option value="CO2">🍃 Qualité de l'Air CO2</option>
+                          <option value="BADGE_READER">🪪 Lecteur de Badge RFID</option>
+                          <option value="SMOKE">🚨 Détecteur de Fumée DAAF</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">Protocole IoT :</label>
+                          <select
+                            value={selectedNode.iotProperties?.protocolType ?? "MQTT"}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  protocolType: e.target.value as any,
+                                },
+                              })
+                            }
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-200 text-[10px]"
+                          >
+                            <option value="MQTT">MQTT (Broker)</option>
+                            <option value="HTTP_REST">REST API HTTP</option>
+                            <option value="COAP">CoAP</option>
+                            <option value="ZIGBEE">Zigbee 3.0</option>
+                            <option value="LORAWAN">LoRaWAN</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-slate-400 block mb-0.5">
+                            Batterie ({selectedNode.iotProperties?.batteryLevelPercent ?? 95}%) :
+                          </label>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={selectedNode.iotProperties?.batteryLevelPercent ?? 95}
+                            onChange={(e) =>
+                              onUpdateNodeProperties?.(selectedNode.id, {
+                                iotProperties: {
+                                  ...(selectedNode.iotProperties ?? {}),
+                                  batteryLevelPercent: Number(e.target.value),
+                                },
+                              })
+                            }
+                            className="w-full accent-emerald-500 cursor-pointer mt-1"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-slate-400 block mb-0.5">Dernière Valeur Télémétrique :</label>
+                        <input
+                          type="text"
+                          value={selectedNode.iotProperties?.lastTelemetryValue ?? "21.5°C / 48% HR"}
+                          onChange={(e) =>
+                            onUpdateNodeProperties?.(selectedNode.id, {
+                              iotProperties: {
+                                ...(selectedNode.iotProperties ?? {}),
+                                lastTelemetryValue: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Statut Réseau & Câblage (Propriétés héritées du commutateur) */}
               <div className="mt-2.5 pt-2 border-t border-slate-800/80 space-y-2">

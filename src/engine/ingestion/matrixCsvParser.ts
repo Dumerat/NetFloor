@@ -4,7 +4,11 @@
  * pour les équipements réseau, bureaux et utilisateurs, avec gestion des éléments non positionnés.
  */
 
-import { NodeDisplay, RackDisplay } from "@/components/canvas/EquipmentLayer";
+import {
+  NodeDisplay,
+  RackDisplay,
+  IotCustomProperties,
+} from "@/components/canvas/EquipmentLayer";
 
 export interface MatrixRowData {
   rowNumber: number;
@@ -267,6 +271,206 @@ export function parseAndAuditMatrixCsv(csvText: string): MatrixAuditResult {
   };
 }
 
+export const parseMatrixCsv = parseAndAuditMatrixCsv;
+
+/**
+ * Applique atomiquement les lignes matricielles validées sur l'état des nœuds
+ * Associe les prises et bureaux existants ou génère les éléments non positionnés.
+ */
+/**
+ * Détermine si un identifiant désigne un poste de travail / PC client / bureau
+ * (Ex: "PC DIR", "PC-FINANCE-01", "Poste Direction", "Desk-101", "DIR", etc.)
+ */
+export function isWorkstationOrDeskName(name: string): boolean {
+  if (!name) return false;
+  const trimmed = name.trim().toLowerCase();
+  // Ne pas confondre avec une prise murale explicite
+  if (
+    trimmed.startsWith("prise") ||
+    trimmed.startsWith("outlet") ||
+    trimmed.startsWith("plaque") ||
+    trimmed.startsWith("bloc")
+  ) {
+    return false;
+  }
+  // Ne pas confondre avec de l'infrastructure réseau ou des terminaux IoT
+  if (
+    trimmed.startsWith("sw-") ||
+    trimmed.startsWith("switch") ||
+    trimmed.startsWith("pp-") ||
+    trimmed.startsWith("patch") ||
+    trimmed.startsWith("ap-") ||
+    trimmed.startsWith("ap_") ||
+    trimmed.startsWith("borne") ||
+    trimmed.startsWith("cam-") ||
+    trimmed.startsWith("cam_") ||
+    trimmed.startsWith("camera") ||
+    trimmed.startsWith("printer") ||
+    trimmed.startsWith("imp-") ||
+    trimmed.startsWith("copieur") ||
+    trimmed.startsWith("iot-")
+  ) {
+    return false;
+  }
+  // Mot-clé PC (ex: PC DIR, PC-DIR, PC_DIR, PC FINANCE, PC01, PC-01, PC_01, PC)
+  if (/^pc[\s\-_0-9]/i.test(trimmed) || /^pc$/i.test(trimmed)) {
+    return true;
+  }
+  // Mots-clés Bureau, Poste, Desk, Workstation, Desktop, Laptop, Portable
+  if (
+    trimmed.startsWith("poste") ||
+    trimmed.startsWith("bureau") ||
+    trimmed.startsWith("desk") ||
+    trimmed.startsWith("station") ||
+    trimmed.startsWith("workstation") ||
+    trimmed.startsWith("desktop") ||
+    trimmed.startsWith("laptop") ||
+    trimmed.startsWith("portable")
+  ) {
+    return true;
+  }
+  // Dir / Direction (ex: DIR, DIRECTION, DIR-01, POSTE DIR)
+  if (
+    trimmed === "dir" ||
+    trimmed === "direction" ||
+    trimmed.startsWith("dir-") ||
+    trimmed.startsWith("dir_") ||
+    trimmed.startsWith("dir ")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Détecte si un nom d'équipement correspond à un objet connecté / terminal IoT
+ * (Borne Wi-Fi, Imprimante, Caméra de vidéosurveillance, Capteur IoT)
+ */
+export function classifyIotDevice(
+  name: string,
+  vlanId?: number
+): {
+  subType: "WIFI_AP" | "PRINTER_STATION" | "CAMERA_IP" | "GENERIC_PORT";
+  role: "WIFI" | "PRINTER" | "CAMERA" | "GENERIC";
+  emote: string;
+  defaultVlan: number;
+  defaultProperties: IotCustomProperties;
+} | null {
+  if (!name) return null;
+  const trimmed = name.trim().toLowerCase();
+
+  // 1. Point d'accès Wi-Fi
+  if (
+    trimmed.startsWith("ap-") ||
+    trimmed.startsWith("ap_") ||
+    trimmed.startsWith("borne") ||
+    trimmed.includes("wifi") ||
+    trimmed.includes("uap") ||
+    trimmed.includes("access point")
+  ) {
+    return {
+      subType: "WIFI_AP",
+      role: "WIFI",
+      emote: "📶",
+      defaultVlan: vlanId ?? 50,
+      defaultProperties: {
+        deviceCategory: "WIFI_AP",
+        ssid: "NetFloor-Corp-WiFi",
+        secondarySsid: "NetFloor-Guests",
+        wifiStandard: "Wi-Fi 6 (802.11ax)",
+        frequencyBand: "DUAL_BAND",
+        channel: 36,
+        txPowerDbm: 20,
+        coverageRadiusM: 15,
+        activeClientsCount: 8,
+        maxClients: 64,
+      },
+    };
+  }
+
+  // 2. Caméra de vidéosurveillance IP
+  if (
+    trimmed.startsWith("cam-") ||
+    trimmed.startsWith("cam_") ||
+    trimmed.includes("camera") ||
+    trimmed.includes("caméra") ||
+    trimmed.includes("dome") ||
+    trimmed.includes("surveillance")
+  ) {
+    return {
+      subType: "CAMERA_IP",
+      role: "CAMERA",
+      emote: "🎥",
+      defaultVlan: vlanId ?? 50,
+      defaultProperties: {
+        deviceCategory: "CAMERA",
+        cameraModel: "Dôme IP Sécurité 4K",
+        resolution: "4K Ultra HD",
+        fps: 30,
+        codec: "H.265",
+        fovDegrees: 110,
+        orientationDeg: 90,
+        nightVisionEnabled: true,
+        recordingMode: "CONTINUOUS",
+      },
+    };
+  }
+
+  // 3. Imprimante / Copieur Réseau
+  if (
+    trimmed.startsWith("imp-") ||
+    trimmed.startsWith("imp_") ||
+    trimmed.startsWith("print") ||
+    trimmed.includes("printer") ||
+    trimmed.includes("copieur") ||
+    trimmed.includes("laserjet")
+  ) {
+    return {
+      subType: "PRINTER_STATION",
+      role: "PRINTER",
+      emote: "🖨️",
+      defaultVlan: vlanId ?? 40,
+      defaultProperties: {
+        deviceCategory: "PRINTER",
+        printerModel: "Multifonction Réseau A3/A4",
+        protocol: "IPP_IPPS",
+        tonerCyan: 75,
+        tonerMagenta: 80,
+        tonerYellow: 65,
+        tonerBlack: 90,
+        paperTrayStatus: "OK",
+        totalPagesPrinted: 14250,
+        colorPrintingAllowed: true,
+      },
+    };
+  }
+
+  // 4. Capteur / Autre IoT
+  if (
+    trimmed.startsWith("iot-") ||
+    trimmed.startsWith("iot_") ||
+    trimmed.startsWith("sensor") ||
+    trimmed.startsWith("capteur") ||
+    trimmed.startsWith("badge")
+  ) {
+    return {
+      subType: "GENERIC_PORT",
+      role: "GENERIC",
+      emote: "⚡",
+      defaultVlan: vlanId ?? 20,
+      defaultProperties: {
+        deviceCategory: "IOT_SENSOR",
+        sensorType: "PRESENCE",
+        batteryLevelPercent: 95,
+        protocolType: "MQTT",
+        lastTelemetryValue: "21.5°C / 48% HR",
+      },
+    };
+  }
+
+  return null;
+}
+
 /**
  * Applique atomiquement les lignes matricielles validées sur l'état des nœuds
  * Associe les prises et bureaux existants ou génère les éléments non positionnés.
@@ -305,10 +509,15 @@ export function applyMatrixImport(
     const targetRackId =
       (row.rackName && rackMap.get(row.rackName.toLowerCase())) || racks[0]?.id || "rack-01";
 
-    // 2. Recherche du meuble associé si spécifié
+    // 2. Recherche ou détection automatique du bureau / poste de travail associé
+    // Si row.deskId est renseigné, ou si row.outletId désigne un PC/bureau (ex: "PC DIR"),
+    // on résout ou crée automatiquement le bureau associé.
+    const effectiveDeskId =
+      row.deskId || (isWorkstationOrDeskName(row.outletId) ? row.outletId : undefined);
     let attachedDeskId: string | undefined = undefined;
-    if (row.deskId) {
-      const lowerDeskId = row.deskId.toLowerCase();
+
+    if (effectiveDeskId) {
+      const lowerDeskId = effectiveDeskId.toLowerCase();
       let deskNode = nodeMap.get(lowerDeskId) || nodeNameMap.get(lowerDeskId);
 
       if (deskNode && deskNode.type === "DESK") {
@@ -334,10 +543,14 @@ export function applyMatrixImport(
       } else {
         // Le bureau n'existe pas encore sur le plan : création d'un bureau non positionné
         if (!createdDesksMap.has(lowerDeskId)) {
+          const deskName = effectiveDeskId.toLowerCase().startsWith("bureau")
+            ? effectiveDeskId
+            : `Bureau ${effectiveDeskId}`;
           const newDesk: NodeDisplay = {
-            id: `unpositioned-desk-${row.deskId}`,
+            id: `unpositioned-desk-${effectiveDeskId}`,
             type: "DESK",
-            name: row.deskId.startsWith("Bureau") ? row.deskId : `Bureau ${row.deskId}`,
+            category: "FURNITURE",
+            name: deskName,
             xMm: -99999, // Coordonnée spéciale d'élément non positionné
             yMm: -99999,
             widthMm: 1600,
@@ -361,14 +574,16 @@ export function applyMatrixImport(
           };
           createdDesksMap.set(lowerDeskId, newDesk);
           unpositionedNodes.push(newDesk);
+          matchedDesksCount++;
         }
         attachedDeskId = createdDesksMap.get(lowerDeskId)!.id;
       }
     }
 
-    // 3. Recherche de la prise existante sur le plan
+    // 3. Recherche de la prise existante sur le plan ou classification IoT
     const lowerOutletId = row.outletId.toLowerCase();
     const existingOutlet = nodeMap.get(lowerOutletId) || nodeNameMap.get(lowerOutletId);
+    const iotInfo = classifyIotDevice(row.outletId, row.vlanId);
 
     if (existingOutlet && existingOutlet.type === "WALL_OUTLET") {
       matchedOutletsCount++;
@@ -376,6 +591,18 @@ export function applyMatrixImport(
         ...existingOutlet,
         isPatched: true,
         connectedRackId: targetRackId,
+        ...(iotInfo
+          ? {
+              category: "IOT",
+              subType: iotInfo.subType,
+              outletRole: iotInfo.role,
+              customEmote: iotInfo.emote,
+              iotProperties: {
+                ...iotInfo.defaultProperties,
+                ...(existingOutlet.iotProperties ?? {}),
+              },
+            }
+          : {}),
         ...(row.switchPort ? { connectedSwitchPort: row.switchPort } : {}),
         ...(row.vlanId !== undefined ? { vlanId: row.vlanId } : {}),
         ...(row.ipAddress ? { ipAddress: row.ipAddress } : {}),
@@ -387,15 +614,28 @@ export function applyMatrixImport(
       nodeMap.set(existingOutlet.id.toLowerCase(), updatedOutlet);
       nodeNameMap.set(existingOutlet.name.toLowerCase(), updatedOutlet);
     } else {
-      // La prise n'existe pas encore sur le plan : création d'une prise non positionnée
+      // Création d'un nœud terminal ou prise non positionné
+      const outletName = iotInfo
+        ? row.outletId
+        : row.outletId.startsWith("Prise")
+          ? row.outletId
+          : `Prise ${row.outletId}`;
       const newOutlet: NodeDisplay = {
         id: `unpositioned-outlet-${row.outletId}`,
         type: "WALL_OUTLET",
-        name: row.outletId.startsWith("Prise") ? row.outletId : `Prise ${row.outletId}`,
+        category: iotInfo ? "IOT" : "CONNECTIVITY",
+        name: outletName,
         xMm: -99999,
         yMm: -99999,
         portId: `port-unpositioned-${row.outletId}`,
-        outletRole: row.vlanId === 30 ? "VOIP" : "DATA",
+        subType: iotInfo ? iotInfo.subType : "WALL_OUTLET",
+        outletRole: iotInfo ? iotInfo.role : row.vlanId === 30 ? "VOIP" : "DATA",
+        ...(iotInfo
+          ? {
+              customEmote: iotInfo.emote,
+              iotProperties: iotInfo.defaultProperties,
+            }
+          : {}),
         isPatched: true,
         connectedRackId: targetRackId,
         siteId: defaultSiteId,
