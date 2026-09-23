@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.7.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.6.0...netfloor-architect-v0.7.0) (2026-09-23)
+
+
+### ✨ Nouvelles fonctionnalités
+
+* **directory:** unlink ad accounts from nodes on reset and add ad purge controls ([6185c61](https://github.com/Dumerat/NetFloor/commit/6185c6123a092fe4ba19305aced9d41778ad2755))
+* **telemetry,reset:** real printer telemetry and dual reset modal ([8c34d51](https://github.com/Dumerat/NetFloor/commit/8c34d51d67b79787c731fac7677c1fdc3ffadb20))
+
+
+### 🐛 Corrections de bugs
+
+* **palette:** purge fake default devices from equipment palette and add discovery reset ([8ecfd63](https://github.com/Dumerat/NetFloor/commit/8ecfd6386d2f531bde519bb8626ad43ab5f22b02))
+* **settings:** move hooks before early return to fix react error 310 ([128997a](https://github.com/Dumerat/NetFloor/commit/128997af39484a09b626ca684320e3773e50b7bd))
+
+
+### ✅ Tests
+
+* **db:** isolate pglite in-memory for vitest test runs and await waitReady ([f0aec42](https://github.com/Dumerat/NetFloor/commit/f0aec420a9e2946a9c428aadbc5a3692965039d8))
+
 ## [0.6.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.5.0...netfloor-architect-v0.6.0) (2026-09-22)
 
 
