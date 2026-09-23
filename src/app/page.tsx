@@ -81,6 +81,11 @@ import {
 } from "@/data/vlanStyles";
 import { VlanStyleCustomizer } from "@/components/ui/VlanStyleCustomizer";
 import { unlinkAdAccountsFromNodes, clearEnterpriseDirectory } from "@/data/directory";
+import {
+  autoDeployDiscoveredTopology,
+  DiscoveredDeviceInput,
+  DiscoveredConnectionInput,
+} from "@/engine/discovery/auto-placement";
 
 // Chargement dynamique du canvas Konva sans SSR
 const DynamicFloorCanvas = dynamic(() => import("@/components/canvas/FloorCanvas"), {
@@ -882,11 +887,11 @@ export default function NetFloorApp() {
     const list: CableData[] = [];
     let globalIndex = 0;
 
-    const wallOutlets = visibleNodes.filter(
-      (n) => n.type === "WALL_OUTLET" && (n.isPatched || n.stackedPorts?.some((p) => p.isPatched))
+    const patchedEndpoints = visibleNodes.filter(
+      (n) => n.type !== "PATCH_PANEL" && (n.isPatched || n.stackedPorts?.some((p) => p.isPatched))
     );
 
-    wallOutlets.forEach((outlet) => {
+    patchedEndpoints.forEach((outlet) => {
       const isStacked =
         outlet.subType === "FLOOR_BOX" || (outlet.stackedPorts && outlet.stackedPorts.length > 0);
 
@@ -969,7 +974,7 @@ export default function NetFloorApp() {
           globalIndex++;
         });
       } else if (outlet.isPatched) {
-        // Prise simple standard
+        // Prise simple standard ou équipement réseau sur le plancher
         const rack =
           visibleRacks.find((r) => r.id === outlet.connectedRackId) ??
           visibleRacks.find((r) => r.id === "rack-01") ??
@@ -994,10 +999,14 @@ export default function NetFloorApp() {
 
         const cableId = `cable-run-${outlet.id}`;
         const targetPos = { x: rack.xMm + 400, y: rack.yMm + 240 + globalIndex * 25 };
+        const sourceCenterPos = {
+          x: outlet.xMm + (outlet.widthMm ? Math.round(outlet.widthMm / 2) : 0),
+          y: outlet.yMm + (outlet.heightMm ? Math.round(outlet.heightMm / 2) : 0),
+        };
 
         const customPivot = customPivots[cableId];
         const pivot = customPivot ?? {
-          x: outlet.xMm,
+          x: sourceCenterPos.x,
           y: targetPos.y,
         };
 
@@ -1007,7 +1016,7 @@ export default function NetFloorApp() {
           category: "CAT6A",
           lengthMm: 44200 + globalIndex * 400,
           colorCode: cableColor,
-          sourcePos: { x: outlet.xMm, y: outlet.yMm },
+          sourcePos: sourceCenterPos,
           targetPos,
           vlanId,
           sourceNodeId: outlet.id,
@@ -1021,6 +1030,47 @@ export default function NetFloorApp() {
         globalIndex++;
       }
     });
+
+    // Trunks dorsaux inter-baies (LLDP / Trunks 10G)
+    for (let i = 0; i < visibleRacks.length - 1; i++) {
+      const r1 = visibleRacks[i];
+      const r2 = visibleRacks[i + 1];
+      if (!r1 || !r2) continue;
+
+      const hasInterRackPatch =
+        r1.patches?.some(
+          (p) =>
+            p.cableType === "FIBER_OM4" ||
+            p.cableType === "DAC_10G" ||
+            p.serviceName?.includes("TRUNK")
+        ) ||
+        r2.patches?.some(
+          (p) =>
+            p.cableType === "FIBER_OM4" ||
+            p.cableType === "DAC_10G" ||
+            p.serviceName?.includes("TRUNK")
+        );
+
+      if (hasInterRackPatch) {
+        const trunkCableId = `trunk-${r1.id}-${r2.id}`;
+        list.push({
+          id: trunkCableId,
+          cableType: "BACKBONE_TRUNK",
+          category: "FIBER_OM4",
+          lengthMm: Math.abs(r2.xMm - r1.xMm),
+          colorCode: "rgba(16, 185, 129, 0.95)",
+          sourcePos: { x: r1.xMm + r1.widthMm, y: r1.yMm + 200 },
+          targetPos: { x: r2.xMm, y: r2.yMm + 200 },
+          vlanId: 1,
+          sourceNodeId: r1.id,
+          targetNodeId: r2.id,
+          bundleKey: trunkCableId,
+          bundleIndex: 0,
+          bundleTotal: 1,
+          offsetDistanceMm: 0,
+        });
+      }
+    }
 
     return list;
   }, [visibleNodes, visibleRacks, activeViewMode, customPivots, vlanStyles]);
@@ -2443,6 +2493,84 @@ export default function NetFloorApp() {
     setDbSyncStatus("SAVED");
   }, []);
 
+  // Auto-déploiement topologique intelligent multi-baies & auto-câblage physique depuis la découverte réseau
+  const handleAutoDeployDiscoveredTopology = useCallback(
+    async (options?: {
+      forceResetExisting?: boolean;
+      devices?: DiscoveredDeviceInput[];
+      connections?: DiscoveredConnectionInput[];
+    }) => {
+      try {
+        setDbSyncStatus("SAVING");
+        let devices = options?.devices;
+        let connections = options?.connections;
+
+        if (!devices || devices.length === 0) {
+          const res = await fetch("/api/discovery/status?jobId=latest");
+          if (res.ok) {
+            const data = await res.json();
+            devices = data.devices || [];
+            connections = data.connections || [];
+          }
+        }
+
+        if (!devices || devices.length === 0) {
+          const resAll = await fetch("/api/discovery/status?allDevices=true");
+          if (resAll.ok) {
+            const dataAll = await resAll.json();
+            devices = dataAll.devices || [];
+          }
+        }
+
+        if (!devices || devices.length === 0) {
+          return;
+        }
+
+        const existingRacks = options?.forceResetExisting ? [] : racks;
+        const existingNodes = options?.forceResetExisting ? [] : nodes;
+
+        const result = autoDeployDiscoveredTopology({
+          devices,
+          connections: connections || [],
+          existingRacks,
+          existingNodes,
+          floorBounds: { widthMm: floorData.widthMm, heightMm: floorData.heightMm },
+        });
+
+        // Appliquer les baies créées ou mises à jour
+        setRacks(result.racks);
+
+        // Convertir également les baies en nœuds PATCH_PANEL de premier ordre
+        const rackNodes: NodeDisplay[] = result.racks.map((r) => ({
+          id: r.id,
+          type: "PATCH_PANEL",
+          subType: "RACK_42U",
+          name: r.name,
+          widthMm: r.widthMm,
+          heightMm: r.depthMm,
+          xMm: r.xMm,
+          yMm: r.yMm,
+          uHeight: r.uHeight || 42,
+          devices: r.devices || [],
+          patches: r.patches || [],
+          siteId: r.siteId || activeSiteId || DEFAULT_SITE_ID,
+        }));
+
+        const floorNodes = result.nodes.filter((n) => n.type !== "PATCH_PANEL");
+        setNodes([...rackNodes, ...floorNodes]);
+
+        // Cadrer automatiquement l'affichage sur la zone de travail
+        if (typeof window !== "undefined") {
+          fitFloor(floorData.widthMm, floorData.heightMm, window.innerWidth, window.innerHeight);
+          window.dispatchEvent(new CustomEvent("netfloor_discovery_updated"));
+        }
+      } catch (err) {
+        console.error("Erreur lors de l'auto-déploiement de la topologie :", err);
+      }
+    },
+    [racks, nodes, floorData, activeSiteId, fitFloor]
+  );
+
   // Export du plan complet au format JSON
   const handleExportJsonConfig = () => {
     setIsFileMenuOpen(false);
@@ -2989,6 +3117,7 @@ export default function NetFloorApp() {
           nodes={visibleNodes}
           selectedRackId={selectedNode?.type === "PATCH_PANEL" ? selectedNode.id : null}
           onInsertScannedDevice={handleInsertScannedDeviceIntoRack}
+          onAutoDeployDiscoveredTopology={handleAutoDeployDiscoveredTopology}
         />
 
         {/* Main Canvas Area */}
@@ -3800,8 +3929,10 @@ export default function NetFloorApp() {
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         nodes={nodes}
+        racks={racks}
         onUpdateNodeProperties={handleUpdateNodeProperties}
         onImportDiscoveredDevice={handleImportDiscoveredDevice}
+        onAutoDeployDiscoveredTopology={handleAutoDeployDiscoveredTopology}
         vlanStyles={vlanStyles}
         onUpdateVlanStyle={handleUpdateVlanStyle}
         onResetVlanStyles={handleResetVlanStyles}

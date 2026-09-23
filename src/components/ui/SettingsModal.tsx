@@ -44,7 +44,7 @@ import {
   Filter,
 } from "lucide-react";
 import type { TopologyDiffItem } from "@/engine/discovery/types";
-import { NodeDisplay } from "@/components/canvas/EquipmentLayer";
+import { NodeDisplay, RackDisplay } from "@/components/canvas/EquipmentLayer";
 import {
   DirectoryUser,
   loadEnterpriseDirectory,
@@ -72,8 +72,16 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   nodes: NodeDisplay[];
+  racks?: RackDisplay[] | undefined;
   onUpdateNodeProperties?: (nodeId: string, updates: Partial<NodeDisplay>) => void;
   onImportDiscoveredDevice?: (device: DeviceTelemetry) => void;
+  onAutoDeployDiscoveredTopology?:
+    | ((options?: {
+        forceResetExisting?: boolean;
+        devices?: any[];
+        connections?: any[];
+      }) => Promise<void> | void)
+    | undefined;
   vlanStyles?: Record<number, VlanStyle> | undefined;
   onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
   onResetVlanStyles?: (() => void) | undefined;
@@ -111,8 +119,10 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   nodes,
+  racks: _racks = [],
   onUpdateNodeProperties,
   onImportDiscoveredDevice,
+  onAutoDeployDiscoveredTopology,
   vlanStyles,
   onUpdateVlanStyle,
   onResetVlanStyles,
@@ -1102,6 +1112,12 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
         }
 
         if (acceptAll) {
+          if (onAutoDeployDiscoveredTopology && targetDevs.length > 0) {
+            await onAutoDeployDiscoveredTopology({
+              devices: targetDevs,
+              connections: discoveredConnectionsList,
+            });
+          }
           setReconciliationDiffs([]);
           setSelectedDiffIds(new Set());
         } else {
@@ -3149,6 +3165,29 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           Tout Accepter & Réconcilier
                         </button>
+                        {onAutoDeployDiscoveredTopology && discoveredDevicesList.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await onAutoDeployDiscoveredTopology({
+                                  devices: discoveredDevicesList,
+                                  connections: discoveredConnectionsList,
+                                });
+                                showToast(
+                                  "🚀 Topologie auto-déployée avec succès sur le plan 2D !"
+                                );
+                              } catch {
+                                showToast("❌ Échec lors de l'auto-déploiement");
+                              }
+                            }}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow transition cursor-pointer"
+                            title="Déploie automatiquement les baies, commutateurs, serveurs et postes avec câblage complet"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-cyan-200 animate-pulse" />
+                            <span>🚀 Auto-Déployer sur le Plan</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 

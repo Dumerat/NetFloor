@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { discoveredDevices, discoveredConnections, nodes, floors } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { autoDeployDiscoveredTopology } from "@/engine/discovery/auto-placement";
 
 const reconcileActionSchema = z.object({
   jobId: z.string().uuid("ID de job invalide"),
@@ -187,6 +188,33 @@ export async function POST(req: Request) {
 
     skippedCount = devices.length - (createdCount + updatedCount);
 
+    const autoPlacement = autoDeployDiscoveredTopology({
+      devices: targetDevices.map((d) => ({
+        id: d.id,
+        ipAddress: d.ipAddress,
+        macAddress: d.macAddress,
+        hostname: d.hostname,
+        manufacturer: d.manufacturer,
+        model: d.model,
+        deviceType: d.deviceType,
+        sysDescr: d.sysDescr,
+        osVersion: d.osVersion,
+        vlanId: d.vlanId,
+        isManagedSwitch: d.isManagedSwitch,
+        metadata: (d.metadata || {}) as Record<string, unknown>,
+      })),
+      connections: connections.map((c) => ({
+        id: c.id,
+        sourceDeviceId: c.sourceDeviceId,
+        sourcePortName: c.sourcePortName,
+        targetDeviceId: c.targetDeviceId,
+        targetPortName: c.targetPortName,
+        connectionType: c.connectionType,
+        vlanId: c.vlanId,
+        confidenceScore: c.confidenceScore,
+      })),
+    });
+
     return NextResponse.json({
       success: true,
       jobId,
@@ -198,6 +226,7 @@ export async function POST(req: Request) {
         skippedCount,
       },
       devices: targetDevices,
+      autoPlacement,
       message: `Réconciliation effectuée : ${createdCount} équipement(s) créé(s), ${updatedCount} mis à jour.`,
     });
   } catch (err: unknown) {

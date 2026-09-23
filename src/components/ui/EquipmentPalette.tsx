@@ -608,6 +608,7 @@ interface EquipmentPaletteProps {
   selectedRackId?: string | null | undefined;
   onInsertScannedDevice?:
     ((rackId: string, device: ScannedDeviceItem, slotU?: number) => void) | undefined;
+  onAutoDeployDiscoveredTopology?: (() => Promise<void> | void) | undefined;
 }
 
 const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
@@ -631,6 +632,7 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   nodes = [],
   selectedRackId,
   onInsertScannedDevice,
+  onAutoDeployDiscoveredTopology,
 }) => {
   const isDrawerOpen = isOpen || isTopologyOpen || isInventoryOpen || isSitesOpen;
   // 4 sous-menus d'équipements : Mobilier, Prises, IOT, Infra/Baies
@@ -1426,6 +1428,18 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                           </span>
                         </div>
                       </div>
+
+                      {/* Bouton d'auto-déploiement topologique intelligent multi-baies */}
+                      {onAutoDeployDiscoveredTopology && scannedDevices.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onAutoDeployDiscoveredTopology()}
+                          className="w-full py-2 px-3 bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-2 transition shadow-lg shadow-cyan-900/30 border border-cyan-400/40 active:scale-[0.99] cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-cyan-200 animate-pulse" />
+                          <span>🚀 Auto-déployer tout sur le plan</span>
+                        </button>
+                      )}
 
                       {/* Barre de recherche d'équipement scanné */}
                       <div className="relative">
