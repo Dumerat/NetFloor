@@ -31,6 +31,7 @@ import {
   Sparkles,
   Users,
   UserPlus,
+  UserMinus,
   Trash2,
   AlertTriangle,
   Cable,
@@ -50,6 +51,9 @@ import {
   addCustomDirectoryUser,
   removeCustomDirectoryUser,
   syncAdUsersToDirectory,
+  clearEnterpriseDirectory,
+  clearSyncedAdUsersFromDirectory,
+  DIRECTORY_STORAGE_KEY,
 } from "@/data/directory";
 import {
   SystemSettings,
@@ -74,6 +78,7 @@ interface SettingsModalProps {
   onUpdateVlanStyle?: ((vlanId: number, updates: Partial<VlanStyle>) => void) | undefined;
   onResetVlanStyles?: (() => void) | undefined;
   onFullSystemReset?: (() => Promise<void> | void) | undefined;
+  onUnlinkAllAdUsers?: (() => void) | undefined;
 }
 
 type TabType = "sso" | "snmp" | "ipam" | "integrations" | "portals";
@@ -112,6 +117,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
   onUpdateVlanStyle,
   onResetVlanStyles,
   onFullSystemReset,
+  onUnlinkAllAdUsers,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>("sso");
   const [dsiMode, setDsiMode] = useState<"SUPERVISION" | "CONFIGURATION">("SUPERVISION");
@@ -676,7 +682,19 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     const def = resetStoredSettings();
     setSettings(def);
     onResetVlanStyles?.();
-    showToast("🔄 Paramètres de configuration DSI réinitialisés aux valeurs d'origine");
+    clearSyncedAdUsersFromDirectory();
+    setSyncedAdUsers([]);
+    onUnlinkAllAdUsers?.();
+    showToast("🔄 Paramètres de configuration DSI et comptes AD réinitialisés");
+    setIsResetDialogOpen(false);
+  };
+
+  // Action dédiée : Délier tous les postes et purger les comptes Active Directory
+  const handlePurgeAndUnlinkAdUsers = () => {
+    clearSyncedAdUsersFromDirectory();
+    setSyncedAdUsers([]);
+    onUnlinkAllAdUsers?.();
+    showToast("🧹 Comptes Active Directory purgés et postes déliés avec succès");
     setIsResetDialogOpen(false);
   };
 
@@ -691,7 +709,13 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
       await clearAllBackgroundPlans().catch(() => null);
       await clearAllSites().catch(() => null);
 
-      // 3. Vider les clés de stockage locales NetFloor
+      // 3. Purger l'annuaire d'entreprise complet
+      clearEnterpriseDirectory();
+      setSyncedAdUsers([]);
+      setCustomUsers([]);
+      onUnlinkAllAdUsers?.();
+
+      // 4. Vider les clés de stockage locales NetFloor
       if (typeof window !== "undefined") {
         try {
           const keysToRemove = [
@@ -701,6 +725,7 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
             "netfloor_floor_sites_v2",
             "netfloor_background_plans",
             "netfloor_sites_v1",
+            DIRECTORY_STORAGE_KEY,
           ];
           for (const k of keysToRemove) {
             localStorage.removeItem(k);
@@ -708,11 +733,11 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
         } catch {}
       }
 
-      // 4. Restaurer les paramètres DSI et styles VLAN par défaut
+      // 5. Restaurer les paramètres DSI et styles VLAN par défaut
       resetStoredSettings();
       onResetVlanStyles?.();
 
-      // 5. Exécuter le reset côté parent
+      // 6. Exécuter le reset côté parent
       if (onFullSystemReset) {
         await onFullSystemReset();
       }
@@ -2098,12 +2123,22 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                         </span>
                         <div className="flex items-center gap-2">
                           <button
+                            type="button"
                             onClick={handleInjectAdUsersToDirectory}
                             className="px-2.5 py-1 bg-cyan-600/25 hover:bg-cyan-600/40 text-cyan-300 rounded text-[10px] font-semibold border border-cyan-500/30 flex items-center gap-1 transition"
                             title="Enregistrer tous ces comptes dans l'inventaire des collaborateurs"
                           >
                             <Download className="w-3 h-3" />
                             Enregistrer dans l'Inventaire
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handlePurgeAndUnlinkAdUsers}
+                            className="px-2.5 py-1 bg-amber-600/25 hover:bg-amber-600/40 text-amber-300 rounded text-[10px] font-semibold border border-amber-500/30 flex items-center gap-1 transition"
+                            title="Délier tous les postes assignés et purger les comptes Active Directory"
+                          >
+                            <UserMinus className="w-3 h-3" />
+                            Délier & Purger l&apos;AD
                           </button>
                           <span className="text-[10px] font-mono text-emerald-400">À jour</span>
                         </div>
@@ -5161,7 +5196,40 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Option 2: Reset Complet */}
+              {/* Option 2: Délier & Purger les comptes AD */}
+              <div className="p-3.5 rounded-lg bg-amber-950/20 border border-amber-900/40 space-y-2 hover:border-amber-500/50 transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                    <UserMinus className="w-4 h-4 text-amber-400" />
+                    Délier les Postes & Purger l&apos;Active Directory
+                  </span>
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Ciblé • Annuaire & Affectations
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Supprime tous les comptes Active Directory de l&apos;annuaire local et retire
+                  l&apos;assignation des collaborateurs sur tous les bureaux, sièges et prises du
+                  plateau.
+                  <br />
+                  <strong className="text-slate-200">
+                    Vos équipements, câbles physiques et configurations réseau restent intacts.
+                  </strong>
+                </p>
+                <div className="pt-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handlePurgeAndUnlinkAdUsers}
+                    disabled={isResettingFull}
+                    className="px-3 py-1.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 rounded text-xs font-semibold flex items-center gap-1.5 transition"
+                  >
+                    <UserMinus className="w-3.5 h-3.5" />
+                    <span>Délier et réinitialiser les comptes AD</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 3: Reset Complet */}
               <div className="p-3.5 rounded-lg bg-red-950/20 border border-red-900/40 space-y-2 hover:border-red-500/50 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">

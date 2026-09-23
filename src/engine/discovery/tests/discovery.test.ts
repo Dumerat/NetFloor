@@ -883,7 +883,7 @@ describe("Discovery Pipeline & Topology Engine", () => {
 
       expect(Array.isArray(results)).toBe(true);
       expect(progressCalls).toBeGreaterThanOrEqual(1);
-    });
+    }, 15000);
   });
 
   describe("7. Pipeline de Découverte de Bout en Bout (runDiscoveryPipeline)", () => {

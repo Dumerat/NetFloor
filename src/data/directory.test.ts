@@ -12,6 +12,9 @@ import {
   addCustomDirectoryUser,
   removeCustomDirectoryUser,
   syncAdUsersToDirectory,
+  clearEnterpriseDirectory,
+  clearSyncedAdUsersFromDirectory,
+  unlinkAdAccountsFromNodes,
   DIRECTORY_STORAGE_KEY,
 } from "./directory";
 
@@ -185,5 +188,78 @@ describe("Gestion de l'annuaire d'entreprise (Local & Custom & AD)", () => {
     );
     expect(merged.some((u) => u.source === "AD" && u.fullName === "Thomas Bernard")).toBe(true);
     expect(merged.some((u) => u.source === "AD" && u.fullName === "Sophie Martin")).toBe(true);
+  });
+
+  it("clearSyncedAdUsersFromDirectory supprime les comptes AD et garde les custom", () => {
+    addCustomDirectoryUser({
+      fullName: "Prestataire Externe",
+      jobTitle: "Auditeur",
+      department: "Audit",
+      email: "auditeur@externe.fr",
+    });
+    syncAdUsersToDirectory([{ id: "ad-001", fullName: "Thomas Bernard", source: "AD" }]);
+    expect(loadEnterpriseDirectory()).toHaveLength(2);
+
+    const filtered = clearSyncedAdUsersFromDirectory();
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.fullName).toBe("Prestataire Externe");
+  });
+
+  it("clearEnterpriseDirectory vide tout le répertoire", () => {
+    addCustomDirectoryUser({
+      fullName: "User 1",
+      jobTitle: "Job",
+      department: "Dep",
+      email: "u1@test.com",
+    });
+    expect(loadEnterpriseDirectory()).toHaveLength(1);
+    clearEnterpriseDirectory();
+    expect(loadEnterpriseDirectory()).toHaveLength(0);
+  });
+});
+
+describe("unlinkAdAccountsFromNodes", () => {
+  it("délie les comptes AD spécifiés des bureaux, sièges et ports", () => {
+    const mockNodes = [
+      {
+        id: "desk-1",
+        assignedPerson: "Thomas Bernard",
+        assignedUserId: "ad-001",
+        department: "DSI",
+        seats: [
+          { seatIndex: 0, fullName: "Thomas Bernard", userId: "ad-001", department: "DSI" },
+          {
+            seatIndex: 1,
+            fullName: "Prestataire Externe",
+            userId: "custom-1",
+            department: "Audit",
+          },
+        ],
+        stackedPorts: [
+          { portIndex: 0, assignedPerson: "Thomas Bernard", assignedUserId: "ad-001" },
+        ],
+      },
+      {
+        id: "desk-2",
+        assignedPerson: "Prestataire Externe",
+        assignedUserId: "custom-1",
+        department: "Audit",
+      },
+    ];
+
+    const targetIds = new Set(["ad-001"]);
+    const targetNames = new Set(["thomas bernard"]);
+
+    const unlinked = unlinkAdAccountsFromNodes(mockNodes, targetIds, targetNames);
+
+    // desk-1 doit être délié
+    expect(unlinked[0]?.assignedPerson).toBeUndefined();
+    expect(unlinked[0]?.assignedUserId).toBeUndefined();
+    expect(unlinked[0]?.seats?.[0]?.fullName).toBeUndefined();
+    expect(unlinked[0]?.seats?.[1]?.fullName).toBe("Prestataire Externe");
+    expect(unlinked[0]?.stackedPorts?.[0]?.assignedPerson).toBeUndefined();
+
+    // desk-2 doit être préservé
+    expect(unlinked[1]?.assignedPerson).toBe("Prestataire Externe");
   });
 });

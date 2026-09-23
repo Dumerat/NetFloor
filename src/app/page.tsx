@@ -80,6 +80,7 @@ import {
   saveStoredVlanStyles,
 } from "@/data/vlanStyles";
 import { VlanStyleCustomizer } from "@/components/ui/VlanStyleCustomizer";
+import { unlinkAdAccountsFromNodes, clearEnterpriseDirectory } from "@/data/directory";
 
 // Chargement dynamique du canvas Konva sans SSR
 const DynamicFloorCanvas = dynamic(() => import("@/components/canvas/FloorCanvas"), {
@@ -2389,6 +2390,7 @@ export default function NetFloorApp() {
         visible: true,
       });
 
+      clearEnterpriseDirectory();
       setDbSyncStatus("SAVED");
       setLastSavedAt(
         new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
@@ -2398,8 +2400,14 @@ export default function NetFloorApp() {
     }
   };
 
+  // Déliement de tous les comptes AD sur les postes et sièges
+  const handleUnlinkAllAdUsers = useCallback(() => {
+    setNodes((prevNodes) => unlinkAdAccountsFromNodes(prevNodes));
+  }, []);
+
   // Remise à zéro complète du système (appelée par SettingsModal)
   const handleFullSystemReset = useCallback(async () => {
+    clearEnterpriseDirectory();
     setNodes([]);
     setRacks([]);
     setZones([]);
@@ -3787,6 +3795,7 @@ export default function NetFloorApp() {
         onUpdateVlanStyle={handleUpdateVlanStyle}
         onResetVlanStyles={handleResetVlanStyles}
         onFullSystemReset={handleFullSystemReset}
+        onUnlinkAllAdUsers={handleUnlinkAllAdUsers}
       />
 
       {/* 5. Modal Dédié Personnalisation Styles & Tracés des Câbles par VLAN */}

@@ -16,7 +16,7 @@ import {
   type IotCustomProperties,
 } from "@/components/canvas/EquipmentLayer";
 import { SwitchPortVisualizer } from "./SwitchPortVisualizer";
-import { ENTERPRISE_DIRECTORY } from "@/data/directory";
+import { ENTERPRISE_DIRECTORY, loadEnterpriseDirectory, DirectoryUser } from "@/data/directory";
 import { getRackPortAvailability } from "@/engine/spatial/autoRoute";
 import {
   Zap,
@@ -168,6 +168,24 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false);
   const [pickingSeatIndex, setPickingSeatIndex] = useState<number | null>(null);
   const [activeStackedPortIdx, setActiveStackedPortIdx] = useState(0);
+
+  // Annuaire d'entreprise synchronisé en direct
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>(() => {
+    if (typeof window !== "undefined") {
+      return loadEnterpriseDirectory();
+    }
+    return ENTERPRISE_DIRECTORY;
+  });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setDirectoryUsers(loadEnterpriseDirectory());
+    };
+    window.addEventListener("netfloor_directory_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("netfloor_directory_updated", handleUpdate);
+    };
+  }, []);
 
   // État interactif du Menu Baie & Branchements Internes
   const [rackTab, setRackTab] = useState<"PATCHING" | "EQUIPMENT" | "SWITCHES" | "VLANS">(
@@ -593,7 +611,7 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   );
 
   // Assignation d'un collaborateur à une place spécifique
-  const handleAssignUserToSeat = (seatIdx: number, user: (typeof ENTERPRISE_DIRECTORY)[0]) => {
+  const handleAssignUserToSeat = (seatIdx: number, user: DirectoryUser) => {
     if (!selectedNode) return;
     const labels = getDefaultSeatLabels(selectedNode.subType);
     const updatedSeats: DeskSeatOccupant[] = [...currentSeats];
@@ -703,11 +721,11 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
   const currentAssignedUser = useMemo(() => {
     if (!selectedNode) return null;
     if (selectedNode.assignedUserId) {
-      return ENTERPRISE_DIRECTORY.find((u) => u.id === selectedNode.assignedUserId) ?? null;
+      return directoryUsers.find((u) => u.id === selectedNode.assignedUserId) ?? null;
     }
     if (selectedNode.assignedPerson) {
       const match = selectedNode.assignedPerson.replace(/\s*\(.*\)/, "").trim();
-      const found = ENTERPRISE_DIRECTORY.find((u) =>
+      const found = directoryUsers.find((u) =>
         u.fullName.toLowerCase().includes(match.toLowerCase())
       );
       if (found) return found;
@@ -721,20 +739,20 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
       };
     }
     return null;
-  }, [selectedNode]);
+  }, [selectedNode, directoryUsers]);
 
   // Filtrage de l'annuaire selon la recherche
   const filteredUsers = useMemo(() => {
-    if (!userSearchQuery.trim()) return ENTERPRISE_DIRECTORY;
+    if (!userSearchQuery.trim()) return directoryUsers;
     const q = userSearchQuery.toLowerCase();
-    return ENTERPRISE_DIRECTORY.filter(
+    return directoryUsers.filter(
       (u) =>
         u.fullName.toLowerCase().includes(q) ||
         u.jobTitle.toLowerCase().includes(q) ||
         u.department.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q)
     );
-  }, [userSearchQuery]);
+  }, [userSearchQuery, directoryUsers]);
 
   // Sélecteur de mode : Consultation (Lecture seule / Télémétrie rapide) vs Modification (Édition complète)
   const renderModeBanner = () => (
@@ -6674,9 +6692,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
               {currentSeats.map((seat, idx) => {
                 const isOccupied = Boolean(seat.fullName);
                 const assignedUser = seat.userId
-                  ? ENTERPRISE_DIRECTORY.find((u) => u.id === seat.userId)
+                  ? directoryUsers.find((u) => u.id === seat.userId)
                   : seat.fullName
-                    ? ENTERPRISE_DIRECTORY.find(
+                    ? directoryUsers.find(
                         (u) => u.fullName.toLowerCase() === seat.fullName?.toLowerCase()
                       )
                     : null;
@@ -6909,9 +6927,9 @@ const CircuitInspectorComponent: FC<CircuitInspectorProps> = ({
                   <div className="space-y-2">
                     {currentSeats.map((seat, idx) => {
                       const assignedUser = seat.userId
-                        ? ENTERPRISE_DIRECTORY.find((u) => u.id === seat.userId)
+                        ? directoryUsers.find((u) => u.id === seat.userId)
                         : seat.fullName
-                          ? ENTERPRISE_DIRECTORY.find(
+                          ? directoryUsers.find(
                               (u) => u.fullName.toLowerCase() === seat.fullName?.toLowerCase()
                             )
                           : null;
