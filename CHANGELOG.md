@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.7.0...netfloor-architect-v0.8.0) (2026-09-23)
+
+
+### ✨ Nouvelles fonctionnalités
+
+* **discovery:** add intelligent multi-rack auto-placement and physical auto-wiring ([74f2666](https://github.com/Dumerat/NetFloor/commit/74f2666267cd7d29cfa43044e23510aa24230307))
+* **inventory:** add rack devices to inventory and dual desk-outlet placement for discovered PCs ([573e695](https://github.com/Dumerat/NetFloor/commit/573e6951a933856519bb755ad5fac43c0c80ea99))
+
 ## [0.7.0](https://github.com/Dumerat/NetFloor/compare/netfloor-architect-v0.6.0...netfloor-architect-v0.7.0) (2026-09-23)
 
 
