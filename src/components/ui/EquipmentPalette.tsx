@@ -377,6 +377,17 @@ export function isDeviceMatch(
   ) {
     return true;
   }
+  // Vérification des occupants / sièges pour les bureaux
+  if ((item as any).seats && Array.isArray((item as any).seats)) {
+    for (const seat of (item as any).seats) {
+      if (scannedMac && seat.macAddress && seat.macAddress.trim().toLowerCase() === scannedMac) {
+        return true;
+      }
+      if (scannedIp && seat.ipAddress && seat.ipAddress.trim() === scannedIp) {
+        return true;
+      }
+    }
+  }
   if (
     item.name &&
     scanned.name &&
@@ -812,15 +823,25 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
     });
   }, [scannedDevices, scannedFilterType, scannedSearchQuery]);
 
+  const furnitureScannedDevices = useMemo(() => {
+    return scannedDevices.filter((dev) => dev.deviceType === "WORKSTATION");
+  }, [scannedDevices]);
+
   const iotScannedDevices = useMemo(() => {
     return scannedDevices.filter(
       (dev) =>
         dev.deviceType === "ACCESS_POINT" ||
         dev.deviceType === "PRINTER" ||
         dev.deviceType === "CAMERA" ||
-        dev.deviceType === "WORKSTATION" ||
         dev.deviceType === "PHONE_VOIP" ||
-        dev.uSize === 0
+        (dev.uSize === 0 &&
+          dev.deviceType !== "WORKSTATION" &&
+          dev.deviceType !== "SWITCH" &&
+          dev.deviceType !== "SERVER" &&
+          dev.deviceType !== "FIREWALL" &&
+          dev.deviceType !== "ROUTER" &&
+          dev.deviceType !== "PATCH_PANEL" &&
+          dev.deviceType !== "PDU")
     );
   }, [scannedDevices]);
 
@@ -1103,6 +1124,45 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
       <div style="display:flex;flex-direction:column;">
         <span style="font-size:10px;font-weight:bold;color:#f8fafc;font-family:monospace;white-space:nowrap;">${dev.name}</span>
         <span style="font-size:8px;color:#fbbf24;font-family:monospace;">${dev.ip} • ${dev.manufacturer || dev.model}</span>
+      </div>
+    `;
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 40, 20);
+    setTimeout(() => {
+      if (document.body.contains(ghost)) {
+        document.body.removeChild(ghost);
+      }
+    }, 0);
+  };
+
+  const handleScannedWorkstationDragStart = (e: React.DragEvent, dev: ScannedDeviceItem) => {
+    e.dataTransfer.setData(
+      "application/json",
+      JSON.stringify({
+        type: "SCANNED_WORKSTATION_DEVICE",
+        device: dev,
+      })
+    );
+    e.dataTransfer.effectAllowed = "copy";
+    const ghost = document.createElement("div");
+    ghost.style.position = "absolute";
+    ghost.style.top = "-1000px";
+    ghost.style.left = "-1000px";
+    ghost.style.zIndex = "99999";
+    ghost.style.pointerEvents = "none";
+    ghost.style.display = "flex";
+    ghost.style.alignItems = "center";
+    ghost.style.gap = "8px";
+    ghost.style.padding = "6px 12px";
+    ghost.style.backgroundColor = "#090d16";
+    ghost.style.border = "2px solid #10b981";
+    ghost.style.borderRadius = "6px";
+    ghost.style.boxShadow = "0 10px 25px rgba(0,0,0,0.8), 0 0 15px rgba(16, 185, 129, 0.4)";
+    ghost.innerHTML = `
+      <span style="font-size:16px;">💻</span>
+      <div style="display:flex;flex-direction:column;">
+        <span style="font-size:10px;font-weight:bold;color:#f8fafc;font-family:monospace;white-space:nowrap;">${dev.name}</span>
+        <span style="font-size:8px;color:#34d399;font-family:monospace;">Poste Bureau + Prise • ${dev.ip || "DHCP"}</span>
       </div>
     `;
     document.body.appendChild(ghost);
@@ -1655,6 +1715,83 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                       </div>
                     )}
 
+                    {/* Section Postes de travail et PC Découverts */}
+                    {selectedCategory === "FURNITURE" && furnitureScannedDevices.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
+                            <Monitor className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Postes de Travail & PC Découverts</span>
+                          </div>
+                          <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            {furnitureScannedDevices.length} dispos
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {furnitureScannedDevices.map((dev) => {
+                            const placement = getDevicePlacement(dev);
+                            return (
+                              <div
+                                key={dev.id}
+                                draggable={true}
+                                onDragStart={(e) => handleScannedWorkstationDragStart(e, dev)}
+                                className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-lg transition flex flex-col gap-1.5 group cursor-grab active:cursor-grabbing hover:shadow-md"
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition flex-shrink-0" />
+                                    <div className="w-7 h-7 rounded-md bg-slate-850 flex items-center justify-center text-slate-300 group-hover:text-emerald-400 transition">
+                                      <span className="text-sm">💻</span>
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-semibold text-slate-200 group-hover:text-white">
+                                        {dev.name}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-sans">
+                                        {dev.model}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                                      Poste Client
+                                    </span>
+                                    {placement && (
+                                      <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                        Placé
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-400 bg-slate-950 p-1.5 rounded border border-slate-850">
+                                  <div>IP : {dev.ip}</div>
+                                  <div className="truncate">MAC : {dev.mac}</div>
+                                </div>
+
+                                {placement ? (
+                                  <div className="flex items-center justify-between text-[10px] bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 px-2 py-1 rounded">
+                                    <span className="font-semibold">{placement.locationLabel}</span>
+                                    <span className="text-[9px] text-emerald-400/80">
+                                      Glisser pour replacer
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="text-[9px] text-slate-500 flex items-center justify-between font-mono pt-0.5">
+                                    <span>🟢 Découvert</span>
+                                    <span className="text-emerald-400 font-semibold group-hover:translate-x-0.5 transition">
+                                      Glisser sur le plan (Bureau + Prise) →
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Bannière d'introduction sous-menu IOT */}
                     {selectedCategory === "IOT" && (
                       <>
@@ -1687,27 +1824,16 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                                 const placement = getDevicePlacement(dev);
                                 const isAp = dev.deviceType === "ACCESS_POINT";
                                 const isCam = dev.deviceType === "CAMERA";
-                                const isPc = dev.deviceType === "WORKSTATION";
                                 const isPhone = dev.deviceType === "PHONE_VOIP";
 
-                                const emote = isAp
-                                  ? "📶"
-                                  : isCam
-                                    ? "🎥"
-                                    : isPc
-                                      ? "💻"
-                                      : isPhone
-                                        ? "📞"
-                                        : "🖨️";
+                                const emote = isAp ? "📶" : isCam ? "🎥" : isPhone ? "📞" : "🖨️";
                                 const badgeLabel = isAp
                                   ? "Wi-Fi AP"
                                   : isCam
                                     ? "Caméra IP"
-                                    : isPc
-                                      ? "Poste Client"
-                                      : isPhone
-                                        ? "VoIP"
-                                        : "Imprimante";
+                                    : isPhone
+                                      ? "VoIP"
+                                      : "Imprimante";
 
                                 return (
                                   <div

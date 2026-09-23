@@ -19,6 +19,7 @@ import {
   GripVertical,
   Phone,
   Laptop,
+  Network,
 } from "lucide-react";
 import { NodeDisplay, RackDisplay } from "@/components/canvas/EquipmentLayer";
 import { loadEnterpriseDirectory, DirectoryUser } from "@/data/directory";
@@ -26,7 +27,28 @@ import { VlanStyle, DEFAULT_VLAN_STYLES } from "@/data/vlanStyles";
 import { FloorZone } from "@/types/zones";
 
 export type InventoryTab = "USERS" | "DESKS" | "PORTS" | "DEVICES" | "INFRA";
-export type DeviceSubFilter = "ALL" | "PRINTER" | "WIFI" | "CAMERA" | "OTHER";
+export type DeviceSubFilter =
+  "ALL" | "SWITCH" | "SERVER" | "WORKSTATION" | "PRINTER" | "WIFI" | "CAMERA" | "OTHER";
+
+export interface UnifiedDeviceItem {
+  id: string;
+  name: string;
+  categoryType: "SWITCH" | "SERVER" | "WORKSTATION" | "PRINTER" | "WIFI" | "CAMERA" | "OTHER";
+  deviceTypeLabel: string;
+  model: string;
+  ipAddress?: string | undefined;
+  macAddress?: string | undefined;
+  status: "ONLINE" | "OFFLINE" | "WARNING";
+  location: string;
+  isRackDevice: boolean;
+  rackId?: string | undefined;
+  rackName?: string | undefined;
+  slotU?: number | undefined;
+  uSize?: number | undefined;
+  portsCount?: number | undefined;
+  node?: NodeDisplay | undefined;
+  vlanId?: number | undefined;
+}
 
 interface InventoryPanelProps {
   nodes: NodeDisplay[];
@@ -402,33 +424,132 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
     return list;
   }, [outletNodes]);
 
-  // Équipements terminaux (Prises/Modules avec rôle spécifique : Wi-Fi, Imprimante, Caméra, ou sous-type spécial)
-  const deviceNodes = useMemo(() => {
-    return nodes.filter((n) => {
-      // Exclure les gros bureaux et les baies
-      if (n.type === "PATCH_PANEL") return false;
-      if (n.subType === "RACK_42U" || n.subType === "RACK_18U") return false;
-      if (
-        n.type === "DESK" &&
-        n.subType !== "DESK_SOLO" &&
-        n.subType !== "BENCH_DOUBLE" &&
-        n.subType !== "BENCH_QUAD" &&
-        n.subType !== "MEETING_TABLE"
-      ) {
-        return true;
+  // Consolidation de tous les équipements IT : équipements de baies informatiques + équipements de plancher
+  const allInventoryDevices: UnifiedDeviceItem[] = useMemo(() => {
+    const list: UnifiedDeviceItem[] = [];
+
+    // 1. Équipements rackés dans les baies informatiques
+    for (const rack of racks) {
+      for (const dev of rack.devices || []) {
+        const rawType = (dev.deviceType || "").toUpperCase();
+        let categoryType: UnifiedDeviceItem["categoryType"] = "OTHER";
+        let deviceTypeLabel = "Équipement Baie";
+
+        if (rawType === "SWITCH") {
+          categoryType = "SWITCH";
+          deviceTypeLabel = "Commutateur Réseau (Switch)";
+        } else if (rawType === "SERVER") {
+          categoryType = "SERVER";
+          deviceTypeLabel = "Serveur Rackable";
+        } else if (rawType === "FIREWALL" || rawType === "ROUTER") {
+          categoryType = "SWITCH";
+          deviceTypeLabel = rawType === "FIREWALL" ? "Pare-Feu (Firewall)" : "Routeur Réseau";
+        } else if (rawType === "PATCH_PANEL") {
+          categoryType = "OTHER";
+          deviceTypeLabel = "Panneau de Brassage";
+        } else if (rawType === "PDU") {
+          categoryType = "OTHER";
+          deviceTypeLabel = "Alimentation (PDU)";
+        }
+
+        list.push({
+          id: dev.id,
+          name: dev.name,
+          categoryType,
+          deviceTypeLabel,
+          model: dev.model || `${dev.brand || ""} ${dev.deviceType}`.trim() || "Équipement Baie",
+          ipAddress: dev.ipAddress,
+          macAddress: dev.macAddress,
+          status: dev.status === "OFFLINE" ? "OFFLINE" : "ONLINE",
+          location: `Baie : ${rack.name} (U${dev.slotU ?? "?"})`,
+          isRackDevice: true,
+          rackId: rack.id,
+          rackName: rack.name,
+          slotU: dev.slotU,
+          uSize: dev.uSize,
+          portsCount: dev.portsCount,
+        });
       }
-      // Conserver les équipements à rôle périphérique ou connectique spéciale
-      const isSpecialRole =
-        n.outletRole === "WIFI" ||
-        n.outletRole === "PRINTER" ||
-        n.outletRole === "CAMERA" ||
-        n.outletRole === "VOIP" ||
-        n.subType === "WIFI_AP" ||
-        n.subType === "PRINTER_STATION" ||
-        n.subType === "CAMERA_IP";
-      return isSpecialRole;
-    });
-  }, [nodes]);
+    }
+
+    // 2. Équipements de plancher (Prises/Modules avec rôle spécifique, Wi-Fi, Imprimantes, Caméras, Postes)
+    for (const n of nodes) {
+      if (n.type === "PATCH_PANEL" || n.subType === "RACK_42U" || n.subType === "RACK_18U")
+        continue;
+
+      const isPrinter = n.outletRole === "PRINTER" || n.subType === "PRINTER_STATION";
+      const isWifi = n.outletRole === "WIFI" || n.subType === "WIFI_AP";
+      const isCamera = n.outletRole === "CAMERA" || n.subType === "CAMERA_IP";
+      const isVoip = n.outletRole === "VOIP";
+      const isWorkstation =
+        (n.type === "DESK" &&
+          (Boolean(n.ipAddress) ||
+            Boolean(n.macAddress) ||
+            Boolean(n.seats?.some((s) => s.fullName)))) ||
+        (n.type === "WALL_OUTLET" && (n.subType === "DESK_SOLO" || Boolean(n.attachedToDeskId)));
+
+      if (!isPrinter && !isWifi && !isCamera && !isVoip && !isWorkstation && n.type !== "DESK") {
+        continue;
+      }
+
+      let categoryType: UnifiedDeviceItem["categoryType"] = "OTHER";
+      let deviceTypeLabel = n.description || "Périphérique IT";
+
+      if (isPrinter) {
+        categoryType = "PRINTER";
+        deviceTypeLabel = "Imprimante Réseau / MFP";
+      } else if (isWifi) {
+        categoryType = "WIFI";
+        deviceTypeLabel = "Borne Wi-Fi Haute Densité";
+      } else if (isCamera) {
+        categoryType = "CAMERA";
+        deviceTypeLabel = "Caméra de Surveillance IP";
+      } else if (isVoip) {
+        categoryType = "OTHER";
+        deviceTypeLabel = "Poste Téléphonie VoIP";
+      } else if (isWorkstation) {
+        categoryType = "WORKSTATION";
+        deviceTypeLabel = "Poste de Travail / PC Client";
+      }
+
+      const parentZone = zones.find(
+        (z) =>
+          n.xMm >= z.xMm &&
+          n.xMm <= z.xMm + z.widthMm &&
+          n.yMm >= z.yMm &&
+          n.yMm <= z.yMm + z.heightMm
+      );
+
+      const occupantName = n.seats?.[0]?.fullName || n.assignedPerson;
+      const location = parentZone
+        ? `Zone : ${parentZone.name}`
+        : occupantName
+          ? `Plancher • ${occupantName}`
+          : "Plancher / Étage";
+
+      list.push({
+        id: n.id,
+        name: n.name,
+        categoryType,
+        deviceTypeLabel,
+        model: n.description || deviceTypeLabel,
+        ipAddress: n.ipAddress,
+        macAddress: n.macAddress,
+        status:
+          n.pingStatus === "OFFLINE"
+            ? "OFFLINE"
+            : n.pingStatus === "DEGRADED"
+              ? "WARNING"
+              : "ONLINE",
+        location,
+        isRackDevice: false,
+        node: n,
+        vlanId: n.vlanId,
+      });
+    }
+
+    return list;
+  }, [nodes, racks, zones]);
 
   // Infrastructure : Baies informatiques consolidées avec métriques
   const infraMetrics = useMemo(() => {
@@ -556,46 +677,24 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
   // Filtre Équipements
   const filteredDevices = useMemo(() => {
-    return deviceNodes.filter((node) => {
+    return allInventoryDevices.filter((item) => {
       // 1. Sous-filtre de type
-      if (
-        deviceSubFilter === "PRINTER" &&
-        node.outletRole !== "PRINTER" &&
-        node.subType !== "PRINTER_STATION"
-      ) {
-        return false;
-      }
-      if (deviceSubFilter === "WIFI" && node.outletRole !== "WIFI" && node.subType !== "WIFI_AP") {
-        return false;
-      }
-      if (
-        deviceSubFilter === "CAMERA" &&
-        node.outletRole !== "CAMERA" &&
-        node.subType !== "CAMERA_IP"
-      ) {
-        return false;
-      }
-      if (
-        deviceSubFilter === "OTHER" &&
-        (node.outletRole === "PRINTER" ||
-          node.subType === "PRINTER_STATION" ||
-          node.outletRole === "WIFI" ||
-          node.subType === "WIFI_AP" ||
-          node.outletRole === "CAMERA" ||
-          node.subType === "CAMERA_IP")
-      ) {
+      if (deviceSubFilter !== "ALL" && item.categoryType !== deviceSubFilter) {
         return false;
       }
 
       // 2. Recherche textuelle
       if (!query) return true;
       return (
-        node.name.toLowerCase().includes(query) ||
-        (node.description && node.description.toLowerCase().includes(query)) ||
-        (node.ipAddress && node.ipAddress.toLowerCase().includes(query))
+        item.name.toLowerCase().includes(query) ||
+        (item.model && item.model.toLowerCase().includes(query)) ||
+        (item.ipAddress && item.ipAddress.toLowerCase().includes(query)) ||
+        (item.macAddress && item.macAddress.toLowerCase().includes(query)) ||
+        (item.location && item.location.toLowerCase().includes(query)) ||
+        (item.deviceTypeLabel && item.deviceTypeLabel.toLowerCase().includes(query))
       );
     });
-  }, [deviceNodes, deviceSubFilter, query]);
+  }, [allInventoryDevices, deviceSubFilter, query]);
 
   // -------------------------------------------------------------
   // 3. ACTIONS
@@ -603,6 +702,16 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   const handleItemClick = (node: NodeDisplay) => {
     if (onSelectNode) onSelectNode(node);
     if (onFocusNode) onFocusNode(node.id);
+  };
+
+  const handleDeviceItemClick = (item: UnifiedDeviceItem) => {
+    if (item.isRackDevice && item.rackId) {
+      if (onFocusNode) onFocusNode(item.rackId);
+      const rackNode = nodes.find((n) => n.id === item.rackId);
+      if (rackNode && onSelectNode) onSelectNode(rackNode);
+    } else if (item.node) {
+      handleItemClick(item.node);
+    }
   };
 
   return (
@@ -745,7 +854,40 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 : "text-slate-400 hover:text-white hover:bg-slate-800"
             }`}
           >
-            Tous ({deviceNodes.length})
+            Tous ({allInventoryDevices.length})
+          </button>
+          <button
+            onClick={() => setDeviceSubFilter("SWITCH")}
+            className={`px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap transition ${
+              deviceSubFilter === "SWITCH"
+                ? "bg-sky-600 text-white font-semibold"
+                : "text-slate-400 hover:text-sky-400 hover:bg-slate-850"
+            }`}
+          >
+            <Network className="w-3 h-3" /> Switchs (
+            {allInventoryDevices.filter((d) => d.categoryType === "SWITCH").length})
+          </button>
+          <button
+            onClick={() => setDeviceSubFilter("SERVER")}
+            className={`px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap transition ${
+              deviceSubFilter === "SERVER"
+                ? "bg-purple-600 text-white font-semibold"
+                : "text-slate-400 hover:text-purple-400 hover:bg-slate-850"
+            }`}
+          >
+            <Server className="w-3 h-3" /> Serveurs (
+            {allInventoryDevices.filter((d) => d.categoryType === "SERVER").length})
+          </button>
+          <button
+            onClick={() => setDeviceSubFilter("WORKSTATION")}
+            className={`px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap transition ${
+              deviceSubFilter === "WORKSTATION"
+                ? "bg-emerald-600 text-white font-semibold"
+                : "text-slate-400 hover:text-emerald-400 hover:bg-slate-850"
+            }`}
+          >
+            <Laptop className="w-3 h-3" /> Postes / PC (
+            {allInventoryDevices.filter((d) => d.categoryType === "WORKSTATION").length})
           </button>
           <button
             onClick={() => setDeviceSubFilter("PRINTER")}
@@ -755,17 +897,19 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 : "text-slate-400 hover:text-amber-400 hover:bg-slate-850"
             }`}
           >
-            <Printer className="w-3 h-3" /> Imprimantes
+            <Printer className="w-3 h-3" /> Imprimantes (
+            {allInventoryDevices.filter((d) => d.categoryType === "PRINTER").length})
           </button>
           <button
             onClick={() => setDeviceSubFilter("WIFI")}
             className={`px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap transition ${
               deviceSubFilter === "WIFI"
-                ? "bg-sky-600 text-white font-semibold"
-                : "text-slate-400 hover:text-sky-400 hover:bg-slate-850"
+                ? "bg-blue-600 text-white font-semibold"
+                : "text-slate-400 hover:text-blue-400 hover:bg-slate-850"
             }`}
           >
-            <Wifi className="w-3 h-3" /> Wi-Fi
+            <Wifi className="w-3 h-3" /> Wi-Fi (
+            {allInventoryDevices.filter((d) => d.categoryType === "WIFI").length})
           </button>
           <button
             onClick={() => setDeviceSubFilter("CAMERA")}
@@ -775,17 +919,18 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 : "text-slate-400 hover:text-rose-400 hover:bg-slate-850"
             }`}
           >
-            <Camera className="w-3 h-3" /> Caméras
+            <Camera className="w-3 h-3" /> Caméras (
+            {allInventoryDevices.filter((d) => d.categoryType === "CAMERA").length})
           </button>
           <button
             onClick={() => setDeviceSubFilter("OTHER")}
             className={`px-2 py-1 rounded-full whitespace-nowrap transition ${
               deviceSubFilter === "OTHER"
-                ? "bg-purple-600 text-white font-semibold"
-                : "text-slate-400 hover:text-purple-400 hover:bg-slate-850"
+                ? "bg-cyan-600 text-white font-semibold"
+                : "text-slate-400 hover:text-cyan-400 hover:bg-slate-850"
             }`}
           >
-            Autres
+            Autres ({allInventoryDevices.filter((d) => d.categoryType === "OTHER").length})
           </button>
         </div>
       )}
@@ -1468,32 +1613,46 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 Aucun équipement ne correspond aux filtres.
               </div>
             ) : (
-              filteredDevices.map((node) => {
-                const isPrinter =
-                  node.outletRole === "PRINTER" || node.subType === "PRINTER_STATION";
-                const isWifi = node.outletRole === "WIFI" || node.subType === "WIFI_AP";
-                const isCamera = node.outletRole === "CAMERA" || node.subType === "CAMERA_IP";
+              filteredDevices.map((item) => {
+                const isSwitch = item.categoryType === "SWITCH";
+                const isServer = item.categoryType === "SERVER";
+                const isWorkstation = item.categoryType === "WORKSTATION";
+                const isPrinter = item.categoryType === "PRINTER";
+                const isWifi = item.categoryType === "WIFI";
+                const isCamera = item.categoryType === "CAMERA";
+
+                const iconBoxClass = isSwitch
+                  ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
+                  : isServer
+                    ? "bg-purple-500/15 border-purple-500/30 text-purple-400"
+                    : isWorkstation
+                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                      : isPrinter
+                        ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                        : isWifi
+                          ? "bg-blue-500/15 border-blue-500/30 text-blue-400"
+                          : isCamera
+                            ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
+                            : "bg-cyan-500/15 border-cyan-500/30 text-cyan-400";
 
                 return (
                   <div
-                    key={node.id}
-                    onClick={() => handleItemClick(node)}
+                    key={item.id}
+                    onClick={() => handleDeviceItemClick(item)}
                     className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 cursor-pointer transition flex flex-col gap-1.5 group"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <div
-                          className={`w-7 h-7 rounded-lg border flex items-center justify-center ${
-                            isPrinter
-                              ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
-                              : isWifi
-                                ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
-                                : isCamera
-                                  ? "bg-rose-500/15 border-rose-500/30 text-rose-400"
-                                  : "bg-purple-500/15 border-purple-500/30 text-purple-400"
-                          }`}
+                          className={`w-7 h-7 rounded-lg border flex items-center justify-center ${iconBoxClass}`}
                         >
-                          {isPrinter ? (
+                          {isSwitch ? (
+                            <Network className="w-4 h-4" />
+                          ) : isServer ? (
+                            <Server className="w-4 h-4" />
+                          ) : isWorkstation ? (
+                            <Laptop className="w-4 h-4" />
+                          ) : isPrinter ? (
                             <Printer className="w-4 h-4" />
                           ) : isWifi ? (
                             <Wifi className="w-4 h-4" />
@@ -1504,32 +1663,62 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                           )}
                         </div>
                         <div>
-                          <div className="text-xs font-semibold text-slate-100 group-hover:text-cyan-300 transition">
-                            {node.name}
+                          <div className="text-xs font-semibold text-slate-100 group-hover:text-cyan-300 transition flex items-center gap-1.5">
+                            <span>{item.name}</span>
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                item.status === "ONLINE"
+                                  ? "bg-emerald-400"
+                                  : item.status === "WARNING"
+                                    ? "bg-amber-400"
+                                    : "bg-rose-500"
+                              }`}
+                              title={item.status}
+                            />
                           </div>
                           <div className="text-[10px] text-slate-400">
-                            {isPrinter
-                              ? "Imprimante Réseau / MFP"
-                              : isWifi
-                                ? "Borne Wi-Fi Haute Densité"
-                                : isCamera
-                                  ? "Caméra de Surveillance IP"
-                                  : node.description || "Périphérique IT"}
+                            {item.deviceTypeLabel} • {item.model}
                           </div>
                         </div>
                       </div>
 
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition" />
+                      <div className="flex items-center gap-1.5">
+                        {item.isRackDevice ? (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
+                            Baie {item.uSize ? `• ${item.uSize}U` : ""}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                            Plancher
+                          </span>
+                        )}
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition" />
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-slate-400 flex items-center justify-between font-mono bg-slate-950/40 px-1.5 py-0.5 rounded">
+                      <span className="flex items-center gap-1">
+                        <HardDrive className="w-3 h-3 text-slate-500" />
+                        <span>{item.location}</span>
+                      </span>
+                      {item.portsCount && (
+                        <span className="text-slate-400">{item.portsCount} Ports</span>
+                      )}
                     </div>
 
                     <div className="bg-slate-950/70 rounded p-1.5 border border-slate-800/80 text-[10px] flex items-center justify-between font-mono gap-1">
-                      <span className="shrink-0 whitespace-nowrap text-slate-400">
-                        IP / Statut&nbsp;:
-                      </span>
-                      <span className="min-w-0 truncate text-cyan-400">
-                        {node.ipAddress ||
-                          (isWifi ? "192.168.10.25" : isPrinter ? "192.168.20.150" : "DHCP")}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500">IP:</span>
+                        <span className="text-cyan-400">{item.ipAddress || "DHCP / —"}</span>
+                      </div>
+                      {item.macAddress && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-500">MAC:</span>
+                          <span className="text-slate-400 truncate max-w-[110px]">
+                            {item.macAddress}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

@@ -6,7 +6,7 @@ import {
   discoveryLogs,
   nodes,
 } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { ScanOptions, DiscoveredSwitch, TopologyLink, TopologyDiffItem } from "./types";
 import { executePingSweep } from "./ping-sweep";
 import { crawlSwitchLldpCdp } from "./snmp-crawler";
@@ -298,8 +298,24 @@ export async function runDiscoveryPipeline(
         })
         .returning();
 
-      if (inserted) {
-        deviceIdMap.set(sw.id, inserted.id);
+      let swInsertedId = inserted?.id;
+      if (!swInsertedId) {
+        const [existing] = await db
+          .select({ id: discoveredDevices.id })
+          .from(discoveredDevices)
+          .where(and(eq(discoveredDevices.jobId, jobId), eq(discoveredDevices.ipAddress, sw.ip)));
+        swInsertedId = existing?.id;
+      }
+
+      if (swInsertedId) {
+        deviceIdMap.set(sw.id, swInsertedId);
+        deviceIdMap.set(sw.ip, swInsertedId);
+        if (sw.mac) {
+          deviceIdMap.set(sw.mac, swInsertedId);
+          deviceIdMap.set(sw.mac.toUpperCase(), swInsertedId);
+          deviceIdMap.set(sw.mac.toLowerCase(), swInsertedId);
+        }
+        if (sw.sysName) deviceIdMap.set(sw.sysName, swInsertedId);
       }
     }
 
@@ -327,15 +343,66 @@ export async function runDiscoveryPipeline(
         .onConflictDoNothing()
         .returning();
 
-      if (inserted) {
-        deviceIdMap.set(`dev-${h.mac.replace(/:/g, "")}`, inserted.id);
+      let hostInsertedId = inserted?.id;
+      if (!hostInsertedId) {
+        const [existing] = await db
+          .select({ id: discoveredDevices.id })
+          .from(discoveredDevices)
+          .where(and(eq(discoveredDevices.jobId, jobId), eq(discoveredDevices.macAddress, h.mac)));
+        hostInsertedId = existing?.id;
+      }
+
+      if (hostInsertedId) {
+        deviceIdMap.set(`dev-${h.mac.replace(/:/g, "")}`, hostInsertedId);
+        deviceIdMap.set(h.mac, hostInsertedId);
+        deviceIdMap.set(h.mac.toUpperCase(), hostInsertedId);
+        deviceIdMap.set(h.mac.toLowerCase(), hostInsertedId);
+        deviceIdMap.set(h.ip, hostInsertedId);
+        if (h.hostname) deviceIdMap.set(h.hostname, hostInsertedId);
       }
     }
 
     // 2. Sauvegarder les liaisons L2 découvertes
     for (const link of allDiscoveredLinks) {
-      const srcDbId = deviceIdMap.get(link.sourceDeviceId);
-      const tgtDbId = deviceIdMap.get(link.targetDeviceId);
+      let srcDbId = deviceIdMap.get(link.sourceDeviceId) || deviceIdMap.get(link.sourceDeviceName);
+      let tgtDbId = deviceIdMap.get(link.targetDeviceId) || deviceIdMap.get(link.targetDeviceName);
+
+      // Si non trouvé dans la map en mémoire, tenter une recherche directe en BDD
+      if (!srcDbId && link.sourceDeviceId) {
+        const [found] = await db
+          .select({ id: discoveredDevices.id })
+          .from(discoveredDevices)
+          .where(
+            and(
+              eq(discoveredDevices.jobId, jobId),
+              or(
+                eq(discoveredDevices.ipAddress, link.sourceDeviceId),
+                eq(discoveredDevices.macAddress, link.sourceDeviceId),
+                eq(discoveredDevices.hostname, link.sourceDeviceName)
+              )
+            )
+          )
+          .limit(1);
+        if (found) srcDbId = found.id;
+      }
+
+      if (!tgtDbId && link.targetDeviceId) {
+        const [found] = await db
+          .select({ id: discoveredDevices.id })
+          .from(discoveredDevices)
+          .where(
+            and(
+              eq(discoveredDevices.jobId, jobId),
+              or(
+                eq(discoveredDevices.ipAddress, link.targetDeviceId),
+                eq(discoveredDevices.macAddress, link.targetDeviceId),
+                eq(discoveredDevices.hostname, link.targetDeviceName)
+              )
+            )
+          )
+          .limit(1);
+        if (found) tgtDbId = found.id;
+      }
 
       if (srcDbId && tgtDbId) {
         await db.insert(discoveredConnections).values({

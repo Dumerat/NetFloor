@@ -104,6 +104,29 @@ export async function probeTcpHost(
 }
 
 /**
+ * Sonde ICMP native système (ping OS).
+ * Fonctionne sans privilèges root et met automatiquement à jour le cache ARP du système.
+ */
+export async function probeIcmpHost(ip: string, timeoutMs = 350): Promise<boolean> {
+  if (!ip || ip === "0.0.0.0") return false;
+
+  try {
+    const isWindows = process.platform === "win32";
+    const cmd = isWindows
+      ? `ping -n 1 -w ${timeoutMs} ${ip}`
+      : `ping -c 1 -W ${Math.max(1, Math.ceil(timeoutMs / 1000))} ${ip}`;
+
+    const { stdout } = await execAsync(cmd, { timeout: timeoutMs + 600 });
+    const lower = stdout.toLowerCase();
+    return isWindows
+      ? lower.includes("ttl=") || lower.includes("temps=") || lower.includes("temps<")
+      : lower.includes("bytes from") || lower.includes("1 received");
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Récupère le cache ARP du système d'exploitation pour mapper IP <-> MAC locales.
  */
 export async function getSystemArpTable(): Promise<Map<string, string>> {
@@ -179,10 +202,16 @@ export async function executePingSweep(
         const knownMac = arpTable.get(ip);
         const tcpProbe = await probeTcpHost(ip, [80, 443, 22, 135, 445, 161], timeoutMs);
 
-        const isAlive = tcpProbe.isAlive || Boolean(knownMac);
+        let isAlive = tcpProbe.isAlive || Boolean(knownMac);
+        if (!isAlive) {
+          const icmpAlive = await probeIcmpHost(ip, timeoutMs);
+          if (icmpAlive) {
+            isAlive = true;
+          }
+        }
         if (!isAlive) return null;
 
-        // Si l'hôte est vivant mais sans MAC encore apprise, re-vérifier la table ARP après son émission TCP
+        // Si l'hôte est vivant mais sans MAC encore apprise, re-vérifier la table ARP après son émission TCP/ICMP
         let mac = knownMac;
         if (!mac) {
           const freshArp = await getSystemArpTable();

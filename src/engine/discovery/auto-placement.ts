@@ -535,18 +535,73 @@ export function autoDeployDiscoveredTopology(options: AutoPlacementOptions): Aut
       const row = Math.floor(workstationIndex / cols);
       xMm = 12000 + col * 2400;
       yMm = 8500 + row * 2000;
-      widthMm = 1400;
+      widthMm = 1600;
       heightMm = 800;
       subType = "DESK_SOLO";
       outletRole = "DATA";
       workstationIndex++;
       summary.workstationsOnFloor.push(attr.name);
+
+      // Création conjointe : 1. Le Bureau physique (DESK) avec son occupant
+      const deskNode: NodeDisplay = {
+        id: raw.id,
+        name: `Bureau - ${attr.name}`,
+        type: "DESK",
+        category: "FURNITURE",
+        subType: "DESK_SOLO",
+        xMm,
+        yMm,
+        widthMm,
+        heightMm,
+        ipAddress: raw.ipAddress,
+        macAddress: raw.macAddress,
+        pingStatus: "ONLINE",
+        pingLatencyMs: 2,
+        assignedPerson: attr.name,
+        description: raw.model || raw.sysDescr?.slice(0, 60) || "Poste de travail découvert",
+        isPatched: false,
+        vlanId: raw.vlanId || 20,
+        seats: [
+          {
+            seatIndex: 0,
+            seatLabel: "Poste 1",
+            fullName: attr.name,
+          },
+        ],
+      };
+      deployedNodes.push(deskNode);
+
+      // 2. La Prise RJ45 solidaire (WALL_OUTLET) raccordée au commutateur
+      const outletNode: NodeDisplay = {
+        id: `outlet-${raw.id}`,
+        name: `Prise RJ45 - ${attr.name}`,
+        type: "WALL_OUTLET",
+        category: "CONNECTIVITY",
+        subType: "GENERIC_PORT",
+        outletRole: "DATA",
+        xMm: xMm + 400,
+        yMm: yMm + 150,
+        widthMm: 120,
+        heightMm: 120,
+        attachedToDeskId: raw.id,
+        attachedSeatIndex: 0,
+        ipAddress: raw.ipAddress,
+        macAddress: raw.macAddress,
+        pingStatus: "ONLINE",
+        pingLatencyMs: 2,
+        description: `Prise réseau raccordée au ${attr.name}`,
+        isPatched: false,
+        vlanId: raw.vlanId || 20,
+      };
+      deployedNodes.push(outletNode);
+      continue;
     }
 
     const newNode: NodeDisplay = {
       id: raw.id,
       name: attr.name,
       type: "WALL_OUTLET",
+      category: "IOT",
       xMm,
       yMm,
       widthMm,
@@ -598,9 +653,11 @@ export function autoDeployDiscoveredTopology(options: AutoPlacementOptions): Aut
         (m) => m.rackDevice.id === conn.targetDeviceId || m.rackDevice.name === conn.targetDeviceId
       );
 
-    const targetFloorNode = deployedNodes.find(
+    const targetFloorNodes = deployedNodes.filter(
       (n) =>
         n.id === conn.targetDeviceId ||
+        n.id === `outlet-${conn.targetDeviceId}` ||
+        n.attachedToDeskId === conn.targetDeviceId ||
         (n.ipAddress && n.ipAddress === conn.targetDeviceId) ||
         (n.macAddress && n.macAddress.toUpperCase() === conn.targetDeviceId.toUpperCase())
     );
@@ -650,26 +707,28 @@ export function autoDeployDiscoveredTopology(options: AutoPlacementOptions): Aut
       }
     }
 
-    // CAS B : Raccordement FDB vers un équipement sur le plancher (Workstation, Imprimante, Wi-Fi)
-    if (isFdb && sourceMapping && targetFloorNode) {
+    // CAS B : Raccordement FDB vers un équipement sur le plancher (Workstation bureau + prise, Imprimante, Wi-Fi)
+    if (isFdb && sourceMapping && targetFloorNodes.length > 0) {
       summary.fdbAccessLinksCount++;
-      const vlanId =
-        conn.vlanId ||
-        targetFloorNode.vlanId ||
-        (targetFloorNode.outletRole === "PRINTER"
-          ? 40
-          : targetFloorNode.outletRole === "VOIP"
-            ? 30
-            : targetFloorNode.outletRole === "WIFI"
-              ? 50
-              : 20);
+      for (const targetFloorNode of targetFloorNodes) {
+        const vlanId =
+          conn.vlanId ||
+          targetFloorNode.vlanId ||
+          (targetFloorNode.outletRole === "PRINTER"
+            ? 40
+            : targetFloorNode.outletRole === "VOIP"
+              ? 30
+              : targetFloorNode.outletRole === "WIFI"
+                ? 50
+                : 20);
 
-      // Câbler le nœud vers la baie et le port du switch
-      targetFloorNode.isPatched = true;
-      targetFloorNode.connectedRackId = sourceMapping.rackId;
-      targetFloorNode.connectedSwitchId = sourceMapping.rackDevice.id;
-      targetFloorNode.connectedSwitchPort = conn.sourcePortName;
-      targetFloorNode.vlanId = vlanId;
+        // Câbler le nœud vers la baie et le port du switch
+        targetFloorNode.isPatched = true;
+        targetFloorNode.connectedRackId = sourceMapping.rackId;
+        targetFloorNode.connectedSwitchId = sourceMapping.rackDevice.id;
+        targetFloorNode.connectedSwitchPort = conn.sourcePortName;
+        targetFloorNode.vlanId = vlanId;
+      }
       cablesCreatedCount++;
     }
 

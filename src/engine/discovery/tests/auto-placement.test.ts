@@ -236,8 +236,8 @@ describe("Topology Auto-Placement & Auto-Wiring Engine (autoDeployDiscoveredTopo
     expect(esxiDev).toBeDefined();
     expect(esxiDev?.deviceType).toBe("SERVER");
 
-    // 3. Vérification des équipements sur le plancher
-    expect(result.nodes.length).toBe(3); // 2 PC + 1 Imprimante
+    // 3. Vérification des équipements sur le plancher (Bureaux + Prises associées + Périphériques)
+    expect(result.nodes.length).toBe(5); // 2 Postes Bureaux + 2 Prises RJ45 associées + 1 Imprimante
     const printerNode = result.nodes.find((n) => n.id === "d-printer");
     expect(printerNode).toBeDefined();
     expect(printerNode?.subType).toBe("PRINTER_STATION");
@@ -249,17 +249,33 @@ describe("Topology Auto-Placement & Auto-Wiring Engine (autoDeployDiscoveredTopo
 
     const pc1Node = result.nodes.find((n) => n.id === "d-pc1");
     expect(pc1Node).toBeDefined();
+    expect(pc1Node?.type).toBe("DESK");
     expect(pc1Node?.subType).toBe("DESK_SOLO");
     expect(pc1Node?.isPatched).toBe(true);
     expect(pc1Node?.connectedRackId).toBe(mainRack.id);
     expect(pc1Node?.connectedSwitchPort).toBe("Gi1/0/7");
 
+    const pc1Outlet = result.nodes.find((n) => n.id === "outlet-d-pc1");
+    expect(pc1Outlet).toBeDefined();
+    expect(pc1Outlet?.type).toBe("WALL_OUTLET");
+    expect(pc1Outlet?.attachedToDeskId).toBe("d-pc1");
+    expect(pc1Outlet?.isPatched).toBe(true);
+    expect(pc1Outlet?.connectedSwitchPort).toBe("Gi1/0/7");
+
     const pc2Node = result.nodes.find((n) => n.id === "d-pc2");
     expect(pc2Node).toBeDefined();
+    expect(pc2Node?.type).toBe("DESK");
     expect(pc2Node?.subType).toBe("DESK_SOLO");
     expect(pc2Node?.isPatched).toBe(true);
     expect(pc2Node?.connectedRackId).toBe(mainRack.id);
     expect(pc2Node?.connectedSwitchPort).toBe("Gi1/0/8");
+
+    const pc2Outlet = result.nodes.find((n) => n.id === "outlet-d-pc2");
+    expect(pc2Outlet).toBeDefined();
+    expect(pc2Outlet?.type).toBe("WALL_OUTLET");
+    expect(pc2Outlet?.attachedToDeskId).toBe("d-pc2");
+    expect(pc2Outlet?.isPatched).toBe(true);
+    expect(pc2Outlet?.connectedSwitchPort).toBe("Gi1/0/8");
 
     // 4. Vérification des patches internes de baie (LLDP trunk et liaisons serveurs)
     const patches = mainRack.patches || [];

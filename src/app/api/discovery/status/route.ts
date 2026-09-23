@@ -88,9 +88,16 @@ export async function GET(req: Request) {
         });
       }
 
+      const allConnections = await db
+        .select()
+        .from(discoveredConnections)
+        .orderBy(desc(discoveredConnections.createdAt))
+        .limit(200);
+
       return NextResponse.json({
         success: true,
         devices: dedupedDevs,
+        connections: allConnections,
       });
     }
 

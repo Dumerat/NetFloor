@@ -3404,17 +3404,111 @@ export default function NetFloorApp() {
                 return;
               }
 
-              // 3. Cas du glisser-déposer d'un équipement IOT/AP scanné (Borne Wi-Fi, Imprimante, Caméra, Poste, etc.)
-              if (parsed && parsed.type === "SCANNED_IOT_DEVICE" && parsed.device) {
+              // 3. Cas du glisser-déposer d'un équipement IOT/AP/Workstation scanné
+              if (
+                parsed &&
+                (parsed.type === "SCANNED_IOT_DEVICE" ||
+                  parsed.type === "SCANNED_WORKSTATION_DEVICE") &&
+                parsed.device
+              ) {
                 const scannedDev = parsed.device as ScannedDeviceItem;
                 const isAp = scannedDev.deviceType === "ACCESS_POINT";
                 const isCam = scannedDev.deviceType === "CAMERA";
-                const isPc = scannedDev.deviceType === "WORKSTATION";
+                const isPc =
+                  scannedDev.deviceType === "WORKSTATION" ||
+                  parsed.type === "SCANNED_WORKSTATION_DEVICE";
                 const isPhone = scannedDev.deviceType === "PHONE_VOIP";
 
+                if (isPc) {
+                  // Cas spécifique POSTE DE TRAVAIL : Bureau (DESK) ET Prise RJ45 liée (WALL_OUTLET)
+                  const existingDesk = nodes.find(
+                    (n) => n.type === "DESK" && isDeviceMatch(n, scannedDev)
+                  );
+                  const widthMm = 1600;
+                  const heightMm = 800;
+                  const snapped = snapToGrid(
+                    {
+                      x: Math.round(worldPos.x - widthMm / 2),
+                      y: Math.round(worldPos.y - heightMm / 2),
+                    },
+                    useCameraStore.getState().gridConfig
+                  ).point;
+
+                  if (existingDesk) {
+                    const linkedOutlet = nodes.find((n) => n.attachedToDeskId === existingDesk.id);
+                    setNodes((prev) =>
+                      prev.map((n) => {
+                        if (n.id === existingDesk.id) {
+                          return { ...n, xMm: snapped.x, yMm: snapped.y };
+                        }
+                        if (linkedOutlet && n.id === linkedOutlet.id) {
+                          return { ...n, xMm: snapped.x + 400, yMm: snapped.y + 150 };
+                        }
+                        return n;
+                      })
+                    );
+                    setSelectedNodeId(existingDesk.id);
+                  } else {
+                    const cleanId = scannedDev.id.replace(/^disc-/, "");
+                    const deskId = `desk-${cleanId}`;
+                    const outletId = `outlet-${cleanId}`;
+
+                    const deskNode: NodeDisplay = {
+                      id: deskId,
+                      name: `Bureau - ${scannedDev.name}`,
+                      type: "DESK",
+                      category: "FURNITURE",
+                      subType: "DESK_SOLO",
+                      xMm: snapped.x,
+                      yMm: snapped.y,
+                      widthMm: 1600,
+                      heightMm: 800,
+                      siteId: activeSiteId || DEFAULT_SITE_ID,
+                      ipAddress: scannedDev.ip !== "Passif" ? scannedDev.ip : undefined,
+                      macAddress: scannedDev.mac !== "Non applicable" ? scannedDev.mac : undefined,
+                      description:
+                        `${scannedDev.manufacturer || ""} ${scannedDev.model || ""}`.trim(),
+                      pingStatus: "ONLINE",
+                      assignedPerson: scannedDev.name,
+                      seats: [
+                        {
+                          seatIndex: 0,
+                          seatLabel: "Poste 1",
+                          fullName: scannedDev.name,
+                        },
+                      ],
+                    };
+
+                    const outletNode: NodeDisplay = {
+                      id: outletId,
+                      name: `Prise RJ45 - ${scannedDev.name}`,
+                      type: "WALL_OUTLET",
+                      category: "CONNECTIVITY",
+                      subType: "GENERIC_PORT",
+                      outletRole: "DATA",
+                      xMm: snapped.x + 400,
+                      yMm: snapped.y + 150,
+                      widthMm: 120,
+                      heightMm: 120,
+                      attachedToDeskId: deskId,
+                      attachedSeatIndex: 0,
+                      siteId: activeSiteId || DEFAULT_SITE_ID,
+                      ipAddress: scannedDev.ip !== "Passif" ? scannedDev.ip : undefined,
+                      macAddress: scannedDev.mac !== "Non applicable" ? scannedDev.mac : undefined,
+                      description: `Prise réseau raccordée au ${scannedDev.name}`,
+                      vlanId: 20,
+                      pingStatus: "ONLINE",
+                    };
+
+                    setNodes((prev) => [...prev, deskNode, outletNode]);
+                    setSelectedNodeId(deskId);
+                  }
+                  return;
+                }
+
                 const existingNode = nodes.find((n) => isDeviceMatch(n, scannedDev));
-                const widthMm = isAp ? 350 : isCam ? 300 : isPc ? 800 : isPhone ? 250 : 800;
-                const heightMm = isAp ? 350 : isCam ? 300 : isPc ? 600 : isPhone ? 250 : 700;
+                const widthMm = isAp ? 350 : isCam ? 300 : isPhone ? 250 : 800;
+                const heightMm = isAp ? 350 : isCam ? 300 : isPhone ? 250 : 700;
                 const snapped = snapToGrid(
                   {
                     x: Math.round(worldPos.x - widthMm / 2),
@@ -3437,46 +3531,32 @@ export default function NetFloorApp() {
                     ? "node-ap"
                     : isCam
                       ? "node-cam"
-                      : isPc
-                        ? "node-pc"
-                        : isPhone
-                          ? "node-voip"
-                          : "node-iot";
+                      : isPhone
+                        ? "node-voip"
+                        : "node-iot";
                   const newNodeId = `${prefix}-${Date.now()}`;
                   const subType = isAp
                     ? "WIFI_AP"
                     : isCam
                       ? "CAMERA_IP"
-                      : isPc
-                        ? "DESK_SOLO"
-                        : isPhone
-                          ? "WALL_OUTLET"
-                          : "PRINTER_STATION";
+                      : isPhone
+                        ? "WALL_OUTLET"
+                        : "PRINTER_STATION";
                   const outletRole = isAp
                     ? "WIFI"
                     : isCam
                       ? "CAMERA"
-                      : isPc
-                        ? "DATA"
-                        : isPhone
-                          ? "VOIP"
-                          : "PRINTER";
-                  const customEmote = isAp
-                    ? "📶"
-                    : isCam
-                      ? "🎥"
-                      : isPc
-                        ? "💻"
-                        : isPhone
-                          ? "📞"
-                          : "🖨️";
-                  const vlanId = isAp ? 50 : isCam ? 50 : isPc ? 20 : isPhone ? 30 : 40;
+                      : isPhone
+                        ? "VOIP"
+                        : "PRINTER";
+                  const customEmote = isAp ? "📶" : isCam ? "🎥" : isPhone ? "📞" : "🖨️";
+                  const vlanId = isAp ? 50 : isCam ? 50 : isPhone ? 30 : 40;
                   const poeMode = isAp ? "POE_PLUS" : isCam ? "POE" : isPhone ? "POE" : "NONE";
 
                   const newNode: NodeDisplay = {
                     id: newNodeId,
                     name: scannedDev.name,
-                    type: isPc ? "DESK" : "WALL_OUTLET",
+                    type: "WALL_OUTLET",
                     subType,
                     outletRole,
                     xMm: snapped.x,
