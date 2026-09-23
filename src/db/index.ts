@@ -142,8 +142,15 @@ let activePgliteClient: PGlite | null = null;
 export const queryClient = {
   end: async () => {
     if (activePostgresClient) {
-      await activePostgresClient.end();
+      await activePostgresClient.end().catch(() => {});
+      activePostgresClient = null;
     }
+    if (activePgliteClient) {
+      await activePgliteClient.close().catch(() => {});
+      activePgliteClient = null;
+    }
+    activeDb = null;
+    initPromise = null;
   },
 };
 
@@ -209,13 +216,17 @@ export async function getDb(): Promise<Database> {
       }
     }
 
-    // Bascule automatique sur le moteur PostgreSQL 16 WASM PGlite avec stockage local persistant
-    const dataDir = path.resolve(process.cwd(), ".pgdata");
-    if (!fs.existsSync(dataDir)) {
+    // Bascule automatique sur le moteur PostgreSQL 16 WASM PGlite
+    // En environnement de test (Vitest / CI), instanciation en mémoire pour garantir l'isolation et éviter les conflits de verrous
+    const isTestEnv = process.env.NODE_ENV === "test" || Boolean(process.env.VITEST);
+    const dataDir =
+      process.env.PGDATA_DIR || (isTestEnv ? undefined : path.resolve(process.cwd(), ".pgdata"));
+    if (dataDir && !fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    const pgliteClient = new PGlite(dataDir);
+    const pgliteClient = dataDir ? new PGlite(dataDir) : new PGlite();
+    await pgliteClient.waitReady;
     activePgliteClient = pgliteClient;
 
     // Application des migrations Drizzle sur PGlite
