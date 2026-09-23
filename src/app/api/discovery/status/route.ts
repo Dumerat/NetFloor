@@ -249,3 +249,27 @@ export async function GET(req: Request) {
     );
   }
 }
+
+export async function DELETE() {
+  try {
+    const db = await getDb();
+    await db.transaction(async (tx) => {
+      await tx.delete(discoveryLogs);
+      await tx.delete(discoveredConnections);
+      await tx.delete(discoveredDevices);
+      await tx.delete(discoveryJobs);
+    });
+    return NextResponse.json({
+      success: true,
+      message: "Historique et équipements de découverte réseau purgés avec succès.",
+    });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: err instanceof Error ? err.message : "Erreur lors de la purge de découverte",
+      },
+      { status: 500 }
+    );
+  }
+}

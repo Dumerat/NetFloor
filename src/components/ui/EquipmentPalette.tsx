@@ -28,6 +28,8 @@ import {
   HardDrive,
   Search,
   Zap,
+  RefreshCw,
+  Trash2,
 } from "lucide-react";
 import {
   OutletRole,
@@ -385,132 +387,7 @@ export function isDeviceMatch(
   return false;
 }
 
-export const DEFAULT_SCANNED_DEVICES: ScannedDeviceItem[] = [
-  {
-    id: "scanned-sw-aruba-2930f",
-    name: "SW-CORE-ARUBA-2930F-24G",
-    ip: "10.42.0.1",
-    mac: "38:21:C7:A1:B0:10",
-    model: "Aruba 2930F 24G 4SFP+ PoE+ (JL255A)",
-    manufacturer: "Aruba Networks / HPE",
-    deviceType: "SWITCH",
-    portsCount: 24,
-    uSize: 1,
-    status: "ONLINE",
-    poeBudgetW: 370,
-  },
-  {
-    id: "scanned-sw-cisco-9300",
-    name: "SW-DISTRIB-CISCO-9300-48P",
-    ip: "10.42.0.2",
-    mac: "00:81:C4:F2:30:01",
-    model: "Cisco Catalyst 9300-48P UPOE",
-    manufacturer: "Cisco Systems",
-    deviceType: "SWITCH",
-    portsCount: 48,
-    uSize: 1,
-    status: "ONLINE",
-    poeBudgetW: 740,
-  },
-  {
-    id: "scanned-sw-zyxel-gs1920",
-    name: "SW-ACCESS-ZYXEL-GS1920-24HP",
-    ip: "10.42.0.3",
-    mac: "BC:CF:4F:22:91:E4",
-    model: "Zyxel GS1920-24HP Smart Managed Switch",
-    manufacturer: "Zyxel Communications",
-    deviceType: "SWITCH",
-    portsCount: 24,
-    uSize: 1,
-    status: "ONLINE",
-    poeBudgetW: 375,
-  },
-  {
-    id: "scanned-sw-ubiquiti-pro",
-    name: "SW-ACCESS-UNIFI-PRO-24-POE",
-    ip: "10.42.0.4",
-    mac: "74:83:C2:55:19:D2",
-    model: "Ubiquiti UniFi Switch Pro 24 PoE",
-    manufacturer: "Ubiquiti Networks",
-    deviceType: "SWITCH",
-    portsCount: 24,
-    uSize: 1,
-    status: "ONLINE",
-    poeBudgetW: 400,
-  },
-  {
-    id: "scanned-fw-fortigate-60f",
-    name: "FW-PERIMETRE-FORTIGATE-60F",
-    ip: "10.42.0.254",
-    mac: "70:4C:A5:18:FE:09",
-    model: "Fortinet FortiGate 60F UTM Appliance",
-    manufacturer: "Fortinet Inc.",
-    deviceType: "FIREWALL",
-    portsCount: 10,
-    uSize: 1,
-    status: "ONLINE",
-  },
-  {
-    id: "scanned-srv-dell-r740",
-    name: "SRV-HYPERVISEUR-DELL-R740",
-    ip: "10.42.0.20",
-    mac: "D4:AE:52:88:C1:22",
-    model: "Dell PowerEdge R740 2U (Proxmox/ESXi)",
-    manufacturer: "Dell Technologies",
-    deviceType: "SERVER",
-    portsCount: 8,
-    uSize: 2,
-    status: "ONLINE",
-  },
-  {
-    id: "scanned-ap-aruba-515",
-    name: "AP-ETAGE-1-ARUBA-515",
-    ip: "10.42.0.80",
-    mac: "20:4C:03:AA:BB:01",
-    model: "Aruba AP-515 Unified Campus AP",
-    manufacturer: "Aruba Networks / HPE",
-    deviceType: "ACCESS_POINT",
-    portsCount: 1,
-    uSize: 0,
-    status: "ONLINE",
-  },
-  {
-    id: "scanned-ap-unifi-u6pro",
-    name: "AP-HALL-UNIFI-U6-PRO",
-    ip: "10.42.0.81",
-    mac: "74:83:C2:99:11:44",
-    model: "Ubiquiti UniFi U6 Pro Access Point",
-    manufacturer: "Ubiquiti Networks",
-    deviceType: "ACCESS_POINT",
-    portsCount: 1,
-    uSize: 0,
-    status: "ONLINE",
-  },
-  {
-    id: "scanned-pp-cat6a-24p",
-    name: "PP-CAT6A-24P-BRASSAGE",
-    ip: "Passif",
-    mac: "Non applicable",
-    model: "Panneau de Brassage Cat6A 24 Ports RJ45",
-    manufacturer: "Legrand LCS3 / Schneider",
-    deviceType: "PATCH_PANEL",
-    portsCount: 24,
-    uSize: 1,
-    status: "ONLINE",
-  },
-  {
-    id: "scanned-pdu-apc-monitored",
-    name: "PDU-APC-16A-METRED",
-    ip: "10.42.0.250",
-    mac: "00:C0:B7:44:89:12",
-    model: "APC Rack PDU 16A 230V 8x C13 Monitored",
-    manufacturer: "APC by Schneider Electric",
-    deviceType: "PDU",
-    portsCount: 8,
-    uSize: 1,
-    status: "ONLINE",
-  },
-];
+export const DEFAULT_SCANNED_DEVICES: ScannedDeviceItem[] = [];
 
 export const PALETTE_CATALOG: PaletteItem[] = [
   // 1. Mobilier (RH & Espace)
@@ -765,8 +642,9 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   const [customRackFormat, setCustomRackFormat] = useState<"STD" | "COMPACT">("STD");
 
   // Équipements scannés & découverts (en dessous de Baie Custom)
-  const [scannedDevices, setScannedDevices] =
-    useState<ScannedDeviceItem[]>(DEFAULT_SCANNED_DEVICES);
+  const [scannedDevices, setScannedDevices] = useState<ScannedDeviceItem[]>([]);
+  const [isRefreshingDiscovery, setIsRefreshingDiscovery] = useState(false);
+  const [isPurgingDiscovery, setIsPurgingDiscovery] = useState(false);
   const [scannedFilterType, setScannedFilterType] = useState<string>("ALL");
   const [scannedSearchQuery, setScannedSearchQuery] = useState("");
 
@@ -776,56 +654,88 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
   }, [racks?.length]);
 
   // Récupération dynamique des équipements découverts par l'API de découverte avec inférence de profil
-  useEffect(() => {
-    fetch("/api/discovery/status?allDevices=true")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.success && Array.isArray(data.devices) && data.devices.length > 0) {
-          const seenKeys = new Set<string>();
-          const dedupedApiDevices: ScannedDeviceItem[] = [];
+  const refreshDiscoveredDevices = async () => {
+    setIsRefreshingDiscovery(true);
+    try {
+      const res = await fetch("/api/discovery/status?allDevices=true");
+      if (!res.ok) {
+        setScannedDevices([]);
+        return;
+      }
+      const data = await res.json();
+      if (data?.success && Array.isArray(data.devices)) {
+        const seenKeys = new Set<string>();
+        const dedupedApiDevices: ScannedDeviceItem[] = [];
 
-          for (const d of data.devices) {
-            const normMac = d.macAddress ? d.macAddress.trim().toLowerCase() : "";
-            const normIp = d.ipAddress ? d.ipAddress.trim() : "";
-            const normName = (d.hostname || d.name || "").trim().toLowerCase();
-            const key = normMac || (normIp ? `ip:${normIp}` : `name:${normName || d.id}`);
-            if (seenKeys.has(key)) continue;
-            seenKeys.add(key);
+        for (const d of data.devices) {
+          const normMac = d.macAddress ? d.macAddress.trim().toLowerCase() : "";
+          const normIp = d.ipAddress ? d.ipAddress.trim() : "";
+          const normName = (d.hostname || d.name || "").trim().toLowerCase();
+          const key = normMac || (normIp ? `ip:${normIp}` : `name:${normName || d.id}`);
+          if (seenKeys.has(key)) continue;
+          seenKeys.add(key);
 
-            const profile = inferScannedDeviceProfile(d);
-            dedupedApiDevices.push({
-              id: `disc-${d.id}`,
-              name: d.hostname || d.model || `Équipement ${d.ipAddress}`,
-              ip: d.ipAddress,
-              mac: d.macAddress,
-              model: d.model || d.sysDescr?.slice(0, 45) || `${profile.deviceType} Découvert`,
-              manufacturer: d.manufacturer || "Constructeur Découvert",
-              deviceType: profile.deviceType,
-              portsCount: profile.portsCount,
-              uSize: profile.uSize,
-              status: "ONLINE",
-            });
-          }
-
-          const existingIps = new Set(dedupedApiDevices.map((d) => d.ip).filter(Boolean));
-          const existingMacs = new Set(
-            dedupedApiDevices.map((d) => d.mac?.toLowerCase()).filter(Boolean)
-          );
-          const existingNames = new Set(
-            dedupedApiDevices.map((d) => d.name.toLowerCase()).filter(Boolean)
-          );
-
-          const complementary = DEFAULT_SCANNED_DEVICES.filter(
-            (d) =>
-              !existingIps.has(d.ip) &&
-              !existingMacs.has(d.mac.toLowerCase()) &&
-              !existingNames.has(d.name.toLowerCase())
-          );
-          setScannedDevices([...dedupedApiDevices, ...complementary]);
+          const profile = inferScannedDeviceProfile(d);
+          dedupedApiDevices.push({
+            id: `disc-${d.id}`,
+            name: d.hostname || d.model || `Équipement ${d.ipAddress}`,
+            ip: d.ipAddress,
+            mac: d.macAddress,
+            model: d.model || d.sysDescr?.slice(0, 45) || `${profile.deviceType} Découvert`,
+            manufacturer: d.manufacturer || "Constructeur Découvert",
+            deviceType: profile.deviceType,
+            portsCount: profile.portsCount,
+            uSize: profile.uSize,
+            status: "ONLINE",
+          });
         }
-      })
-      .catch(() => {});
+        setScannedDevices(dedupedApiDevices);
+      } else {
+        setScannedDevices([]);
+      }
+    } catch {
+      setScannedDevices([]);
+    } finally {
+      setIsRefreshingDiscovery(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshDiscoveredDevices();
+
+    const handleDiscoveryUpdated = () => {
+      refreshDiscoveredDevices();
+    };
+    const handleResetAll = () => {
+      setScannedDevices([]);
+    };
+
+    window.addEventListener("netfloor_discovery_updated", handleDiscoveryUpdated);
+    window.addEventListener("netfloor_full_reset", handleResetAll);
+
+    return () => {
+      window.removeEventListener("netfloor_discovery_updated", handleDiscoveryUpdated);
+      window.removeEventListener("netfloor_full_reset", handleResetAll);
+    };
   }, []);
+
+  const handlePurgeScannedDevices = async () => {
+    if (!window.confirm("Voulez-vous vraiment purger tous les équipements découverts ?")) {
+      return;
+    }
+    setIsPurgingDiscovery(true);
+    try {
+      await fetch("/api/discovery/status", { method: "DELETE" });
+      setScannedDevices([]);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("netfloor_discovery_updated"));
+      }
+    } catch (err) {
+      console.error("Erreur lors de la purge :", err);
+    } finally {
+      setIsPurgingDiscovery(false);
+    }
+  };
 
   const filteredItems = PALETTE_CATALOG.filter((item) => item.category === selectedCategory);
 
@@ -1488,9 +1398,33 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
                           <Network className="w-3.5 h-3.5 text-sky-400" />
                           <span>Équipements Scannés & Découverts</span>
                         </div>
-                        <span className="text-[9px] font-mono bg-sky-500/10 text-sky-400 px-1.5 py-0.5 rounded border border-sky-500/20">
-                          {filteredScannedDevices.length} dispos
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={refreshDiscoveredDevices}
+                            disabled={isRefreshingDiscovery}
+                            title="Actualiser la liste des équipements découverts"
+                            className="p-1 rounded text-slate-400 hover:text-sky-300 hover:bg-slate-850 transition"
+                          >
+                            <RefreshCw
+                              className={`w-3 h-3 ${isRefreshingDiscovery ? "animate-spin text-sky-400" : ""}`}
+                            />
+                          </button>
+                          {scannedDevices.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={handlePurgeScannedDevices}
+                              disabled={isPurgingDiscovery}
+                              title="Purger tous les équipements scannés"
+                              className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-850 transition"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                          <span className="text-[9px] font-mono bg-sky-500/10 text-sky-400 px-1.5 py-0.5 rounded border border-sky-500/20">
+                            {filteredScannedDevices.length} dispos
+                          </span>
+                        </div>
                       </div>
 
                       {/* Barre de recherche d'équipement scanné */}
@@ -1537,116 +1471,146 @@ const EquipmentPaletteComponent: FC<EquipmentPaletteProps> = ({
 
                       {/* Liste des cartes d'équipements scannés */}
                       <div className="space-y-1.5">
-                        {filteredScannedDevices.map((dev: ScannedDeviceItem) => {
-                          const placement = getDevicePlacement(dev);
-                          const isSwitch = dev.deviceType === "SWITCH";
-                          const isFw = dev.deviceType === "FIREWALL";
-                          const isSrv = dev.deviceType === "SERVER";
-                          const isPp = dev.deviceType === "PATCH_PANEL";
+                        {filteredScannedDevices.length === 0 ? (
+                          <div className="p-3.5 rounded-lg bg-slate-950/70 border border-slate-800/80 text-center space-y-1.5">
+                            <div className="w-7 h-7 rounded-full bg-slate-900 border border-slate-800 text-slate-400 mx-auto flex items-center justify-center">
+                              <Network className="w-3.5 h-3.5 text-slate-400" />
+                            </div>
+                            <div className="text-xs font-semibold text-slate-300">
+                              Aucun équipement scanné ou découvert
+                            </div>
+                            <p className="text-[10px] text-slate-400 leading-relaxed">
+                              Lancez une détection réseau SNMP ou connectez vos portails Cloud
+                              (Meraki, Aruba, UniFi) dans les Paramètres DSI pour intégrer vos
+                              commutateurs et serveurs réels.
+                            </p>
+                            {onOpenSettings && (
+                              <button
+                                type="button"
+                                onClick={onOpenSettings}
+                                className="mt-1 px-2.5 py-1 bg-sky-600/25 hover:bg-sky-600/40 text-sky-200 border border-sky-500/30 rounded text-[10px] font-semibold inline-flex items-center gap-1.5 transition"
+                              >
+                                <Sliders className="w-3 h-3" />
+                                <span>Ouvrir les Paramètres DSI</span>
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          filteredScannedDevices.map((dev: ScannedDeviceItem) => {
+                            const placement = getDevicePlacement(dev);
+                            const isSwitch = dev.deviceType === "SWITCH";
+                            const isFw = dev.deviceType === "FIREWALL";
+                            const isSrv = dev.deviceType === "SERVER";
+                            const isPp = dev.deviceType === "PATCH_PANEL";
 
-                          const brandColor = dev.manufacturer.toLowerCase().includes("aruba")
-                            ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                            : dev.manufacturer.toLowerCase().includes("cisco")
-                              ? "bg-sky-500/20 text-sky-300 border-sky-500/30"
-                              : dev.manufacturer.toLowerCase().includes("zyxel")
-                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                                : dev.manufacturer.toLowerCase().includes("fortinet")
-                                  ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
-                                  : dev.manufacturer.toLowerCase().includes("dell")
-                                    ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
-                                    : "bg-blue-500/20 text-blue-300 border-blue-500/30";
+                            const brandColor = dev.manufacturer.toLowerCase().includes("aruba")
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                              : dev.manufacturer.toLowerCase().includes("cisco")
+                                ? "bg-sky-500/20 text-sky-300 border-sky-500/30"
+                                : dev.manufacturer.toLowerCase().includes("zyxel")
+                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                  : dev.manufacturer.toLowerCase().includes("fortinet")
+                                    ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                                    : dev.manufacturer.toLowerCase().includes("dell")
+                                      ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                                      : "bg-blue-500/20 text-blue-300 border-blue-500/30";
 
-                          return (
-                            <div
-                              key={dev.id}
-                              draggable={true}
-                              onDragStart={(e) => handleScannedDeviceDragStart(e, dev)}
-                              className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/50 rounded-lg transition flex flex-col gap-1.5 group cursor-grab active:cursor-grabbing hover:shadow-md"
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-2">
-                                  <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400 transition flex-shrink-0" />
-                                  <div className="w-7 h-7 rounded-md bg-slate-850 flex items-center justify-center text-slate-300 group-hover:text-sky-400 transition">
-                                    {isSwitch ? (
-                                      <Network className="w-4 h-4 text-sky-400" />
-                                    ) : isFw ? (
-                                      <Shield className="w-4 h-4 text-rose-400" />
-                                    ) : isSrv ? (
-                                      <HardDrive className="w-4 h-4 text-purple-400" />
-                                    ) : isPp ? (
-                                      <Layers className="w-4 h-4 text-blue-400" />
-                                    ) : (
-                                      <Zap className="w-4 h-4 text-amber-400" />
+                            return (
+                              <div
+                                key={dev.id}
+                                draggable={true}
+                                onDragStart={(e) => handleScannedDeviceDragStart(e, dev)}
+                                className="p-2.5 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/50 rounded-lg transition flex flex-col gap-1.5 group cursor-grab active:cursor-grabbing hover:shadow-md"
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400 transition flex-shrink-0" />
+                                    <div className="w-7 h-7 rounded-md bg-slate-850 flex items-center justify-center text-slate-300 group-hover:text-sky-400 transition">
+                                      {isSwitch ? (
+                                        <Network className="w-4 h-4 text-sky-400" />
+                                      ) : isFw ? (
+                                        <Shield className="w-4 h-4 text-rose-400" />
+                                      ) : isSrv ? (
+                                        <HardDrive className="w-4 h-4 text-purple-400" />
+                                      ) : isPp ? (
+                                        <Layers className="w-4 h-4 text-blue-400" />
+                                      ) : (
+                                        <Zap className="w-4 h-4 text-amber-400" />
+                                      )}
+                                    </div>
+                                    <div>
+                                      <div className="text-xs font-semibold text-slate-200 group-hover:text-white flex items-center gap-1.5">
+                                        <span>{dev.name}</span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-sans">
+                                        {dev.model}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span
+                                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${brandColor}`}
+                                    >
+                                      {dev.uSize ?? 1}U • {dev.portsCount}P
+                                    </span>
+                                    {placement && (
+                                      <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                        Placé
+                                      </span>
                                     )}
                                   </div>
-                                  <div>
-                                    <div className="text-xs font-semibold text-slate-200 group-hover:text-white flex items-center gap-1.5">
-                                      <span>{dev.name}</span>
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 font-sans">
-                                      {dev.model}
-                                    </div>
-                                  </div>
                                 </div>
-                                <div className="flex flex-col items-end gap-1">
-                                  <span
-                                    className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${brandColor}`}
+
+                                <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-400 bg-slate-950 p-1.5 rounded border border-slate-850">
+                                  <div>IP : {dev.ip}</div>
+                                  <div className="truncate">MAC : {dev.mac}</div>
+                                </div>
+
+                                {/* Statut de placement & Actions */}
+                                {placement ? (
+                                  <div className="flex flex-col gap-1">
+                                    <div className="flex items-center justify-between text-[10px] bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 px-2 py-1 rounded">
+                                      <span className="font-semibold">
+                                        {placement.locationLabel}
+                                      </span>
+                                      <span className="text-[9px] text-emerald-400/80">
+                                        Glisser pour replacer
+                                      </span>
+                                    </div>
+                                    {selectedRack && selectedRack.id !== placement.rackId && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          onInsertScannedDevice?.(selectedRack.id, dev)
+                                        }
+                                        className="w-full py-1 px-2 bg-purple-600/40 hover:bg-purple-600 text-purple-200 hover:text-white rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition border border-purple-500/40"
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                        <span>Déplacer vers {selectedRack.name}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : selectedRack ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onInsertScannedDevice?.(selectedRack.id, dev)}
+                                    className="w-full py-1 px-2 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition border border-purple-500/40"
                                   >
-                                    {dev.uSize ?? 1}U • {dev.portsCount}P
-                                  </span>
-                                  {placement && (
-                                    <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                      Placé
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-400 bg-slate-950 p-1.5 rounded border border-slate-850">
-                                <div>IP : {dev.ip}</div>
-                                <div className="truncate">MAC : {dev.mac}</div>
-                              </div>
-
-                              {/* Statut de placement & Actions */}
-                              {placement ? (
-                                <div className="flex flex-col gap-1">
-                                  <div className="flex items-center justify-between text-[10px] bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 px-2 py-1 rounded">
-                                    <span className="font-semibold">{placement.locationLabel}</span>
-                                    <span className="text-[9px] text-emerald-400/80">
-                                      Glisser pour replacer
+                                    <Plus className="w-3 h-3" />
+                                    <span>Insérer dans {selectedRack.name}</span>
+                                  </button>
+                                ) : (
+                                  <div className="text-[9px] text-slate-500 flex items-center justify-between font-mono pt-0.5">
+                                    <span>🟢 En ligne (Scanné SNMP)</span>
+                                    <span className="text-sky-400 font-semibold group-hover:translate-x-0.5 transition">
+                                      Glisser dans une baie →
                                     </span>
                                   </div>
-                                  {selectedRack && selectedRack.id !== placement.rackId && (
-                                    <button
-                                      type="button"
-                                      onClick={() => onInsertScannedDevice?.(selectedRack.id, dev)}
-                                      className="w-full py-1 px-2 bg-purple-600/40 hover:bg-purple-600 text-purple-200 hover:text-white rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition border border-purple-500/40"
-                                    >
-                                      <Plus className="w-3 h-3" />
-                                      <span>Déplacer vers {selectedRack.name}</span>
-                                    </button>
-                                  )}
-                                </div>
-                              ) : selectedRack ? (
-                                <button
-                                  type="button"
-                                  onClick={() => onInsertScannedDevice?.(selectedRack.id, dev)}
-                                  className="w-full py-1 px-2 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition border border-purple-500/40"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                  <span>Insérer dans {selectedRack.name}</span>
-                                </button>
-                              ) : (
-                                <div className="text-[9px] text-slate-500 flex items-center justify-between font-mono pt-0.5">
-                                  <span>🟢 En ligne (Scanné SNMP)</span>
-                                  <span className="text-sky-400 font-semibold group-hover:translate-x-0.5 transition">
-                                    Glisser dans une baie →
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
                   </div>

@@ -698,10 +698,37 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
     setIsResetDialogOpen(false);
   };
 
+  // Action dédiée : Purger les équipements scannés et l'historique de découverte réseau
+  const handlePurgeDiscoveryDevices = async () => {
+    try {
+      await fetch("/api/discovery/status", { method: "DELETE" }).catch(() => null);
+      setDiscoveredDevices([]);
+      setDiscoveredDevicesList([]);
+      setDiscoveryLogs([]);
+      setDiscoveredConnectionsList([]);
+      setReconciliationDiffs([]);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("netfloor_discovery_updated"));
+      }
+      showToast("🧹 Équipements scannés et historique de découverte réseau purgés");
+      setIsResetDialogOpen(false);
+    } catch {
+      showToast("❌ Erreur lors de la purge des équipements scannés");
+    }
+  };
+
   // 2. Réinitialisation complète du système, des objets et de la base de données
   const handleResetFullSystem = async () => {
     setIsResettingFull(true);
     try {
+      // 0. Purger l'historique et les équipements de découverte réseau
+      await fetch("/api/discovery/status", { method: "DELETE" }).catch(() => null);
+      setDiscoveredDevices([]);
+      setDiscoveredDevicesList([]);
+      setDiscoveryLogs([]);
+      setDiscoveredConnectionsList([]);
+      setReconciliationDiffs([]);
+
       // 1. Supprimer tous les objets en base de données PostgreSQL / PGLite
       await fetch("/api/topology", { method: "DELETE" }).catch(() => null);
 
@@ -740,6 +767,11 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
       // 6. Exécuter le reset côté parent
       if (onFullSystemReset) {
         await onFullSystemReset();
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("netfloor_discovery_updated"));
+        window.dispatchEvent(new CustomEvent("netfloor_full_reset"));
       }
 
       showToast("💥 Système et base de données entièrement réinitialisés");
@@ -5229,7 +5261,40 @@ const SettingsModalComponent: FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Option 3: Reset Complet */}
+              {/* Option 3: Purger les équipements scannés & découverts */}
+              <div className="p-3.5 rounded-lg bg-sky-950/20 border border-sky-900/40 space-y-2 hover:border-sky-500/50 transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                    <Network className="w-4 h-4 text-sky-400" />
+                    Purger les Équipements Scannés & Découverts
+                  </span>
+                  <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                    Ciblé • Catalogue Baies & Scans
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Supprime l&apos;intégralité des commutateurs, bornes et serveurs scannés ou
+                  découverts par SNMP et API Cloud, et vide la liste d&apos;équipements disponibles
+                  dans le catalogue d&apos;ajout.
+                  <br />
+                  <strong className="text-slate-200">
+                    Votre plateau 2D, mobilier, prises et câbles physiques restent intacts.
+                  </strong>
+                </p>
+                <div className="pt-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handlePurgeDiscoveryDevices}
+                    disabled={isResettingFull}
+                    className="px-3 py-1.5 bg-sky-600/30 hover:bg-sky-600/50 text-sky-200 border border-sky-500/40 rounded text-xs font-semibold flex items-center gap-1.5 transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Purger les équipements découverts</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 4: Reset Complet */}
               <div className="p-3.5 rounded-lg bg-red-950/20 border border-red-900/40 space-y-2 hover:border-red-500/50 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-red-400 flex items-center gap-1.5">

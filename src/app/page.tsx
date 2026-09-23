@@ -2390,6 +2390,12 @@ export default function NetFloorApp() {
         visible: true,
       });
 
+      await fetch("/api/discovery/status", { method: "DELETE" }).catch(() => null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("netfloor_discovery_updated"));
+        window.dispatchEvent(new CustomEvent("netfloor_full_reset"));
+      }
+
       clearEnterpriseDirectory();
       setDbSyncStatus("SAVED");
       setLastSavedAt(
@@ -2407,6 +2413,11 @@ export default function NetFloorApp() {
 
   // Remise à zéro complète du système (appelée par SettingsModal)
   const handleFullSystemReset = useCallback(async () => {
+    await fetch("/api/discovery/status", { method: "DELETE" }).catch(() => null);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("netfloor_discovery_updated"));
+      window.dispatchEvent(new CustomEvent("netfloor_full_reset"));
+    }
     clearEnterpriseDirectory();
     setNodes([]);
     setRacks([]);
